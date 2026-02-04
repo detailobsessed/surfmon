@@ -28,7 +28,7 @@ def format_diff(
 ) -> str:
     """Format a difference with color coding."""
     diff = new - old
-    pct_change = (diff / old * 100) if old > 0 else 0
+    pct_change = (diff / old * 100) if old != 0 else 0
 
     # For memory/cpu, lower is better (unless reverse=True)
     if not reverse:

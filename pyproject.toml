@@ -50,7 +50,7 @@ exclude_lines = [
 target-version = "py314"
 
 [tool.ruff.lint]
-select = [
+extend-select = [
     # Core pyupgrade functionality
     "UP",   # pyupgrade rules
 

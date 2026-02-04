@@ -1,7 +1,6 @@
 """Typer-based CLI for Windsurf Performance Monitor."""
 
 import signal
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -244,6 +243,10 @@ def watch(
     Saves periodic JSON reports for historical analysis.
     Each watch session creates a new timestamped folder.
     """
+    # Reset stop flag at start of watch (in case of previous Ctrl+C)
+    global stop_monitoring
+    stop_monitoring = False
+
     # Create session-specific subdirectory
     session_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     session_dir = output_dir / session_timestamp
@@ -411,8 +414,6 @@ def cleanup(
 
     # Confirm before killing
     if not force:
-        import sys
-
         confirm = typer.confirm("Kill these processes?")
         if not confirm:
             console.print("[dim]Cancelled.[/dim]")
@@ -558,7 +559,7 @@ def prune(
         for file in sorted(duplicates_to_remove):
             console.print(f"  {file.name}")
         console.print(
-            f"\n[cyan]Run without --dry-run to actually delete these files[/cyan]"
+            "\n[cyan]Run without --dry-run to actually delete these files[/cyan]"
         )
         raise typer.Exit(code=0)
 
@@ -975,7 +976,7 @@ def analyze(
                 "Language Servers & Extensions", fontsize=11, fontweight="bold"
             )
             lines = line1 + line2
-            labels = [l.get_label() for l in lines]
+            labels = [line.get_label() for line in lines]
             ax.legend(lines, labels, loc="upper left", fontsize=8)
             ax.grid(True, alpha=0.3)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
