@@ -1,0 +1,172 @@
+{
+  "timestamp": "2026-02-04T14:00:34.499887",
+  "system": {
+    "total_memory_gb": 32.0,
+    "available_memory_gb": 11.71990966796875,
+    "memory_percent": 63.4,
+    "cpu_count": 10,
+    "swap_total_gb": 3.0,
+    "swap_used_gb": 1.43426513671875
+  },
+  "windsurf_processes": [
+    {
+      "pid": 30478,
+      "name": "Electron",
+      "cpu_percent": 0.0,
+      "memory_mb": 238.140625,
+      "memory_percent": 0.7267475128173828,
+      "num_threads": 45,
+      "runtime_seconds": 1212.9630019664764,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/MacOS/Electron"
+    },
+    {
+      "pid": 30481,
+      "name": "Windsurf Helper (GPU)",
+      "cpu_percent": 0.0,
+      "memory_mb": 119.234375,
+      "memory_percent": 0.3638744354248047,
+      "num_threads": 16,
+      "runtime_seconds": 1212.6813628673553,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (GPU).app/Contents/MacOS/Windsurf Helper (GPU) --type=gpu-process --user-data-dir=/Users/ismar.iljazovic/Library/Ap..."
+    },
+    {
+      "pid": 30482,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 49.8125,
+      "memory_percent": 0.15201568603515625,
+      "num_threads": 16,
+      "runtime_seconds": 1212.7848751544952,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --se..."
+    },
+    {
+      "pid": 30483,
+      "name": "Windsurf Helper (Renderer)",
+      "cpu_percent": 0.0,
+      "memory_mb": 749.875,
+      "memory_percent": 2.2884368896484375,
+      "num_threads": 20,
+      "runtime_seconds": 1212.641597032547,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Renderer).app/Contents/MacOS/Windsurf Helper (Renderer) --type=renderer --user-data-dir=/Users/ismar.iljazovic/Lib..."
+    },
+    {
+      "pid": 30522,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 104.453125,
+      "memory_percent": 0.31876564025878906,
+      "num_threads": 22,
+      "runtime_seconds": 1212.039300918579,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-..."
+    },
+    {
+      "pid": 30523,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 68.046875,
+      "memory_percent": 0.20766258239746094,
+      "num_threads": 24,
+      "runtime_seconds": 1212.1424701213837,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-..."
+    },
+    {
+      "pid": 30570,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 80.046875,
+      "memory_percent": 0.24428367614746094,
+      "num_threads": 23,
+      "runtime_seconds": 1211.6273880004883,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-..."
+    },
+    {
+      "pid": 30571,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 557.6875,
+      "memory_percent": 1.7019271850585938,
+      "num_threads": 22,
+      "runtime_seconds": 1211.731260061264,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) --type=utility --utility-sub-type=node.mojom.NodeService --lan..."
+    },
+    {
+      "pid": 30747,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 292.40625,
+      "memory_percent": 0.8923530578613281,
+      "num_threads": 14,
+      "runtime_seconds": 1209.5855271816254,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) --max-old-space-size=3072 /Users/ismar.iljazovic/.windsurf/ext..."
+    },
+    {
+      "pid": 31844,
+      "name": "language_server_macos_arm",
+      "cpu_percent": 0.0,
+      "memory_mb": 1634.265625,
+      "memory_percent": 4.987382888793945,
+      "num_threads": 19,
+      "runtime_seconds": 1205.1506969928741,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm --api_server_url https://server.codeium.com --run_child --enable_lsp --extensi..."
+    },
+    {
+      "pid": 32172,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 150.3125,
+      "memory_percent": 0.45871734619140625,
+      "num_threads": 14,
+      "runtime_seconds": 1203.494920015335,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) --use-system-ca /Users/ismar.iljazovic/.windsurf/extensions/gi..."
+    },
+    {
+      "pid": 35226,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 96.515625,
+      "memory_percent": 0.2945423126220703,
+      "num_threads": 14,
+      "runtime_seconds": 541.1287050247192,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) /Users/ismar.iljazovic/.windsurf/extensions/redhat.vscode-yaml..."
+    },
+    {
+      "pid": 37779,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 937.015625,
+      "memory_percent": 2.8595447540283203,
+      "num_threads": 14,
+      "runtime_seconds": 202.34725499153137,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) /Users/ismar.iljazovic/.windsurf/extensions/tamasfe.even-bette..."
+    }
+  ],
+  "total_windsurf_memory_mb": 5077.8125,
+  "total_windsurf_cpu_percent": 0.0,
+  "process_count": 13,
+  "language_servers": [
+    {
+      "pid": 31844,
+      "name": "language_server_macos_arm",
+      "cpu_percent": 0.0,
+      "memory_mb": 1634.265625,
+      "memory_percent": 4.987382888793945,
+      "num_threads": 19,
+      "runtime_seconds": 1205.1506969928741,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm --api_server_url https://server.codeium.com --run_child --enable_lsp --extensi..."
+    }
+  ],
+  "mcp_servers_enabled": [
+    "deepwiki",
+    "gitlab",
+    "kubernetes",
+    "pacman",
+    "playwriter",
+    "unblu-mcp"
+  ],
+  "extensions_count": 32,
+  "log_issues": [
+    "\u26a0\ufe0f  1 orphaned crash handler(s) found (oldest: 0.0 days, PIDs: 30480) - Fix: surfmon cleanup --force",
+    "\u26a0\ufe0f  'logs' directory exists in extensions folder (causes package.json errors) - Fix: rm -rf ~/.windsurf/extensions/logs",
+    "\u26a0\ufe0f  1 extension host exits detected"
+  ]
+}

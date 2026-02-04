@@ -1,0 +1,330 @@
+"""Display and formatting utilities for monitoring reports."""
+
+from pathlib import Path
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
+from .monitor import MonitoringReport
+
+console = Console()
+
+
+def display_report(report: MonitoringReport, verbose: bool = False) -> None:
+    """Display report in rich terminal format."""
+    console.print()
+
+    # Determine Windsurf status
+    if report.process_count == 0:
+        status = "[red]Not Running[/red]"
+    else:
+        status = "[green]Running[/green]"
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Surfmon[/bold cyan] - Windsurf Status: {status}\n"
+            + f"[dim]{report.timestamp}[/dim]",
+            border_style="cyan",
+        )
+    )
+    console.print()
+
+    # System overview
+    sys_table = Table(title="System Resources", show_header=True)
+    sys_table.add_column("Metric", style="cyan")
+    sys_table.add_column("Value", style="green")
+
+    sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
+    sys_table.add_row("Available Memory", f"{report.system.available_memory_gb:.1f} GB")
+
+    mem_color = (
+        "red"
+        if report.system.memory_percent > 80
+        else "yellow"
+        if report.system.memory_percent > 60
+        else "green"
+    )
+    sys_table.add_row(
+        "Memory Usage",
+        f"[{mem_color}]{report.system.memory_percent:.1f}%[/{mem_color}]",
+    )
+    sys_table.add_row(
+        "Swap Used",
+        f"{report.system.swap_used_gb:.1f} / {report.system.swap_total_gb:.1f} GB",
+    )
+    sys_table.add_row("CPU Cores", str(report.system.cpu_count))
+
+    console.print(sys_table)
+    console.print()
+
+    # Windsurf summary
+    ws_table = Table(title="Windsurf Resource Usage", show_header=True)
+    ws_table.add_column("Metric", style="cyan")
+    ws_table.add_column("Value", style="green")
+
+    ws_table.add_row("Process Count", str(report.process_count))
+
+    mem_gb = report.total_windsurf_memory_mb / 1024
+    mem_pct = (
+        report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb
+    ) * 100
+    mem_color = "red" if mem_pct > 20 else "yellow" if mem_pct > 10 else "green"
+    ws_table.add_row(
+        "Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]"
+    )
+
+    cpu_color = (
+        "red"
+        if report.total_windsurf_cpu_percent > 50
+        else "yellow"
+        if report.total_windsurf_cpu_percent > 20
+        else "green"
+    )
+    ws_table.add_row(
+        "Total CPU",
+        f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]",
+    )
+
+    ws_table.add_row("Extensions", str(report.extensions_count))
+    ws_table.add_row("MCP Servers", str(len(report.mcp_servers_enabled)))
+    ws_table.add_row("Language Servers", str(len(report.language_servers)))
+    ws_table.add_row("Active Workspaces", str(len(report.active_workspaces)))
+    ws_table.add_row("Launches Today", str(report.windsurf_launches_today))
+
+    console.print(ws_table)
+    console.print()
+
+    # Active workspaces
+    if report.active_workspaces:
+        workspace_table = Table(title="Active Workspaces", show_header=True)
+        workspace_table.add_column("ID", style="dim", max_width=20)
+        workspace_table.add_column("Path", style="cyan")
+        workspace_table.add_column("Exists", style="green")
+        workspace_table.add_column("Loaded At", style="dim")
+
+        for ws in report.active_workspaces:
+            exists_icon = "✓" if ws.exists else "❌"
+            exists_color = "green" if ws.exists else "red"
+            workspace_table.add_row(
+                ws.id[:18] + ".." if len(ws.id) > 20 else ws.id,
+                ws.path,
+                f"[{exists_color}]{exists_icon}[/{exists_color}]",
+                ws.loaded_at or "Unknown",
+            )
+
+        console.print(workspace_table)
+        console.print()
+
+    # Top processes
+    if report.windsurf_processes:
+        top_procs = sorted(
+            report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True
+        )[:10]
+
+        proc_table = Table(title="Top 10 Processes by Memory", show_header=True)
+        proc_table.add_column("PID", style="dim")
+        proc_table.add_column("Name", style="cyan")
+        proc_table.add_column("Memory", justify="right", style="green")
+        proc_table.add_column("CPU %", justify="right", style="yellow")
+        proc_table.add_column("Threads", justify="right", style="dim")
+
+        for proc in top_procs:
+            mem_str = f"{proc.memory_mb:.0f} MB"
+            mem_style = (
+                "red"
+                if proc.memory_mb > 1000
+                else "yellow"
+                if proc.memory_mb > 500
+                else "green"
+            )
+            proc_table.add_row(
+                str(proc.pid),
+                proc.name[:40],
+                f"[{mem_style}]{mem_str}[/{mem_style}]",
+                f"{proc.cpu_percent:.1f}",
+                str(proc.num_threads),
+            )
+
+        console.print(proc_table)
+        console.print()
+
+    # Language servers
+    if report.language_servers:
+        ls_table = Table(title="Language Servers", show_header=True)
+        ls_table.add_column("PID", style="dim")
+        ls_table.add_column("Type", style="cyan")
+        ls_table.add_column("Memory", justify="right", style="green")
+        ls_table.add_column("CPU %", justify="right", style="yellow")
+
+        for ls in report.language_servers:
+            # The cmdline was enhanced by find_language_servers to include context
+            # Just use it directly
+            server_type = ls.cmdline
+
+            mem_style = (
+                "red"
+                if ls.memory_mb > 1000
+                else "yellow"
+                if ls.memory_mb > 200
+                else "green"
+            )
+            cpu_style = (
+                "red"
+                if ls.cpu_percent > 5
+                else "yellow"
+                if ls.cpu_percent > 2
+                else "green"
+            )
+
+            ls_table.add_row(
+                str(ls.pid),
+                server_type,
+                f"[{mem_style}]{ls.memory_mb:.0f} MB[/{mem_style}]",
+                f"[{cpu_style}]{ls.cpu_percent:.1f}[/{cpu_style}]",
+            )
+
+        console.print(ls_table)
+        console.print()
+
+    # MCP servers
+    if report.mcp_servers_enabled:
+        console.print("[bold cyan]Enabled MCP Servers:[/bold cyan]")
+        for server in report.mcp_servers_enabled:
+            console.print(f"  • {server}")
+        console.print()
+    elif verbose:
+        console.print("[bold cyan]MCP Servers:[/bold cyan]")
+        console.print("  [dim]None configured[/dim]")
+        console.print()
+
+    # Issues
+    if report.log_issues:
+        console.print(
+            Panel(
+                "\n".join(report.log_issues),
+                title="[bold red]Issues Detected[/bold red]",
+                border_style="red",
+            )
+        )
+        console.print()
+    else:
+        console.print("[green]✓ No critical issues detected[/green]")
+        console.print()
+
+    # Verbose output - additional diagnostic information
+    if verbose:
+        # Show detailed system info
+        console.print("[bold cyan]Verbose Diagnostic Information:[/bold cyan]")
+        console.print()
+
+        # Config paths
+        from pathlib import Path
+
+        console.print("[cyan]Configuration Paths:[/cyan]")
+        windsurf_dir = Path.home() / ".windsurf"
+        codeium_dir = Path.home() / ".codeium" / "windsurf"
+        console.print(
+            f"  Extensions: {windsurf_dir / 'extensions'} ({report.extensions_count} installed)"
+        )
+        console.print(f"  MCP Config: {codeium_dir / 'mcp_config.json'}")
+        console.print()
+
+        # All processes detail
+        console.print("[cyan]Process Details:[/cyan]")
+        if report.windsurf_processes:
+            for proc in sorted(
+                report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True
+            ):
+                runtime_hours = proc.runtime_seconds / 3600
+                console.print(f"  PID {proc.pid}: {proc.name}")
+                console.print(
+                    f"    Memory: {proc.memory_mb:.0f} MB | CPU: {proc.cpu_percent:.1f}% | "
+                    f"Threads: {proc.num_threads} | Runtime: {runtime_hours:.1f}h"
+                )
+                console.print(f"    [dim]{proc.cmdline[:100]}...[/dim]")
+                console.print()
+        else:
+            console.print("  [dim]No Windsurf processes running[/dim]")
+            console.print()
+
+
+def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
+    """Save report as Markdown."""
+    lines = [
+        "# Windsurf Performance Report",
+        "",
+        f"**Generated:** {report.timestamp}",
+        "",
+        "## System Resources",
+        "",
+        f"- **Total Memory:** {report.system.total_memory_gb:.1f} GB",
+        f"- **Available Memory:** {report.system.available_memory_gb:.1f} GB ({100 - report.system.memory_percent:.1f}% free)",
+        f"- **Memory Usage:** {report.system.memory_percent:.1f}%",
+        f"- **Swap Used:** {report.system.swap_used_gb:.1f} / {report.system.swap_total_gb:.1f} GB",
+        f"- **CPU Cores:** {report.system.cpu_count}",
+        "",
+        "## Windsurf Resource Usage",
+        "",
+        f"- **Process Count:** {report.process_count}",
+        f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB ({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)",
+        f"- **Total CPU:** {report.total_windsurf_cpu_percent:.1f}%",
+        f"- **Extensions:** {report.extensions_count}",
+        f"- **MCP Servers Enabled:** {len(report.mcp_servers_enabled)}",
+        f"- **Language Servers:** {len(report.language_servers)}",
+        "",
+    ]
+
+    if report.language_servers:
+        lines.extend(
+            [
+                "## Language Servers",
+                "",
+                "| PID | Type | Memory | CPU % |",
+                "|-----|------|--------|-------|",
+            ]
+        )
+        for ls in report.language_servers:
+            cmdline_lower = ls.cmdline.lower()
+            if "language_server_macos_arm" in cmdline_lower:
+                server_type = "Windsurf (Codeium)"
+            elif "jdtls" in cmdline_lower or "eclipse.jdt" in cmdline_lower:
+                server_type = "Java (JDT.LS)"
+            elif "basedpyright" in cmdline_lower:
+                server_type = "Python (basedpyright)"
+            elif "yaml" in cmdline_lower:
+                server_type = "YAML"
+            elif "json" in cmdline_lower:
+                server_type = "JSON"
+            else:
+                server_type = "Other"
+
+            lines.append(
+                f"| {ls.pid} | {server_type} | {ls.memory_mb:.0f} MB | {ls.cpu_percent:.1f}% |"
+            )
+        lines.append("")
+
+    if report.mcp_servers_enabled:
+        lines.extend(
+            [
+                "## Enabled MCP Servers",
+                "",
+            ]
+        )
+        for server in report.mcp_servers_enabled:
+            lines.append(f"- {server}")
+        lines.append("")
+
+    if report.log_issues:
+        lines.extend(
+            [
+                "## Issues Detected",
+                "",
+            ]
+        )
+        for issue in report.log_issues:
+            lines.append(f"- {issue}")
+        lines.append("")
+
+    with open(output_path, "w") as f:
+        f.write("\n".join(lines))

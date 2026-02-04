@@ -1,0 +1,199 @@
+{
+  "timestamp": "2026-02-04T16:21:59.079057",
+  "system": {
+    "total_memory_gb": 32.0,
+    "available_memory_gb": 10.276229858398438,
+    "memory_percent": 67.9,
+    "cpu_count": 10,
+    "swap_total_gb": 3.0,
+    "swap_used_gb": 1.43426513671875
+  },
+  "windsurf_processes": [
+    {
+      "pid": 79884,
+      "name": "Electron",
+      "cpu_percent": 0.0,
+      "memory_mb": 175.796875,
+      "memory_percent": 0.5364894866943359,
+      "num_threads": 44,
+      "runtime_seconds": 3749.838907957077,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/MacOS/Electron"
+    },
+    {
+      "pid": 79886,
+      "name": "chrome_crashpad_handler",
+      "cpu_percent": 0.0,
+      "memory_mb": 3.796875,
+      "memory_percent": 0.011587142944335938,
+      "num_threads": 3,
+      "runtime_seconds": 3749.5577318668365,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler --no-rate-limit --monitor-self-annotation=ptype=crashpad-handler --database=/Users/ismar.iljazovic/Library/Application Support/Windsurf/Crashpad --annotation=_companyName=Exafunction --annotation=_productName=Windsurf --annotation=_version=1.106.0 --annotation=plat=OS X --annotation=prod=Electron --annotation=ver=37.7.0 --handshake-fd=20"
+    },
+    {
+      "pid": 79887,
+      "name": "Windsurf Helper (GPU)",
+      "cpu_percent": 10.6,
+      "memory_mb": 80.6875,
+      "memory_percent": 0.24623870849609375,
+      "num_threads": 18,
+      "runtime_seconds": 3749.5265758037567,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (GPU).app/Contents/MacOS/Windsurf Helper (GPU) --type=gpu-process --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --gpu-preferences=UAAAAAAAAAAgAAAEAAAAAAAAAAAAAAAAAABgAAMAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAA --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version --seatbelt-client=26"
+    },
+    {
+      "pid": 79888,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 41.9375,
+      "memory_percent": 0.12798309326171875,
+      "num_threads": 16,
+      "runtime_seconds": 3749.5254969596863,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=network --host-resolver-rules=MAP a.localhost 127.0.0.1, MAP b.localhost 127.0.0.1, MAP c.localhost 127.0.0.1, MAP d.localhost 127.0.0.1, MAP e.localhost 127.0.0.1, MAP f.localhost 127.0.0.1, MAP g.localhost 127.0.0.1, MAP h.localhost 127.0.0.1, MAP i.localhost 127.0.0.1, MAP j.localhost 127.0.0.1, MAP k.localhost 127.0.0.1, MAP l.localhost 127.0.0.1, MAP m.localhost 127.0.0.1, MAP n.localhost 127.0.0.1, MAP o.localhost 127.0.0.1, MAP p.localhost 127.0.0.1, MAP q.localhost 127.0.0.1, MAP r.localhost 127.0.0.1, MAP s.localhost 127.0.0.1, MAP t.localhost 127.0.0.1, MAP u.localhost 127.0.0.1, MAP v.localhost 127.0.0.1, MAP w.localhost 127.0.0.1, MAP x.localhost 127.0.0.1, MAP y.localhost 127.0.0.1, MAP z.localhost 127.0.0.1 --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version --seatbelt-client=26"
+    },
+    {
+      "pid": 79890,
+      "name": "Windsurf Helper (Renderer)",
+      "cpu_percent": 8.8,
+      "memory_mb": 557.5625,
+      "memory_percent": 1.7015457153320312,
+      "num_threads": 18,
+      "runtime_seconds": 3749.3374989032745,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Renderer).app/Contents/MacOS/Windsurf Helper (Renderer) --type=renderer --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --app-path=/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Resources/app --enable-sandbox --enable-blink-features=HighlightAPI --disable-blink-features=FontMatchingCTMigration,StandardizedBrowserZoom, --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1769624310247191 --launch-time-ticks=590459486319 --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version --vscode-window-config=vscode:a23adb5d-86c2-4e0c-a8ed-44d0eb43fc76 --seatbelt-client=71"
+    },
+    {
+      "pid": 79969,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.0,
+      "memory_mb": 73.890625,
+      "memory_percent": 0.2254962921142578,
+      "num_threads": 22,
+      "runtime_seconds": 3748.698763847351,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-sandbox-type=none --host-resolver-rules=MAP a.localhost 127.0.0.1, MAP b.localhost 127.0.0.1, MAP c.localhost 127.0.0.1, MAP d.localhost 127.0.0.1, MAP e.localhost 127.0.0.1, MAP f.localhost 127.0.0.1, MAP g.localhost 127.0.0.1, MAP h.localhost 127.0.0.1, MAP i.localhost 127.0.0.1, MAP j.localhost 127.0.0.1, MAP k.localhost 127.0.0.1, MAP l.localhost 127.0.0.1, MAP m.localhost 127.0.0.1, MAP n.localhost 127.0.0.1, MAP o.localhost 127.0.0.1, MAP p.localhost 127.0.0.1, MAP q.localhost 127.0.0.1, MAP r.localhost 127.0.0.1, MAP s.localhost 127.0.0.1, MAP t.localhost 127.0.0.1, MAP u.localhost 127.0.0.1, MAP v.localhost 127.0.0.1, MAP w.localhost 127.0.0.1, MAP x.localhost 127.0.0.1, MAP y.localhost 127.0.0.1, MAP z.localhost 127.0.0.1 --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version"
+    },
+    {
+      "pid": 79970,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.1,
+      "memory_mb": 58.046875,
+      "memory_percent": 0.17714500427246094,
+      "num_threads": 24,
+      "runtime_seconds": 3748.6979191303253,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-sandbox-type=none --host-resolver-rules=MAP a.localhost 127.0.0.1, MAP b.localhost 127.0.0.1, MAP c.localhost 127.0.0.1, MAP d.localhost 127.0.0.1, MAP e.localhost 127.0.0.1, MAP f.localhost 127.0.0.1, MAP g.localhost 127.0.0.1, MAP h.localhost 127.0.0.1, MAP i.localhost 127.0.0.1, MAP j.localhost 127.0.0.1, MAP k.localhost 127.0.0.1, MAP l.localhost 127.0.0.1, MAP m.localhost 127.0.0.1, MAP n.localhost 127.0.0.1, MAP o.localhost 127.0.0.1, MAP p.localhost 127.0.0.1, MAP q.localhost 127.0.0.1, MAP r.localhost 127.0.0.1, MAP s.localhost 127.0.0.1, MAP t.localhost 127.0.0.1, MAP u.localhost 127.0.0.1, MAP v.localhost 127.0.0.1, MAP w.localhost 127.0.0.1, MAP x.localhost 127.0.0.1, MAP y.localhost 127.0.0.1, MAP z.localhost 127.0.0.1 --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version"
+    },
+    {
+      "pid": 79971,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 1.3,
+      "memory_mb": 271.578125,
+      "memory_percent": 0.8287906646728516,
+      "num_threads": 22,
+      "runtime_seconds": 3748.6198420524597,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-sandbox-type=none --host-resolver-rules=MAP a.localhost 127.0.0.1, MAP b.localhost 127.0.0.1, MAP c.localhost 127.0.0.1, MAP d.localhost 127.0.0.1, MAP e.localhost 127.0.0.1, MAP f.localhost 127.0.0.1, MAP g.localhost 127.0.0.1, MAP h.localhost 127.0.0.1, MAP i.localhost 127.0.0.1, MAP j.localhost 127.0.0.1, MAP k.localhost 127.0.0.1, MAP l.localhost 127.0.0.1, MAP m.localhost 127.0.0.1, MAP n.localhost 127.0.0.1, MAP o.localhost 127.0.0.1, MAP p.localhost 127.0.0.1, MAP q.localhost 127.0.0.1, MAP r.localhost 127.0.0.1, MAP s.localhost 127.0.0.1, MAP t.localhost 127.0.0.1, MAP u.localhost 127.0.0.1, MAP v.localhost 127.0.0.1, MAP w.localhost 127.0.0.1, MAP x.localhost 127.0.0.1, MAP y.localhost 127.0.0.1, MAP z.localhost 127.0.0.1 --dns-result-order=ipv4first --experimental-network-inspection --inspect-port=0 --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version"
+    },
+    {
+      "pid": 79972,
+      "name": "Windsurf Helper",
+      "cpu_percent": 0.1,
+      "memory_mb": 65.828125,
+      "memory_percent": 0.20089149475097656,
+      "num_threads": 24,
+      "runtime_seconds": 3748.6158559322357,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper.app/Contents/MacOS/Windsurf Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-sandbox-type=none --host-resolver-rules=MAP a.localhost 127.0.0.1, MAP b.localhost 127.0.0.1, MAP c.localhost 127.0.0.1, MAP d.localhost 127.0.0.1, MAP e.localhost 127.0.0.1, MAP f.localhost 127.0.0.1, MAP g.localhost 127.0.0.1, MAP h.localhost 127.0.0.1, MAP i.localhost 127.0.0.1, MAP j.localhost 127.0.0.1, MAP k.localhost 127.0.0.1, MAP l.localhost 127.0.0.1, MAP m.localhost 127.0.0.1, MAP n.localhost 127.0.0.1, MAP o.localhost 127.0.0.1, MAP p.localhost 127.0.0.1, MAP q.localhost 127.0.0.1, MAP r.localhost 127.0.0.1, MAP s.localhost 127.0.0.1, MAP t.localhost 127.0.0.1, MAP u.localhost 127.0.0.1, MAP v.localhost 127.0.0.1, MAP w.localhost 127.0.0.1, MAP x.localhost 127.0.0.1, MAP y.localhost 127.0.0.1, MAP z.localhost 127.0.0.1 --user-data-dir=/Users/ismar.iljazovic/Library/Application Support/Windsurf --standard-schemes=vscode-webview,vscode-file --enable-sandbox --secure-schemes=vscode-webview,vscode-file --cors-schemes=vscode-webview,vscode-file --fetch-schemes=vscode-webview,vscode-file --service-worker-schemes=vscode-webview --code-cache-schemes=vscode-webview,vscode-file --shared-files --field-trial-handle=1718379636,r,16740767059716583125,3951594786623762349,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=CalculateNativeWinOcclusion,FontationsLinuxSystemFonts,MacWebContentsOcclusion,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts --variations-seed-version"
+    },
+    {
+      "pid": 80213,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 59.390625,
+      "memory_percent": 0.1812458038330078,
+      "num_threads": 14,
+      "runtime_seconds": 3746.350285053253,
+      "cmdline": "Windsurf Helper (Plugin) [Python Language Server]"
+    },
+    {
+      "pid": 80942,
+      "name": "language_server_macos_arm",
+      "cpu_percent": 3.3,
+      "memory_mb": 1012.421875,
+      "memory_percent": 3.0896663665771484,
+      "num_threads": 17,
+      "runtime_seconds": 3743.5410149097443,
+      "cmdline": "language_server_macos_arm [workspace: testing/code/workspace]"
+    },
+    {
+      "pid": 80979,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 120.75,
+      "memory_percent": 0.368499755859375,
+      "num_threads": 14,
+      "runtime_seconds": 3740.7383291721344,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) --use-system-ca /Users/ismar.iljazovic/.windsurf/extensions/gitlab.gitlab-workflow-6.67.6-universal/assets/language-server/main-bundle-node.js --stdio --clientProcessId=79971"
+    },
+    {
+      "pid": 81358,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 45.796875,
+      "memory_percent": 0.13976097106933594,
+      "num_threads": 10,
+      "runtime_seconds": 3735.9649510383606,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) /Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Resources/app/extensions/markdown-language-features/dist/serverWorkerMain --node-ipc --clientProcessId=79971"
+    },
+    {
+      "pid": 81629,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 57.96875,
+      "memory_percent": 0.17690658569335938,
+      "num_threads": 14,
+      "runtime_seconds": 3654.7668669223785,
+      "cmdline": "/Users/ismar.iljazovic/Applications/Windsurf.app/Contents/Frameworks/Windsurf Helper (Plugin).app/Contents/MacOS/Windsurf Helper (Plugin) /Users/ismar.iljazovic/.windsurf/extensions/redhat.vscode-yaml-1.19.1-universal/dist/languageserver.js --node-ipc --clientProcessId=79971"
+    }
+  ],
+  "total_windsurf_memory_mb": 2625.453125,
+  "total_windsurf_cpu_percent": 24.2,
+  "process_count": 14,
+  "language_servers": [
+    {
+      "pid": 80213,
+      "name": "Windsurf Helper (Plugin)",
+      "cpu_percent": 0.0,
+      "memory_mb": 59.390625,
+      "memory_percent": 0.1812458038330078,
+      "num_threads": 14,
+      "runtime_seconds": 3746.350285053253,
+      "cmdline": "Windsurf Helper (Plugin) [Python Language Server]"
+    },
+    {
+      "pid": 80942,
+      "name": "language_server_macos_arm",
+      "cpu_percent": 3.3,
+      "memory_mb": 1012.421875,
+      "memory_percent": 3.0896663665771484,
+      "num_threads": 17,
+      "runtime_seconds": 3743.5410149097443,
+      "cmdline": "language_server_macos_arm [workspace: testing/code/workspace]"
+    }
+  ],
+  "mcp_servers_enabled": [
+    "deepwiki",
+    "gitlab",
+    "kubernetes",
+    "pacman",
+    "playwriter",
+    "unblu-mcp"
+  ],
+  "extensions_count": 31,
+  "log_issues": [
+    "\ud83d\udd34 CRITICAL: Language server indexing non-existent workspace 'testing/code/workspace' (consuming 1012 MB RAM, 0 MB disk) - Fix: Close Windsurf, run: rm -rf /Users/ismar.iljazovic/.codeium/windsurf/database/9c0694567290725d9dcba14ade58e297"
+  ],
+  "active_workspaces": [
+    {
+      "id": "f22dffc06c5faf9037005544fa30b0ef",
+      "path": "/Users/ismar.iljazovic/repos/postfinance/step-testing.code-workspace",
+      "exists": true,
+      "loaded_at": "2026-02-04 15:19:29.736"
+    }
+  ],
+  "windsurf_launches_today": 4
+}

@@ -1,0 +1,64 @@
+[project]
+name = "surfmon"
+version = "0.1.0"
+description = "Monitor Windsurf IDE performance and resource usage"
+requires-python = ">=3.14"
+dependencies = [
+    "psutil>=7.2.2",
+    "rich>=14.3.2",
+    "typer>=0.21.1",
+    "matplotlib>=3.10.0",
+]
+
+[project.scripts]
+surfmon = "surfmon.cli:main"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "ty>=0.0.14",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+]
+
+[tool.coverage.run]
+source = ["src/surfmon"]
+omit = [
+    "src/surfmon/cli.py",
+    "src/surfmon/output.py",
+    "src/surfmon/compare.py",
+]
+
+[tool.coverage.report]
+fail_under = 81
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    # Core pyupgrade functionality
+    "UP",   # pyupgrade rules
+
+    # Additional rules needed for complete pyupgrade replacement
+    "C401", # unnecessary-generator-set
+    "C402", # unnecessary-generator-dict
+    "C403", # unnecessary-list-comprehension-set
+    "C404", # unnecessary-list-comprehension-dict
+    "C405", # unnecessary-literal-set
+    "F632", # is-literal (is/is not comparison to constants)
+    "W605", # invalid-escape-sequence
+]
