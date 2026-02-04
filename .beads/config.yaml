@@ -35,6 +35,8 @@
 daemon:
   auto-start: true
   auto-sync: true
+  auto-commit: true
+  auto-push: true
 
 # Debounce interval for auto-flush (can also use BEADS_FLUSH_DEBOUNCE)
 # flush-debounce: "5s"

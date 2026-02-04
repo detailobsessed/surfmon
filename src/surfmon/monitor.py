@@ -108,9 +108,14 @@ def get_windsurf_processes() -> list[psutil.Process]:
 
     # If no main Windsurf process found, filter out crashpad handlers (they're orphaned)
     if not main_windsurf_found:
-        windsurf_procs = [
-            p for p in windsurf_procs if "crashpad" not in p.name().lower()
-        ]
+        filtered_procs = []
+        for p in windsurf_procs:
+            try:
+                if "crashpad" not in p.name().lower():
+                    filtered_procs.append(p)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass  # Process terminated, skip it
+        windsurf_procs = filtered_procs
 
     return windsurf_procs
 
