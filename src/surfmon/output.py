@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .config import get_target_display_name
 from .monitor import MonitoringReport
 
 console = Console()
@@ -16,6 +17,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     console.print()
 
     # Determine Windsurf status
+    target_name = get_target_display_name()
     if report.process_count == 0:
         status = "[red]Not Running[/red]"
     else:
@@ -23,7 +25,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     console.print(
         Panel.fit(
-            f"[bold cyan]Surfmon[/bold cyan] - Windsurf Status: {status}\n"
+            f"[bold cyan]Surfmon[/bold cyan] - {target_name} Status: {status}\n"
             + f"[dim]{report.timestamp}[/dim]",
             border_style="cyan",
         )
