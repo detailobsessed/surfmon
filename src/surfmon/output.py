@@ -220,16 +220,15 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
         console.print("[bold cyan]Verbose Diagnostic Information:[/bold cyan]")
         console.print()
 
-        # Config paths
-        from pathlib import Path
+        # Config paths - use configured paths for current target
+        from .config import get_paths
 
+        paths = get_paths()
         console.print("[cyan]Configuration Paths:[/cyan]")
-        windsurf_dir = Path.home() / ".windsurf"
-        codeium_dir = Path.home() / ".codeium" / "windsurf"
         console.print(
-            f"  Extensions: {windsurf_dir / 'extensions'} ({report.extensions_count} installed)"
+            f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)"
         )
-        console.print(f"  MCP Config: {codeium_dir / 'mcp_config.json'}")
+        console.print(f"  MCP Config: {paths.mcp_config_path}")
         console.print()
 
         # All processes detail
