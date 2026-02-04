@@ -171,11 +171,16 @@ def get_system_info() -> SystemInfo:
 def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
     """Identify language server processes and extract context.
 
-    Returns language servers with enhanced cmdline showing:
+    Returns new ProcessInfo objects with enhanced cmdline showing:
     - Workspace ID (what project it's indexing)
     - Language (e.g., Java, Python, Go)
     - Special flags (indexing, LSP mode, etc.)
+
+    Note: Returns new objects to avoid mutating the input list.
     """
+    import re
+    from dataclasses import replace
+
     keywords = [
         "language_server",
         "jdtls",
@@ -188,14 +193,14 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
         "rust-analyzer",
         "eclipse.jdt",
     ]
-    servers = [p for p in processes if any(kw in p.cmdline.lower() for kw in keywords)]
 
-    # Enhance cmdline with extracted context
-    import re
+    result = []
+    for p in processes:
+        if not any(kw in p.cmdline.lower() for kw in keywords):
+            continue
 
-    for server in servers:
-        cmdline = server.cmdline
-        enhanced = False
+        cmdline = p.cmdline
+        enhanced_cmdline = None
 
         # Extract workspace ID for Codeium language server
         workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
@@ -204,39 +209,40 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
             # Shorten to last 2-3 path components
             parts = workspace.split("/")
             workspace_short = "/".join(parts[-3:]) if len(parts) > 3 else workspace
-            server.cmdline = f"{server.name} [workspace: {workspace_short}]"
-            enhanced = True
+            enhanced_cmdline = f"{p.name} [workspace: {workspace_short}]"
 
         # Extract language for JDT LS
-        if not enhanced and (
+        if enhanced_cmdline is None and (
             "jdtls" in cmdline.lower() or "eclipse.jdt" in cmdline.lower()
         ):
             # Try to find project path
             data_match = re.search(r"-data\s+(\S+)", cmdline)
             if data_match:
                 project = data_match.group(1).split("/")[-1]
-                server.cmdline = f"{server.name} [Java: {project}]"
+                enhanced_cmdline = f"{p.name} [Java: {project}]"
             else:
-                server.cmdline = f"{server.name} [Java Language Server]"
-            enhanced = True
+                enhanced_cmdline = f"{p.name} [Java Language Server]"
 
         # Other language servers - identify by name
-        if not enhanced:
+        if enhanced_cmdline is None:
             if "gopls" in cmdline.lower():
-                server.cmdline = f"{server.name} [Go Language Server]"
-                enhanced = True
+                enhanced_cmdline = f"{p.name} [Go Language Server]"
             elif "pyright" in cmdline.lower() or "pylance" in cmdline.lower():
-                server.cmdline = f"{server.name} [Python Language Server]"
-                enhanced = True
+                enhanced_cmdline = f"{p.name} [Python Language Server]"
             elif "rust-analyzer" in cmdline.lower():
-                server.cmdline = f"{server.name} [Rust Language Server]"
-                enhanced = True
+                enhanced_cmdline = f"{p.name} [Rust Language Server]"
 
-        # If not enhanced, truncate the original cmdline
-        if not enhanced and len(server.cmdline) > 200:
-            server.cmdline = server.cmdline[:200] + "..."
+        # If not enhanced, truncate the original cmdline if too long
+        if enhanced_cmdline is None and len(cmdline) > 200:
+            enhanced_cmdline = cmdline[:200] + "..."
 
-    return servers
+        # Create new ProcessInfo with enhanced cmdline (or original if no enhancement)
+        if enhanced_cmdline is not None:
+            result.append(replace(p, cmdline=enhanced_cmdline))
+        else:
+            result.append(p)
+
+    return result
 
 
 def get_mcp_config() -> list[str]:
@@ -280,68 +286,64 @@ def check_orphaned_workspaces() -> list[str]:
     """
     issues = []
     import re
-    import subprocess
 
-    # Find all running language servers
+    # Find all running language servers using psutil
     try:
-        result = subprocess.run(
-            ["ps", "aux"], capture_output=True, text=True, check=False
-        )
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                cmdline = " ".join(proc.info["cmdline"] or [])
+                if "language_server_macos_arm" not in cmdline:
+                    continue
 
-        for line in result.stdout.split("\n"):
-            if "language_server_macos_arm" not in line:
-                continue
+                # Extract workspace_id and database_dir from cmdline
+                workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
+                database_match = re.search(r"--database_dir\s+(\S+)", cmdline)
 
-            # Extract workspace_id
-            workspace_match = re.search(r"--workspace_id\s+(\S+)", line)
-            database_match = re.search(r"--database_dir\s+(\S+)", line)
+                if workspace_match and database_match:
+                    workspace_id = workspace_match.group(1)
+                    database_dir = database_match.group(1)
 
-            if workspace_match and database_match:
-                workspace_id = workspace_match.group(1)
-                database_dir = database_match.group(1)
+                    # Convert workspace_id to actual path
+                    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
+                    workspace_path_obj = Path("/" + workspace_path)
 
-                # Convert workspace_id to actual path
-                workspace_path = workspace_id.replace("file_", "").replace("_", "/")
-                workspace_path_obj = Path("/" + workspace_path)
-
-                # Check if workspace exists
-                if not workspace_path_obj.exists():
-                    # Get database size
-                    db_path = Path(database_dir)
-                    db_size_mb = 0
-                    if db_path.exists():
-                        db_size_mb = (
-                            sum(
-                                f.stat().st_size
-                                for f in db_path.rglob("*")
-                                if f.is_file()
+                    # Check if workspace exists
+                    if not workspace_path_obj.exists():
+                        # Get database size
+                        db_path = Path(database_dir)
+                        db_size_mb = 0
+                        if db_path.exists():
+                            db_size_mb = (
+                                sum(
+                                    f.stat().st_size
+                                    for f in db_path.rglob("*")
+                                    if f.is_file()
+                                )
+                                / 1024
+                                / 1024
                             )
-                            / 1024
-                            / 1024
-                        )
 
-                    # Get memory usage from the process
-                    pid_match = re.search(r"^\S+\s+(\d+)", line)
-                    mem_mb = 0
-                    if pid_match:
+                        # Get memory usage from the process
+                        mem_mb = 0
                         try:
-                            proc = psutil.Process(int(pid_match.group(1)))
                             mem_mb = proc.memory_info().rss / 1024 / 1024
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             pass
 
-                    workspace_short = (
-                        "/".join(workspace_path.split("/")[-3:])
-                        if "/" in workspace_path
-                        else workspace_path
-                    )
-                    issues.append(
-                        f"🔴 CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
-                        f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
-                        f"Fix: Close Windsurf, run: rm -rf {database_dir}"
-                    )
-    except Exception:
-        pass  # Silently fail if we can't detect
+                        workspace_short = (
+                            "/".join(workspace_path.split("/")[-3:])
+                            if "/" in workspace_path
+                            else workspace_path
+                        )
+                        issues.append(
+                            f"🔴 CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
+                            f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
+                            f"Fix: Close Windsurf, run: rm -rf {database_dir}"
+                        )
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except (psutil.Error, OSError, re.error):
+        pass  # Silently fail if we can't detect processes or parse cmdline
 
     return issues
 
@@ -431,8 +433,8 @@ def check_log_issues() -> list[str]:
             if log_files:
                 # Get the name from the first log file
                 culprit = log_files[0].stem  # e.g., "marimo.log" -> "marimo"
-        except Exception:
-            pass
+        except OSError:
+            pass  # Can't read logs directory
 
         issues.append(
             f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
@@ -489,8 +491,8 @@ def check_log_issues() -> list[str]:
                                 f"⚠️  {renderer_crashes} GPU/renderer crashes detected"
                             )
 
-                except Exception:
-                    pass
+                except (OSError, UnicodeDecodeError):
+                    pass  # Can't read or decode main.log
 
             # Check shared process log for extension errors
             sharedprocess_log = latest_log / "sharedprocess.log"
@@ -548,8 +550,8 @@ def check_log_issues() -> list[str]:
                                 f"⚠️  {len(error_lines)} extension errors in shared process"
                             )
 
-                except Exception:
-                    pass
+                except (OSError, UnicodeDecodeError):
+                    pass  # Can't read or decode sharedprocess.log
 
             # Check network errors
             network_log = latest_log / "network-shared.log"
@@ -568,8 +570,8 @@ def check_log_issues() -> list[str]:
                             issues.append(
                                 f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)"
                             )
-                except Exception:
-                    pass
+                except (OSError, UnicodeDecodeError):
+                    pass  # Can't read or decode network-shared.log
 
     return issues
 
@@ -628,8 +630,8 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
                                     loaded_at=loaded_at,
                                 )
                             )
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError):
+        pass  # Can't read or parse main.log for workspaces
 
     return workspaces
 
@@ -664,8 +666,8 @@ def count_windsurf_launches_today() -> int:
                         launches += 1
             except (ValueError, IndexError):
                 continue
-    except Exception:
-        pass
+    except OSError:
+        pass  # Can't read logs directory
 
     return launches
 
