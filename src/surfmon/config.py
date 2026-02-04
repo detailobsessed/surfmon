@@ -48,10 +48,17 @@ class WindsurfPaths:
         return Path.home() / self.dotfile_dir / "extensions"
 
     @property
+    def codeium_dir(self) -> str:
+        """Codeium directory name (windsurf or windsurf-next)."""
+        # Maps to .codeium/windsurf or .codeium/windsurf-next
+        if self.dotfile_dir == ".windsurf":
+            return "windsurf"
+        return "windsurf-next"
+
+    @property
     def mcp_config_path(self) -> Path:
         """Path to MCP configuration file."""
-        # MCP config is shared in .codeium/windsurf for both versions
-        return Path.home() / ".codeium" / "windsurf" / "mcp_config.json"
+        return Path.home() / ".codeium" / self.codeium_dir / "mcp_config.json"
 
 
 # Path configurations for each target

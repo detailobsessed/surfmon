@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
+from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
     ProcessInfo,
     SystemInfo,
@@ -23,6 +24,14 @@ from surfmon.monitor import (
     get_windsurf_processes,
     save_report_json,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_config_target():
+    """Reset config target to STABLE before each test to ensure consistent behavior."""
+    set_target(WindsurfTarget.STABLE)
+    yield
+    reset_target()
 
 
 @pytest.fixture

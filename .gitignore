@@ -46,3 +46,5 @@ htmlcov/
 # surfmon-*.json
 # surfmon-*.md
 # reports/
+
+.env
