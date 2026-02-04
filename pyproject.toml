@@ -8,6 +8,7 @@ dependencies = [
     "rich>=14.3.2",
     "typer>=0.21.1",
     "matplotlib>=3.10.0",
+    "python-decouple>=3.8",
 ]
 
 [project.scripts]

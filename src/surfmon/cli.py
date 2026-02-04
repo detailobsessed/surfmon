@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -12,6 +13,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
+from .config import WindsurfTarget, get_target_display_name, set_target
 from .monitor import MonitoringReport, generate_report, save_report_json
 from .output import display_report, save_report_markdown
 from .compare import compare_reports
@@ -23,6 +25,33 @@ app = typer.Typer(
 )
 console = Console()
 stop_monitoring = False
+
+
+def target_callback(value: str | None) -> str | None:
+    """Set the Windsurf target based on CLI option."""
+    if value is not None:
+        if value.lower() == "next":
+            set_target(WindsurfTarget.NEXT)
+        elif value.lower() == "stable":
+            set_target(WindsurfTarget.STABLE)
+        else:
+            raise typer.BadParameter(
+                f"Invalid target: {value}. Use 'stable' or 'next'."
+            )
+    return value
+
+
+# Global option for target selection
+TargetOption = Annotated[
+    str | None,
+    typer.Option(
+        "--target",
+        "-t",
+        help="Windsurf target: 'stable' or 'next' (default: from SURFMON_TARGET env or 'stable')",
+        callback=target_callback,
+        is_eager=True,  # Process before other options
+    ),
+]
 
 
 def signal_handler(signum, frame):
@@ -114,6 +143,7 @@ def create_summary_table(
 
 @app.command()
 def check(
+    target: TargetOption = None,
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed process information"
     ),
@@ -147,8 +177,9 @@ def check(
             )
             raise typer.Exit(code=1)
 
+        target_name = get_target_display_name()
         with console.status(
-            "[cyan]Gathering system information...[/cyan]", spinner="dots"
+            f"[cyan]Gathering {target_name} information...[/cyan]", spinner="dots"
         ):
             report = generate_report()
 
@@ -189,6 +220,7 @@ def check(
 
 @app.command()
 def watch(
+    target: TargetOption = None,
     interval: int = typer.Option(
         5, "--interval", "-i", help="Check interval in seconds"
     ),
@@ -217,7 +249,8 @@ def watch(
     session_dir = output_dir / session_timestamp
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[cyan]Starting continuous monitoring...[/cyan]")
+    target_name = get_target_display_name()
+    console.print(f"[cyan]Starting continuous monitoring of {target_name}...[/cyan]")
     console.print(f"  Interval: {interval}s")
     console.print(f"  Session: {session_dir}")
     console.print(f"  Save every: {save_interval}s")
@@ -293,6 +326,7 @@ def compare(
 
 @app.command()
 def cleanup(
+    target: TargetOption = None,
     force: bool = typer.Option(
         False, "--force", "-f", help="Skip confirmation and kill processes immediately"
     ),
@@ -305,6 +339,9 @@ def cleanup(
     """
     import psutil
     from datetime import datetime
+    from .config import get_paths
+
+    app_name = get_paths().app_name
 
     # Find orphaned crashpad handlers
     orphaned = []
@@ -316,13 +353,13 @@ def cleanup(
             exe = proc.info["exe"] or ""
             cmdline = " ".join(proc.info["cmdline"] or [])
 
-            if "Windsurf.app" not in exe and "Windsurf.app" not in cmdline:
+            if app_name not in exe and app_name not in cmdline:
                 continue
 
             # Check if main Windsurf process
             if (
                 name.lower() == "windsurf"
-                or "Windsurf.app/Contents/MacOS/Windsurf" in exe
+                or f"{app_name}/Contents/MacOS/Windsurf" in exe
                 or (
                     "Windsurf" in name
                     and "Helper" not in name

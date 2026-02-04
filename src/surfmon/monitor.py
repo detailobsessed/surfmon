@@ -7,6 +7,8 @@ from pathlib import Path
 
 import psutil
 
+from surfmon.config import get_paths
+
 
 @dataclass
 class ProcessInfo:
@@ -65,11 +67,14 @@ class MonitoringReport:
 def get_windsurf_processes() -> list[psutil.Process]:
     """Find all Windsurf-related processes.
 
-    Only matches processes from the actual Windsurf.app, excluding:
+    Only matches processes from the configured Windsurf app, excluding:
     - This monitoring tool itself (surfmon)
     - Unrelated processes that happen to contain "windsurf" in their path
     - Orphaned crashpad handlers when the main Windsurf process isn't running
     """
+    paths = get_paths()
+    app_name = paths.app_name  # e.g., "Windsurf.app" or "Windsurf - Next.app"
+
     windsurf_procs = []
     main_windsurf_found = False
 
@@ -84,15 +89,15 @@ def get_windsurf_processes() -> list[psutil.Process]:
             if "surfmon" in cmdline.lower():
                 continue
 
-            # Only match processes from Windsurf.app
-            if "Windsurf.app" in exe or "Windsurf.app" in cmdline:
+            # Only match processes from the configured Windsurf app
+            if app_name in exe or app_name in cmdline:
                 windsurf_procs.append(proc)
 
                 # Check if this is the main Windsurf/Electron process (not a helper/crashpad)
                 if (
                     name.lower() in ["windsurf", "electron"]
-                    or "Windsurf.app/Contents/MacOS/Windsurf" in exe
-                    or "Windsurf.app/Contents/MacOS/Electron" in exe
+                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                    or f"{app_name}/Contents/MacOS/Electron" in exe
                 ):
                     # Exclude helpers and crashpad
                     if "Helper" not in name and "crashpad" not in name.lower():
@@ -231,7 +236,7 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
 
 def get_mcp_config() -> list[str]:
     """Read MCP configuration and return enabled servers."""
-    mcp_config_path = Path.home() / ".codeium" / "windsurf" / "mcp_config.json"
+    mcp_config_path = get_paths().mcp_config_path
     if not mcp_config_path.exists():
         return []
 
@@ -248,7 +253,7 @@ def get_mcp_config() -> list[str]:
 
 def count_extensions() -> int:
     """Count installed Windsurf extensions."""
-    ext_dir = Path.home() / ".windsurf" / "extensions"
+    ext_dir = get_paths().extensions_dir
     if not ext_dir.exists():
         return 0
 
@@ -356,6 +361,7 @@ def check_log_issues() -> list[str]:
     # Check for orphaned crashpad handlers
     orphaned = []
     main_windsurf_found = False
+    app_name = get_paths().app_name
 
     for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
         try:
@@ -363,14 +369,14 @@ def check_log_issues() -> list[str]:
             exe = proc.info["exe"] or ""
             cmdline = " ".join(proc.info["cmdline"] or [])
 
-            if "Windsurf.app" not in exe and "Windsurf.app" not in cmdline:
+            if app_name not in exe and app_name not in cmdline:
                 continue
 
             # Check if this is the main Windsurf/Electron process
             if (
                 name.lower() in ["windsurf", "electron"]
-                or "Windsurf.app/Contents/MacOS/Windsurf" in exe
-                or "Windsurf.app/Contents/MacOS/Electron" in exe
+                or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                or f"{app_name}/Contents/MacOS/Electron" in exe
             ):
                 # Exclude helpers and crashpad
                 if "Helper" not in name and "crashpad" not in name.lower():
@@ -410,7 +416,8 @@ def check_log_issues() -> list[str]:
         )
 
     # Check for logs directory in extensions (causing package.json error)
-    logs_dir = Path.home() / ".windsurf" / "extensions" / "logs"
+    paths = get_paths()
+    logs_dir = paths.extensions_dir / "logs"
     if logs_dir.exists():
         # Try to identify which extension created it
         culprit = "unknown extension"
@@ -423,11 +430,11 @@ def check_log_issues() -> list[str]:
             pass
 
         issues.append(
-            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - Fix: rm -rf ~/.windsurf/extensions/logs"
+            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
         )
 
     # Check latest log directory
-    log_base = Path.home() / "Library" / "Application Support" / "Windsurf" / "logs"
+    log_base = paths.logs_dir
     if log_base.exists():
         log_dirs = sorted(log_base.iterdir(), reverse=True)
         if log_dirs:
@@ -569,7 +576,7 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
         List of WorkspaceInfo with ID, path, existence status, and load time.
     """
     workspaces = []
-    log_base = Path.home() / "Library" / "Application Support" / "Windsurf" / "logs"
+    log_base = get_paths().logs_dir
 
     if not log_base.exists():
         return workspaces
@@ -627,7 +634,7 @@ def count_windsurf_launches_today() -> int:
 
     Counts unique log directories created today.
     """
-    log_base = Path.home() / "Library" / "Application Support" / "Windsurf" / "logs"
+    log_base = get_paths().logs_dir
 
     if not log_base.exists():
         return 0
