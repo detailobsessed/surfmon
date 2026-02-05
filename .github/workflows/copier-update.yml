@@ -1,0 +1,21 @@
+name: Copier Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 0"  # Weekly on Sundays at 5am UTC
+
+jobs:
+  update:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions-ext/copier-update@v0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
