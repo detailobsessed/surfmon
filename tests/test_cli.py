@@ -182,7 +182,7 @@ class TestCompareCommand:
     def test_compare_missing_before_file(self, tmp_path):
         """Should error when before file doesn't exist."""
         after_file = tmp_path / "after.json"
-        after_file.write_text('{"timestamp": "2025-01-01"}')
+        after_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
 
         result = runner.invoke(app, ["compare", str(tmp_path / "nonexistent.json"), str(after_file)])
         assert result.exit_code == 1
@@ -191,7 +191,7 @@ class TestCompareCommand:
     def test_compare_missing_after_file(self, tmp_path):
         """Should error when after file doesn't exist."""
         before_file = tmp_path / "before.json"
-        before_file.write_text('{"timestamp": "2025-01-01"}')
+        before_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
 
         result = runner.invoke(app, ["compare", str(before_file), str(tmp_path / "nonexistent.json")])
         assert result.exit_code == 1
@@ -277,7 +277,7 @@ class TestPruneCommand:
     def test_prune_not_a_directory(self, tmp_path):
         """Should error when path is not a directory."""
         file_path = tmp_path / "file.txt"
-        file_path.write_text("test")
+        file_path.write_text("test", encoding="utf-8")
         result = runner.invoke(app, ["prune", str(file_path)])
         assert result.exit_code == 1
         assert "Not a directory" in result.stdout
@@ -293,7 +293,7 @@ class TestPruneCommand:
         # Create duplicate reports (same content hash)
         for i in range(3):
             report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         result = runner.invoke(app, ["prune", str(tmp_path), "--dry-run"])
         assert result.exit_code == 0
@@ -303,7 +303,7 @@ class TestPruneCommand:
         # Create duplicate reports
         for i in range(3):
             report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         result = runner.invoke(app, ["prune", str(tmp_path)], input="y\n")
         assert result.exit_code == 0
@@ -316,7 +316,7 @@ class TestPruneCommand:
         # Create duplicate reports
         for i in range(3):
             report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         result = runner.invoke(app, ["prune", str(tmp_path)], input="n\n")
         assert result.exit_code == 0
@@ -330,7 +330,7 @@ class TestPruneCommand:
         # Create reports with different timestamps in filenames
         for i in range(3):
             report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_2025010{i + 1}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_2025010{i + 1}.json").write_text(json.dumps(report), encoding="utf-8")
 
         result = runner.invoke(app, ["prune", str(tmp_path), "--keep-latest"], input="y\n")
         assert result.exit_code == 0
@@ -376,7 +376,7 @@ class TestAnalyzeCommand:
                 "extensions_count": 10 + i,
                 "mcp_servers_enabled": [],
             }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         result = runner.invoke(app, ["analyze", str(tmp_path)])
         assert result.exit_code == 0
@@ -406,7 +406,7 @@ class TestAnalyzeCommand:
                 "extensions_count": 10 + i,
                 "mcp_servers_enabled": [],
             }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         # Run analyze with plot - may have matplotlib warnings
         result = runner.invoke(app, ["analyze", str(tmp_path), "--plot"])
@@ -437,7 +437,7 @@ class TestAnalyzeCommand:
                 "extensions_count": 10 + i,
                 "mcp_servers_enabled": [],
             }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report))
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
 
         output_file = tmp_path / "plot.png"
         result = runner.invoke(app, ["analyze", str(tmp_path), "--plot", "--output", str(output_file)])

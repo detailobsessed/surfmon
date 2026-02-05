@@ -65,7 +65,7 @@ def sample_report_data():
 def report_file(tmp_path, sample_report_data):
     """Create a temporary report JSON file."""
     file_path = tmp_path / "report.json"
-    file_path.write_text(json.dumps(sample_report_data))
+    file_path.write_text(json.dumps(sample_report_data), encoding="utf-8")
     return file_path
 
 
@@ -76,5 +76,5 @@ def reports_directory(tmp_path, sample_report_data):
         data = sample_report_data.copy()
         data["timestamp"] = f"2025-01-0{i + 1}T12:00:00"
         data["process_count"] = 5 + i
-        (tmp_path / f"report_{i}.json").write_text(json.dumps(data))
+        (tmp_path / f"report_{i}.json").write_text(json.dumps(data), encoding="utf-8")
     return tmp_path

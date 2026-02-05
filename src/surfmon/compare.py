@@ -12,7 +12,7 @@ console = Console()
 
 def load_report(path: Path) -> dict:
     """Load a JSON report."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 

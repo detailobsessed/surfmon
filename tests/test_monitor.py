@@ -324,7 +324,7 @@ class TestGetMCPConfig:
             }
         }
 
-        config_file.write_text(json.dumps(config))
+        config_file.write_text(json.dumps(config), encoding="utf-8")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         result = get_mcp_config()
@@ -339,7 +339,7 @@ class TestGetMCPConfig:
         config_dir = tmp_path / ".codeium" / "windsurf"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "mcp_config.json"
-        config_file.write_text("{invalid json")
+        config_file.write_text("{invalid json", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -421,7 +421,7 @@ class TestCheckLogIssues:
         """Should identify which extension created the logs directory."""
         logs_dir = tmp_path / ".windsurf" / "extensions" / "logs"
         logs_dir.mkdir(parents=True)
-        (logs_dir / "marimo.log").write_text("some log content")
+        (logs_dir / "marimo.log").write_text("some log content", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -438,7 +438,8 @@ class TestCheckLogIssues:
         main_log.write_text(
             "Extension host with pid 1234 exited with code: 1, signal: unknown.\n"
             "Extension host with pid 5678 exited with code: 0, signal: unknown.\n"
-            "Extension host with pid 9999 exited with code: 137, signal: unknown.\n"
+            "Extension host with pid 9999 exited with code: 137, signal: unknown.\n",
+            encoding="utf-8",
         )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -455,7 +456,7 @@ class TestCheckLogIssues:
         log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204"
         log_dir.mkdir(parents=True)
         main_log = log_dir / "main.log"
-        main_log.write_text("UpdateService error: timeout")
+        main_log.write_text("UpdateService error: timeout", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -468,7 +469,7 @@ class TestCheckLogIssues:
         log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204"
         log_dir.mkdir(parents=True)
         main_log = log_dir / "main.log"
-        main_log.write_text("Fatal error: out of memory")
+        main_log.write_text("Fatal error: out of memory", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -481,7 +482,7 @@ class TestCheckLogIssues:
         log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204"
         log_dir.mkdir(parents=True)
         main_log = log_dir / "main.log"
-        main_log.write_text("GPU process crashed\nGPU process crashed\nGPU process crashed")
+        main_log.write_text("GPU process crashed\nGPU process crashed\nGPU process crashed", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -496,7 +497,7 @@ class TestCheckLogIssues:
         sharedprocess_log = log_dir / "sharedprocess.log"
         # Create many errors (more than threshold of 10)
         errors = "\n".join(["[ERROR] Extension error occurred" for _ in range(15)])
-        sharedprocess_log.write_text(errors)
+        sharedprocess_log.write_text(errors, encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -516,7 +517,7 @@ class TestCheckLogIssues:
             "[ERROR] ms-python.python: third error\n"
             "[ERROR] vscodevim.vim: different error\n"
         )
-        sharedprocess_log.write_text(errors)
+        sharedprocess_log.write_text(errors, encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -587,7 +588,7 @@ class TestGetActiveWorkspaces:
             f'Window will load {{"windowId":1,"workspaceUri":{{"id":"abc123",'
             f'"configPath":{{"fsPath":"{workspace_path}"}}}}}}'
         )
-        main_log.write_text(log_content)
+        main_log.write_text(log_content, encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -609,7 +610,7 @@ class TestGetActiveWorkspaces:
             'Window will load {"windowId":1,"workspaceUri":{"id":"xyz789",'
             '"configPath":{"fsPath":"/Users/test/nonexistent.code-workspace"}}}'
         )
-        main_log.write_text(log_content)
+        main_log.write_text(log_content, encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -813,7 +814,7 @@ class TestNetworkLogParsing:
         network_log = log_dir / "network-shared.log"
         # Create many telemetry errors (more than threshold of 5)
         errors = "\n".join(["windsurf-telemetry.codeium.com connection failed" for _ in range(10)])
-        network_log.write_text(errors)
+        network_log.write_text(errors, encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 

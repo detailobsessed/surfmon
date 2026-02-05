@@ -76,7 +76,7 @@ class TestLoadReport:
         """Should load JSON report from file."""
         report_data = {"timestamp": "2025-01-01", "process_count": 5}
         report_file = tmp_path / "report.json"
-        report_file.write_text(json.dumps(report_data))
+        report_file.write_text(json.dumps(report_data), encoding="utf-8")
 
         result = load_report(report_file)
         assert result == report_data
@@ -133,8 +133,8 @@ class TestCompareReports:
 
         old_file = tmp_path / "old.json"
         new_file = tmp_path / "new.json"
-        old_file.write_text(json.dumps(old_report))
-        new_file.write_text(json.dumps(new_report))
+        old_file.write_text(json.dumps(old_report), encoding="utf-8")
+        new_file.write_text(json.dumps(new_report), encoding="utf-8")
 
         mocker.patch("surfmon.compare.console")
         compare_reports(old_file, new_file)
@@ -189,8 +189,8 @@ class TestCompareReports:
 
         old_file = tmp_path / "old.json"
         new_file = tmp_path / "new.json"
-        old_file.write_text(json.dumps(old_report))
-        new_file.write_text(json.dumps(new_report))
+        old_file.write_text(json.dumps(old_report), encoding="utf-8")
+        new_file.write_text(json.dumps(new_report), encoding="utf-8")
 
         mocker.patch("surfmon.compare.console")
         compare_reports(old_file, new_file)
@@ -238,8 +238,8 @@ class TestCompareReports:
 
         old_file = tmp_path / "old.json"
         new_file = tmp_path / "new.json"
-        old_file.write_text(json.dumps(old_report))
-        new_file.write_text(json.dumps(new_report))
+        old_file.write_text(json.dumps(old_report), encoding="utf-8")
+        new_file.write_text(json.dumps(new_report), encoding="utf-8")
 
         mocker.patch("surfmon.compare.console")
         compare_reports(old_file, new_file)
@@ -296,8 +296,8 @@ class TestCompareReportsWithLanguageServers:
 
         old_file = tmp_path / "old_ls.json"
         new_file = tmp_path / "new_ls.json"
-        old_file.write_text(json.dumps(old_report))
-        new_file.write_text(json.dumps(new_report))
+        old_file.write_text(json.dumps(old_report), encoding="utf-8")
+        new_file.write_text(json.dumps(new_report), encoding="utf-8")
 
         mocker.patch("surfmon.compare.console")
         compare_reports(old_file, new_file)

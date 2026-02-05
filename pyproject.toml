@@ -145,8 +145,7 @@ markers = [
 ]
 filterwarnings = [
     "error",
-    "default::EncodingWarning",
-    "error::EncodingWarning:surfmon",
+    "error::EncodingWarning",
     "ignore:.*rsyncdir:DeprecationWarning:xdist",
 ]
 

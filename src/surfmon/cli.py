@@ -478,7 +478,7 @@ def prune(
 
     for json_file in json_files:
         try:
-            with open(json_file) as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             # Remove timestamp for comparison (it will always differ)
@@ -618,7 +618,7 @@ def analyze(
     reports = []
     for report_file in report_files:
         try:
-            with open(report_file) as f:
+            with open(report_file, encoding="utf-8") as f:
                 data = json.load(f)
                 reports.append(
                     {

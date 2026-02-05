@@ -280,5 +280,5 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         lines.extend(f"- {issue}" for issue in report.log_issues)
         lines.append("")
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
