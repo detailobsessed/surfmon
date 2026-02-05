@@ -10,7 +10,7 @@ project_description: Monitor Windsurf and Windsurf Next resource usage and diagn
     problems
 project_name: surfmon
 project_type: package
-publish_to_pypi: false
+publish_to_pypi: true
 repository_namespace: detailobsessed
 use_blacksmith_runners: true
 use_ci: true
