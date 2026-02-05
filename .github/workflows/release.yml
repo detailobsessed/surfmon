@@ -1,0 +1,48 @@
+name: release
+
+"on":
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    concurrency: release
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Setup uv and Python
+      uses: astral-sh/setup-uv@v7.1.5
+      with:
+        python-version: "3.14"
+        enable-cache: true
+
+    - name: Install dependencies
+      run: uv sync --group maintain
+
+    - name: Semantic Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: uv run semantic-release version --changelog --push --tag --vcs-release
+
+    # Uncomment to publish to PyPI:
+    # - name: Publish to PyPI
+    #   if: secrets.PYPI_TOKEN != ''
+    #   env:
+    #     PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    #   run: |
+    #     if [ -n "$PYPI_TOKEN" ]; then
+    #       uv publish --token $PYPI_TOKEN
+    #     fi

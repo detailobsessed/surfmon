@@ -1,0 +1,112 @@
+name: ci
+
+"on":
+  push:
+    branches:
+    - main
+    - test-me-*
+  pull_request:
+    branches:
+    - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LANG: en_US.utf-8
+  LC_ALL: en_US.utf-8
+  PYTHONIOENCODING: UTF-8
+  PYTHONWARNDEFAULTENCODING: "1"
+  PYTHON_VERSIONS: ""
+
+jobs:
+
+  quality:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Setup uv and Python
+      uses: astral-sh/setup-uv@v7.1.5
+      with:
+        python-version: "3.14"
+        enable-cache: true
+        cache-dependency-glob: pyproject.toml
+
+    - name: Install dependencies
+      run: uv run poe setup
+
+    - name: Check if the documentation builds correctly
+      run: |
+        mkdir -p htmlcov
+        echo '<html><body>No coverage report yet</body></html>' > htmlcov/index.html
+        uv run poe docs-build
+
+    - name: Check the code quality
+      run: uv run poe lint
+
+    - name: Check if the code is correctly typed
+      run: uv run poe typecheck
+
+    - name: Check for security vulnerabilities
+      run: uv run poe security
+
+    - name: Check for dead code
+      run: uv run poe deadcode
+
+    - name: Check for breaking changes in the API
+      run: uv run poe lint
+
+    - name: Store objects inventory for tests
+      uses: actions/upload-artifact@v6
+      with:
+        name: objects.inv
+        path: site/objects.inv
+
+  tests:
+
+    needs:
+    - quality
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    continue-on-error: true
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+        allow-prereleases: true
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: pyproject.toml
+
+    - name: Install dependencies
+      run: uv run poe setup
+
+    - name: Download objects inventory
+      uses: actions/download-artifact@v7
+      with:
+        name: objects.inv
+        path: site/
+
+    - name: Run the test suite
+      run: uv run poe test

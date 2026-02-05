@@ -1,0 +1,20 @@
+# Markdownlint configuration
+# https://github.com/DavidAnson/markdownlint
+
+# Disable line length - prose wrapping is a style choice
+MD013: false
+
+# Allow headings to skip levels (needed for GitHub issue templates with YAML frontmatter)
+MD001: false
+
+# Allow inline HTML (needed for details/summary in issue templates)
+MD033: false
+
+# Allow code blocks without language specifier
+MD040: false
+
+# Allow multiple top-level headings (needed for some doc structures)
+MD025: false
+
+# Allow first line to not be a heading (PR templates, etc.)
+MD041: false
