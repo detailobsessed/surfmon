@@ -25,6 +25,7 @@ uv sync
 The tool provides a Typer-based CLI with multiple commands:
 
 ### Quick performance check
+
 ```bash
 # Basic monitoring (console output)
 uv run surfmon check
@@ -37,6 +38,7 @@ uv run surfmon check --json report.json --markdown report.md
 ```
 
 ### Continuous monitoring
+
 ```bash
 # Watch mode - live updating dashboard
 uv run surfmon watch
@@ -52,12 +54,14 @@ uv run surfmon watch -o ~/my-windsurf-watch
 ```
 
 ### Compare reports
+
 ```bash
 # Compare before/after reports
 uv run surfmon compare before.json after.json
 ```
 
 ### Clean up orphaned processes
+
 ```bash
 # Interactive cleanup (asks for confirmation)
 uv run surfmon cleanup
@@ -67,6 +71,7 @@ uv run surfmon cleanup --force
 ```
 
 ### Remove duplicate reports
+
 ```bash
 # Dry run - see what would be deleted
 uv run surfmon prune ../reports/watch --dry-run
@@ -79,6 +84,7 @@ uv run surfmon prune ../reports/watch --no-keep-latest
 ```
 
 ### Version info
+
 ```bash
 uv run surfmon version
 ```
@@ -86,12 +92,14 @@ uv run surfmon version
 ## What it monitors
 
 ### System Resources
+
 - Total and available memory
 - Memory usage percentage
 - Swap usage
 - CPU cores
 
 ### Windsurf Specific
+
 - **Process count** - Number of Windsurf-related processes
 - **Total memory** - Combined memory usage across all processes
 - **Total CPU** - Combined CPU usage
@@ -101,6 +109,7 @@ uv run surfmon version
 - **MCP servers** - Which MCP servers are enabled
 
 ### Issue Detection
+
 - **Orphaned crash handlers** - Detects chrome_crashpad_handler processes that remain after Windsurf closes
 - Extension host crashes/exits
 - Update service timeouts (NextDNS blocking)
@@ -116,6 +125,7 @@ uv run surfmon version
 ## Use cases
 
 ### 1. Before/after comparison
+
 ```bash
 # Before making changes
 uv run surfmon check --json before.json
@@ -130,6 +140,7 @@ uv run surfmon compare before.json after.json
 ```
 
 ### 2. Continuous monitoring with live display
+
 ```bash
 # Watch mode - live updating table, saves reports every 5 minutes
 uv run surfmon watch
@@ -145,6 +156,7 @@ uv run surfmon watch -o ~/my-windsurf-watch
 ```
 
 This provides a **live dashboard** that updates every few seconds showing:
+
 - Process count changes (↑/↓)
 - Memory usage changes with color coding
 - CPU usage trends
@@ -158,12 +170,14 @@ uv run surfmon prune ../reports/watch --dry-run
 ```
 
 Perfect for:
+
 - Monitoring during long work sessions
 - Detecting memory leaks over time
 - Seeing immediate impact of changes
 - Historical analysis of resource usage patterns
 
 ### 3. Automated health check
+
 ```bash
 # Run as a health check (non-zero exit on issues)
 if ! uv run surfmon check; then
@@ -174,7 +188,7 @@ fi
 ## Common issues detected
 
 | Issue | Cause | Fix |
-|-------|-------|-----|
+| ----- | ----- | --- |
 | Orphaned crash handlers | Windsurf bug - crash reporters not cleaned up on exit | `uv run surfmon cleanup --force` |
 | `logs` directory error | Marimo extension creates logs in wrong place | `mv ~/.windsurf/extensions/logs ~/Library/Application\ Support/Windsurf/extension-logs/` |
 | Update service timeouts | NextDNS blocking `windsurf-stable.codeium.com` | Whitelist `*.codeium.com` in NextDNS |
@@ -221,6 +235,7 @@ surfmon/
 ### Key Components
 
 **Core Module** (`src/windsurf_monitor/monitor.py`):
+
 - `ProcessInfo` - Dataclass for process information
 - `SystemInfo` - Dataclass for system resources
 - `MonitoringReport` - Complete report structure
@@ -232,16 +247,19 @@ surfmon/
 - `save_report_json()` - JSON export
 
 **CLI Module** (`src/windsurf_monitor/cli.py`):
+
 - `check` - Quick performance check command
 - `watch` - Continuous monitoring with live dashboard
 - `compare` - Report comparison command
 - `version` - Version information
 
 **Output Module** (`src/windsurf_monitor/output.py`):
+
 - `display_report()` - Rich terminal output formatting
 - `save_report_markdown()` - Markdown export
 
 **Compare Module** (`src/windsurf_monitor/compare.py`):
+
 - `compare_reports()` - Before/after analysis with colored diffs
 - `format_diff()` - Colored change formatting
 - `load_report()` - JSON report loading
@@ -260,6 +278,7 @@ uv run pytest tests/test_monitor.py::TestGetWindsurfProcesses -v
 ```
 
 **Test Coverage**: 19 tests covering 91% of code
+
 - Process detection and error handling
 - System info gathering
 - Language server identification
@@ -271,6 +290,7 @@ uv run pytest tests/test_monitor.py::TestGetWindsurfProcesses -v
 ## Future Enhancements
 
 ### Planned
+
 - [ ] Historical trend analysis (compare multiple JSON reports)
 - [ ] Alerts when thresholds exceeded
 - [ ] Extension-specific resource tracking
@@ -281,4 +301,5 @@ uv run pytest tests/test_monitor.py::TestGetWindsurfProcesses -v
 - [ ] Add tests for CLI, output, and compare modules
 
 ### Architecture Notes
+
 The package uses a modern Typer-based CLI with proper testing infrastructure. Core logic is cleanly separated in the `src/windsurf_monitor` package, making it easy to add new commands or integrate the monitoring functionality into other tools.

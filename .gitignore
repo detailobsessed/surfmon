@@ -42,10 +42,9 @@ htmlcov/
 # OS
 .DS_Store
 
-# Generated reports (keep in repo for analysis)
-# surfmon-*.json
-# surfmon-*.md
-# reports/
+# Generated reports
+surfmon-*.json
+surfmon-*.md
 
 .env
 
