@@ -53,19 +53,7 @@ jobs:
         uv run poe docs-build
 
     - name: Check the code quality
-      run: uv run poe lint
-
-    - name: Check if the code is correctly typed
-      run: uv run poe typecheck
-
-    - name: Check for security vulnerabilities
-      run: uv run poe security
-
-    - name: Check for dead code
-      run: uv run poe deadcode
-
-    - name: Check for breaking changes in the API
-      run: uv run poe lint
+      run: uv run poe check
 
     - name: Store objects inventory for tests
       uses: actions/upload-artifact@v6
@@ -87,15 +75,10 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
-    - name: Setup Python
-      uses: actions/setup-python@v6
+    - name: Setup uv and Python
+      uses: astral-sh/setup-uv@v7.1.5
       with:
         python-version: "3.14"
-        allow-prereleases: true
-
-    - name: Setup uv
-      uses: astral-sh/setup-uv@v5
-      with:
         enable-cache: true
         cache-dependency-glob: pyproject.toml
 
