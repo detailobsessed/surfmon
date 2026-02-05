@@ -16,6 +16,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     concurrency: release
+    environment: pypi
 
     steps:
     - name: Checkout
@@ -50,11 +51,4 @@ jobs:
 
     - name: Publish to PyPI
       if: steps.dist.outputs.has_dist == 'true'
-      env:
-        PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-      run: |
-        if [ -n "$PYPI_TOKEN" ]; then
-          uv publish --token "$PYPI_TOKEN"
-        else
-          echo "PYPI_TOKEN is not set; skipping PyPI publish."
-        fi
+      run: uv publish
