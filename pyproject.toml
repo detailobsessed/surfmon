@@ -82,6 +82,7 @@ default-groups = ["maintain", "ci", "docs", "local"]
 [tool.ruff]
 target-version = "py314"
 line-length = 140
+preview = true
 
 [tool.ruff.lint]
 select = [
@@ -121,6 +122,9 @@ select = [
 
     # Print statements (use logging instead)
     "T20",  # flake8-print
+
+    # Encoding
+    "PLW1514",  # unspecified-encoding - require encoding in open()
 ]
 
 [tool.ruff.lint.per-file-ignores]
