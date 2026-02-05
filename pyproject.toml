@@ -1,65 +1,214 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
 [project]
 name = "surfmon"
-version = "0.1.0"
-description = "Monitor Windsurf IDE performance and resource usage"
+description = "Monitor Windsurf and Windsurf Next resource usage and diagnose problems"
+authors = [{name = "Ismar Iljazovic", email = "ismar@gmail.com"}]
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
 requires-python = ">=3.14"
+keywords = []
+version = "0.0.0"
 dependencies = [
-    "psutil>=7.2.2",
-    "rich>=14.3.2",
-    "typer>=0.21.1",
-    "matplotlib>=3.10.0",
+    "typer>=0.21",
+    "psutil>=7.2",
+    "rich>=14.3",
     "python-decouple>=3.8",
+    "matplotlib>=3.10",
 ]
+
+[project.urls]
+Homepage = "https://detailobsessed.github.io/surfmon"
+Documentation = "https://detailobsessed.github.io/surfmon"
+Changelog = "https://detailobsessed.github.io/surfmon/changelog"
+Repository = "https://github.com/detailobsessed/surfmon"
+Issues = "https://github.com/detailobsessed/surfmon/issues"
+Discussions = "https://github.com/detailobsessed/surfmon/discussions"
+Funding = "https://github.com/sponsors/ichoosetoaccept"
 
 [project.scripts]
 surfmon = "surfmon.cli:main"
 
-[tool.uv]
-package = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-
 [dependency-groups]
-dev = [
+maintain = [
+    "build>=1.2",
+    "python-semantic-release>=10",
+]
+ci = [
+    "ruff>=0.14",
+    "pytest>=8",
+    "pytest-cov>=6",
+    "pytest-randomly>=3.15",
+    "pytest-xdist>=3.5",
     "ty>=0.0.14",
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
+    "poethepoet>=0.32",
+    "pytest-mock>=3.15.1",
+]
+local = [
+    "prek>=0.3.1",
+]
+docs = [
+    "markdown-callouts>=0.4",
+    "markdown-exec>=1.10",
+    "mkdocs>=1.6",
+    "mkdocs-coverage>=1.1",
+    "mkdocs-git-revision-date-localized-plugin>=1.4",
+    "mkdocs-llmstxt>=0.4",
+    "mkdocs-material>=9.6",
+    "mkdocs-minify-plugin>=0.8",
+    "mkdocs-material-extensions>=1.3",
+    "mkdocs-section-index>=0.3.9",
+    "mkdocstrings[python]>=0.27",
 ]
 
-[tool.coverage.run]
-source = ["src/surfmon"]
-omit = [
-    "src/surfmon/cli.py",
-    "src/surfmon/output.py",
-    "src/surfmon/compare.py",
-]
-
-[tool.coverage.report]
-fail_under = 81
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "pass",
-]
+[tool.uv]
+default-groups = ["maintain", "ci", "docs", "local"]
 
 [tool.ruff]
 target-version = "py314"
+line-length = 140
 
 [tool.ruff.lint]
-extend-select = [
-    # Core pyupgrade functionality
-    "UP",   # pyupgrade rules
+select = [
+    # Core (ruff defaults)
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
 
-    # Additional rules needed for complete pyupgrade replacement
-    "C401", # unnecessary-generator-set
-    "C402", # unnecessary-generator-dict
-    "C403", # unnecessary-list-comprehension-set
-    "C404", # unnecessary-list-comprehension-dict
-    "C405", # unnecessary-literal-set
-    "F632", # is-literal (is/is not comparison to constants)
-    "W605", # invalid-escape-sequence
+    # Modern Python
+    "UP",   # pyupgrade - use modern Python syntax
+    "I",    # isort - import sorting
+
+    # Code quality
+    "B",    # flake8-bugbear - common bugs and design issues
+    "SIM",  # flake8-simplify - simplify code
+    "C4",   # flake8-comprehensions - better comprehensions
+    "PIE",  # flake8-pie - misc improvements
+    "RET",  # flake8-return - return statement issues
+    "RUF",  # Ruff-specific rules
+
+    # Performance
+    "PERF", # Perflint - performance anti-patterns
+
+    # Security
+    "S",    # flake8-bandit - security issues
+
+    # Testing
+    "PT",   # flake8-pytest-style
+
+    # Error handling
+    "TRY",  # tryceratops - exception handling
+    "LOG",  # flake8-logging - logging best practices
+
+    # Unused code
+    "ARG",  # flake8-unused-arguments
+    "ERA",  # eradicate - commented-out code
+
+    # Print statements (use logging instead)
+    "T20",  # flake8-print
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # Allow assert in tests
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["surfmon"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "error",
+    "default::EncodingWarning",
+    "error::EncodingWarning:surfmon",
+    "ignore:.*rsyncdir:DeprecationWarning:xdist",
+]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["src/", "tests/"]
+
+[tool.coverage.paths]
+equivalent = ["src/", ".venv/lib/*/site-packages/"]
+
+[tool.coverage.report]
+precision = 2
+omit = ["src/*/__init__.py", "src/*/__main__.py", "tests/__init__.py"]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING"]
+
+[tool.coverage.json]
+output = "htmlcov/coverage.json"
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+exclude = ["tests/fixtures/"]
+
+[tool.poe.tasks]
+# Setup
+setup = "uv sync"
+
+# Quality checks
+lint = "ruff check src tests"
+format = "ruff format src tests"
+typecheck = "ty check src tests"
+
+# Testing
+test = "pytest -m 'not slow'"
+test-all = "pytest"
+test-cov = "pytest --cov=surfmon --cov-report=term-missing --cov-report=html"
+
+# Combined tasks
+check = ["lint", "typecheck"]
+fix = ["lint --fix", "format"]
+
+# Documentation
+docs = "mkdocs serve"
+docs-build = "mkdocs build -s"
+docs-deploy = "mkdocs gh-deploy"
+
+# Pre-commit
+prek = "prek run --all-files"
+
+# GitHub utilities
+releases = "gh release list --limit 10"
+tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"
+runs = "gh run list --limit 10"
+watch = "gh run watch"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+build_command = """
+uv lock --upgrade-package "$PACKAGE_NAME"
+git add uv.lock
+uv build
+"""
+commit_message = "chore(release): {version}"
+tag_format = "{version}"
+allow_zero_version = true
+major_on_zero = false
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "deps", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]

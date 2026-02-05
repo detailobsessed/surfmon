@@ -1,4 +1,4 @@
-# Minimum prek version for builtin hooks support
+default_stages: [pre-commit]
 minimum_prek_version: "0.3.1"
 
 repos:
@@ -33,15 +33,83 @@ repos:
         priority: 0
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
+    rev: ""  # prek autoupdate will fill this
     hooks:
       - id: gitleaks
+        priority: 1
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: ruff
+        args: [--fix]
+        priority: 1
+      - id: ruff-format
+        priority: 1
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: uv-lock
+        priority: 1
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: shellcheck
+        priority: 1
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: actionlint
+        priority: 1
+
+  - repo: https://github.com/crate-ci/typos
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: typos
+        priority: 1
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: ""  # prek autoupdate will fill this
+    hooks:
+      - id: markdownlint
+        args: ["--fix"]
+        priority: 1
+
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty type checker
+        entry: uv run ty check
+        language: system
+        types: [python]
+        pass_filenames: false
+        priority: 1
+
+      - id: pytest-cov
+        name: pytest with 90% coverage
+        entry: uv run pytest --cov=surfmon --cov-fail-under=90 -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+        priority: 1
+
+      - id: docs-build
+        name: docs build check
+        entry: bash -c 'mkdir -p htmlcov && echo "<html><body>No coverage report yet</body></html>" > htmlcov/index.html && uv run poe docs-build'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
 
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
+    rev: ""  # prek autoupdate will fill this
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
+        priority: 1
         args:
           [
             --strict,
@@ -57,27 +125,3 @@ repos:
             refactor,
             test,
           ]
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: local
-    hooks:
-      - id: ty
-        name: ty check
-        entry: uv run ty check src
-        language: system
-        pass_filenames: false
-        files: ^src/.*\.py$
-
-      - id: pytest-cov
-        name: pytest with 90% coverage
-        entry: uv run pytest --cov=surfmon --cov-fail-under=90 -q
-        language: system
-        types: [python]
-        pass_filenames: false
-        stages: [pre-commit]

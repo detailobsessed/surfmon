@@ -1,5 +1,6 @@
 """Core monitoring functionality."""
 
+import contextlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -95,15 +96,17 @@ def get_windsurf_processes() -> list[psutil.Process]:
 
                 # Check if this is the main Windsurf/Electron process (not a helper/crashpad)
                 if (
-                    name.lower() in ["windsurf", "electron"]
-                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                    or f"{app_name}/Contents/MacOS/Electron" in exe
+                    (
+                        name.lower() in ["windsurf", "electron"]
+                        or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                        or f"{app_name}/Contents/MacOS/Electron" in exe
+                    )
+                    and "Helper" not in name
+                    and "crashpad" not in name.lower()
                 ):
-                    # Exclude helpers and crashpad
-                    if "Helper" not in name and "crashpad" not in name.lower():
-                        main_windsurf_found = True
+                    main_windsurf_found = True
 
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
     # If no main Windsurf process found, filter out crashpad handlers (they're orphaned)
@@ -113,16 +116,14 @@ def get_windsurf_processes() -> list[psutil.Process]:
             try:
                 if "crashpad" not in p.name().lower():
                     filtered_procs.append(p)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except psutil.NoSuchProcess, psutil.AccessDenied:
                 pass  # Process terminated, skip it
         windsurf_procs = filtered_procs
 
     return windsurf_procs
 
 
-def get_process_info(
-    proc: psutil.Process, initial_cpu: float = 0.0
-) -> ProcessInfo | None:
+def get_process_info(proc: psutil.Process, initial_cpu: float = 0.0) -> ProcessInfo | None:
     """Extract detailed information from a process.
 
     Args:
@@ -149,7 +150,7 @@ def get_process_info(
                 runtime_seconds=runtime,
                 cmdline=cmdline,
             )
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
+    except psutil.NoSuchProcess, psutil.AccessDenied:
         return None
 
 
@@ -212,9 +213,7 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
             enhanced_cmdline = f"{p.name} [workspace: {workspace_short}]"
 
         # Extract language for JDT LS
-        if enhanced_cmdline is None and (
-            "jdtls" in cmdline.lower() or "eclipse.jdt" in cmdline.lower()
-        ):
+        if enhanced_cmdline is None and ("jdtls" in cmdline.lower() or "eclipse.jdt" in cmdline.lower()):
             # Try to find project path
             data_match = re.search(r"-data\s+(\S+)", cmdline)
             if data_match:
@@ -255,10 +254,8 @@ def get_mcp_config() -> list[str]:
         with open(mcp_config_path) as f:
             config = json.load(f)
             servers = config.get("mcpServers", {})
-            return [
-                name for name, cfg in servers.items() if not cfg.get("disabled", False)
-            ]
-    except (json.JSONDecodeError, KeyError):
+            return [name for name, cfg in servers.items() if not cfg.get("disabled", False)]
+    except json.JSONDecodeError, KeyError:
         return []
 
 
@@ -271,10 +268,9 @@ def count_extensions() -> int:
     # Count directories that look like extensions (have version numbers)
     count = 0
     for item in ext_dir.iterdir():
-        if item.is_dir() and item.name != "logs":
-            # Simple heuristic: has a version-like pattern
-            if any(char.isdigit() for char in item.name):
-                count += 1
+        # Simple heuristic: directory with version-like pattern (has digits)
+        if item.is_dir() and item.name != "logs" and any(char.isdigit() for char in item.name):
+            count += 1
     return count
 
 
@@ -313,36 +309,22 @@ def check_orphaned_workspaces() -> list[str]:
                         db_path = Path(database_dir)
                         db_size_mb = 0
                         if db_path.exists():
-                            db_size_mb = (
-                                sum(
-                                    f.stat().st_size
-                                    for f in db_path.rglob("*")
-                                    if f.is_file()
-                                )
-                                / 1024
-                                / 1024
-                            )
+                            db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
 
                         # Get memory usage from the process
                         mem_mb = 0
-                        try:
+                        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
                             mem_mb = proc.memory_info().rss / 1024 / 1024
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
 
-                        workspace_short = (
-                            "/".join(workspace_path.split("/")[-3:])
-                            if "/" in workspace_path
-                            else workspace_path
-                        )
+                        workspace_short = "/".join(workspace_path.split("/")[-3:]) if "/" in workspace_path else workspace_path
                         issues.append(
                             f"🔴 CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
                             f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
                             f"Fix: Close Windsurf, run: rm -rf {database_dir}"
                         )
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except psutil.NoSuchProcess, psutil.AccessDenied:
                 continue
-    except (psutil.Error, OSError, re.error):
+    except psutil.Error, OSError, re.error:
         pass  # Silently fail if we can't detect processes or parse cmdline
 
     return issues
@@ -379,15 +361,17 @@ def check_log_issues() -> list[str]:
             if app_name not in exe and app_name not in cmdline:
                 continue
 
-            # Check if this is the main Windsurf/Electron process
+            # Check if this is the main Windsurf/Electron process (not helper/crashpad)
             if (
-                name.lower() in ["windsurf", "electron"]
-                or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                or f"{app_name}/Contents/MacOS/Electron" in exe
+                (
+                    name.lower() in ["windsurf", "electron"]
+                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                    or f"{app_name}/Contents/MacOS/Electron" in exe
+                )
+                and "Helper" not in name
+                and "crashpad" not in name.lower()
             ):
-                # Exclude helpers and crashpad
-                if "Helper" not in name and "crashpad" not in name.lower():
-                    main_windsurf_found = True
+                main_windsurf_found = True
 
             # Track crashpad handlers
             if "crashpad" in name.lower():
@@ -395,7 +379,7 @@ def check_log_issues() -> list[str]:
                 age_days = (datetime.now().timestamp() - create_time) / 86400
                 orphaned.append((proc.info["pid"], age_days))
 
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
     # If no main process but crashpad handlers exist, they're orphaned
@@ -418,9 +402,8 @@ def check_log_issues() -> list[str]:
         else:
             age_str = f"{oldest_days:.1f} days"
 
-        issues.append(
-            f"⚠️  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {', '.join(pids[:3])}{', ...' if len(pids) > 3 else ''}) - Fix: surfmon cleanup --force"
-        )
+        pids_str = ", ".join(pids[:3]) + (", ..." if len(pids) > 3 else "")
+        issues.append(f"⚠️  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force")
 
     # Check for logs directory in extensions (causing package.json error)
     paths = get_paths()
@@ -437,7 +420,8 @@ def check_log_issues() -> list[str]:
             pass  # Can't read logs directory
 
         issues.append(
-            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
+            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
+            f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
         )
 
     # Check latest log directory
@@ -467,31 +451,23 @@ def check_log_issues() -> list[str]:
                         )
                         crashes = [pid for pid, code in crash_lines if code != "0"]
                         if crashes:
-                            issues.append(
-                                f"🔴 {len(crashes)} extension host crash(es) - PIDs: {', '.join(crashes[:3])}{', ...' if len(crashes) > 3 else ''}"
-                            )
+                            pids_str = ", ".join(crashes[:3]) + (", ..." if len(crashes) > 3 else "")
+                            issues.append(f"🔴 {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
 
                         # Update service errors
                         if "UpdateService error" in content:
-                            issues.append(
-                                "⚠️  Update service timeouts detected (check NextDNS)"
-                            )
+                            issues.append("⚠️  Update service timeouts detected (check NextDNS)")
 
                         # OOM errors
-                        if (
-                            "out of memory" in content.lower()
-                            or "oom" in content.lower()
-                        ):
+                        if "out of memory" in content.lower() or "oom" in content.lower():
                             issues.append("🔴 Out of memory errors detected")
 
                         # Renderer crashes
                         renderer_crashes = content.count("GPU process crashed")
                         if renderer_crashes > 0:
-                            issues.append(
-                                f"⚠️  {renderer_crashes} GPU/renderer crashes detected"
-                            )
+                            issues.append(f"⚠️  {renderer_crashes} GPU/renderer crashes detected")
 
-                except (OSError, UnicodeDecodeError):
+                except OSError, UnicodeDecodeError:
                     pass  # Can't read or decode main.log
 
             # Check shared process log for extension errors
@@ -514,22 +490,17 @@ def check_log_issues() -> list[str]:
                             # Skip known harmless errors
                             and "ENOENT" not in line
                             and "marketplace" not in line
-                            and "logs/package.json"
-                            not in line  # Already reported separately
+                            and "logs/package.json" not in line  # Already reported separately
                         ]
 
                         # Try to extract extension IDs from errors
                         extension_errors = {}
                         for line in error_lines:
                             # Look for extension IDs in format: publisher.extension-name
-                            ext_match = re.search(
-                                r"([a-z0-9-]+\.[a-z0-9-]+)", line.lower()
-                            )
+                            ext_match = re.search(r"([a-z0-9-]+\.[a-z0-9-]+)", line.lower())
                             if ext_match:
                                 ext_id = ext_match.group(1)
-                                extension_errors[ext_id] = (
-                                    extension_errors.get(ext_id, 0) + 1
-                                )
+                                extension_errors[ext_id] = extension_errors.get(ext_id, 0) + 1
 
                         if extension_errors:
                             # Report top 3 problematic extensions
@@ -538,19 +509,13 @@ def check_log_issues() -> list[str]:
                                 key=lambda x: x[1],
                                 reverse=True,
                             )
-                            ext_summary = ", ".join(
-                                [f"{ext} ({count})" for ext, count in sorted_exts[:3]]
-                            )
-                            issues.append(
-                                f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > 3 else ''}"
-                            )
+                            ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:3]])
+                            issues.append(f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > 3 else ''}")
                         elif len(error_lines) > 10:
                             # Generic error count if we can't identify extensions
-                            issues.append(
-                                f"⚠️  {len(error_lines)} extension errors in shared process"
-                            )
+                            issues.append(f"⚠️  {len(error_lines)} extension errors in shared process")
 
-                except (OSError, UnicodeDecodeError):
+                except OSError, UnicodeDecodeError:
                     pass  # Can't read or decode sharedprocess.log
 
             # Check network errors
@@ -563,14 +528,10 @@ def check_log_issues() -> list[str]:
                         f.seek(max(0, file_size - 30000))
                         content = f.read()
 
-                        telemetry_errors = content.count(
-                            "windsurf-telemetry.codeium.com"
-                        )
+                        telemetry_errors = content.count("windsurf-telemetry.codeium.com")
                         if telemetry_errors > 5:
-                            issues.append(
-                                f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)"
-                            )
-                except (OSError, UnicodeDecodeError):
+                            issues.append(f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)")
+                except OSError, UnicodeDecodeError:
                     pass  # Can't read or decode network-shared.log
 
     return issues
@@ -605,7 +566,8 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
         with open(main_log) as f:
             for line in f:
                 # Look for workspace load events
-                # Format: "WindsurfWindowsMainManager: Window will load {"workspaceUri":{"id":"...","configPath":{..."fsPath":"/path/to/workspace"...}}}"
+                # Format: "WindsurfWindowsMainManager: Window will load
+                # {"workspaceUri":{"id":"...","configPath":{..."fsPath":"/path/..."...}}}"
                 if "Window will load" in line and "workspaceUri" in line:
                     # Extract workspace ID and path using regex
                     id_match = re.search(r'"id":"([^"]+)"', line)
@@ -630,7 +592,7 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
                                     loaded_at=loaded_at,
                                 )
                             )
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         pass  # Can't read or parse main.log for workspaces
 
     return workspaces
@@ -664,7 +626,7 @@ def count_windsurf_launches_today() -> int:
 
                     if dir_date == today:
                         launches += 1
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 continue
     except OSError:
         pass  # Can't read logs directory
@@ -685,7 +647,7 @@ def generate_report() -> MonitoringReport:
         try:
             proc.cpu_percent()  # First call initializes, returns 0.0
             cpu_samples[proc.pid] = proc
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
     # Sleep once for all processes (instead of once per process)
@@ -697,7 +659,7 @@ def generate_report() -> MonitoringReport:
     for pid, proc in cpu_samples.items():
         try:
             cpu_values[pid] = proc.cpu_percent()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess, psutil.AccessDenied:
             cpu_values[pid] = 0.0
 
     # Build process info with pre-sampled CPU

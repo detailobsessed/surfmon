@@ -23,9 +23,7 @@ def format_memory(mb: float) -> str:
     return f"{mb:.0f} MB"
 
 
-def format_diff(
-    old: float, new: float, is_memory: bool = False, reverse: bool = False
-) -> str:
+def format_diff(old: float, new: float, is_memory: bool = False, reverse: bool = False) -> str:
     """Format a difference with color coding."""
     diff = new - old
     pct_change = (diff / old * 100) if old != 0 else 0
@@ -40,8 +38,7 @@ def format_diff(
 
     if is_memory:
         return f"[{color}]{symbol} {format_memory(abs(diff))} ({pct_change:+.1f}%)[/{color}]"
-    else:
-        return f"[{color}]{symbol} {abs(diff):.1f} ({pct_change:+.1f}%)[/{color}]"
+    return f"[{color}]{symbol} {abs(diff):.1f} ({pct_change:+.1f}%)[/{color}]"
 
 
 def compare_reports(old_path: Path, new_path: Path) -> None:
@@ -52,9 +49,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     console.print()
     console.print(
         Panel.fit(
-            "[bold cyan]Windsurf Performance Comparison[/bold cyan]\n"
-            + f"Before: {old['timestamp']}\n"
-            + f"After:  {new['timestamp']}",
+            "[bold cyan]Windsurf Performance Comparison[/bold cyan]\n" + f"Before: {old['timestamp']}\n" + f"After:  {new['timestamp']}",
             border_style="cyan",
         )
     )
@@ -81,9 +76,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
         "Available Memory",
         f"{old_sys['available_memory_gb']:.1f} GB",
         f"{new_sys['available_memory_gb']:.1f} GB",
-        format_diff(
-            old_sys["available_memory_gb"], new_sys["available_memory_gb"], reverse=True
-        ),
+        format_diff(old_sys["available_memory_gb"], new_sys["available_memory_gb"], reverse=True),
     )
 
     sys_table.add_row(
@@ -125,9 +118,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
         "Total CPU",
         f"{old['total_windsurf_cpu_percent']:.1f}%",
         f"{new['total_windsurf_cpu_percent']:.1f}%",
-        format_diff(
-            old["total_windsurf_cpu_percent"], new["total_windsurf_cpu_percent"]
-        ),
+        format_diff(old["total_windsurf_cpu_percent"], new["total_windsurf_cpu_percent"]),
     )
 
     ws_table.add_row(
@@ -171,9 +162,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
             if pid in new_ls:
                 ls_new = new_ls[pid]
                 status = "Active"
-                mem_change = format_diff(
-                    ls_old["memory_mb"], ls_new["memory_mb"], is_memory=True
-                )
+                mem_change = format_diff(ls_old["memory_mb"], ls_new["memory_mb"], is_memory=True)
                 ls_table.add_row(
                     str(pid),
                     status,
@@ -243,10 +232,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
 
     if mem_improved and proc_reduced and not new_found:
         console.print("[bold green]🎉 Overall: Performance IMPROVED![/bold green]")
-    elif (
-        len(new_found) > 0
-        or new["total_windsurf_memory_mb"] > old["total_windsurf_memory_mb"] * 1.2
-    ):
+    elif len(new_found) > 0 or new["total_windsurf_memory_mb"] > old["total_windsurf_memory_mb"] * 1.2:
         console.print("[bold red]⚠ Overall: Performance DEGRADED[/bold red]")
     else:
         console.print("[bold yellow]→ Overall: No significant change[/bold yellow]")

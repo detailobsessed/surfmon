@@ -34,13 +34,7 @@ class WindsurfPaths:
     @property
     def logs_dir(self) -> Path:
         """Path to logs directory."""
-        return (
-            Path.home()
-            / "Library"
-            / "Application Support"
-            / self.app_support_dir
-            / "logs"
-        )
+        return Path.home() / "Library" / "Application Support" / self.app_support_dir / "logs"
 
     @property
     def extensions_dir(self) -> Path:

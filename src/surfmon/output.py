@@ -18,15 +18,11 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Determine Windsurf status
     target_name = get_target_display_name()
-    if report.process_count == 0:
-        status = "[red]Not Running[/red]"
-    else:
-        status = "[green]Running[/green]"
+    status = "[red]Not Running[/red]" if report.process_count == 0 else "[green]Running[/green]"
 
     console.print(
         Panel.fit(
-            f"[bold cyan]Surfmon[/bold cyan] - {target_name} Status: {status}\n"
-            + f"[dim]{report.timestamp}[/dim]",
+            f"[bold cyan]Surfmon[/bold cyan] - {target_name} Status: {status}\n" + f"[dim]{report.timestamp}[/dim]",
             border_style="cyan",
         )
     )
@@ -40,13 +36,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
     sys_table.add_row("Available Memory", f"{report.system.available_memory_gb:.1f} GB")
 
-    mem_color = (
-        "red"
-        if report.system.memory_percent > 80
-        else "yellow"
-        if report.system.memory_percent > 60
-        else "green"
-    )
+    mem_color = "red" if report.system.memory_percent > 80 else "yellow" if report.system.memory_percent > 60 else "green"
     sys_table.add_row(
         "Memory Usage",
         f"[{mem_color}]{report.system.memory_percent:.1f}%[/{mem_color}]",
@@ -68,21 +58,11 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     ws_table.add_row("Process Count", str(report.process_count))
 
     mem_gb = report.total_windsurf_memory_mb / 1024
-    mem_pct = (
-        report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb
-    ) * 100
+    mem_pct = (report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100
     mem_color = "red" if mem_pct > 20 else "yellow" if mem_pct > 10 else "green"
-    ws_table.add_row(
-        "Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]"
-    )
+    ws_table.add_row("Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]")
 
-    cpu_color = (
-        "red"
-        if report.total_windsurf_cpu_percent > 50
-        else "yellow"
-        if report.total_windsurf_cpu_percent > 20
-        else "green"
-    )
+    cpu_color = "red" if report.total_windsurf_cpu_percent > 50 else "yellow" if report.total_windsurf_cpu_percent > 20 else "green"
     ws_table.add_row(
         "Total CPU",
         f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]",
@@ -120,9 +100,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Top processes
     if report.windsurf_processes:
-        top_procs = sorted(
-            report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True
-        )[:10]
+        top_procs = sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True)[:10]
 
         proc_table = Table(title="Top 10 Processes by Memory", show_header=True)
         proc_table.add_column("PID", style="dim")
@@ -133,13 +111,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
         for proc in top_procs:
             mem_str = f"{proc.memory_mb:.0f} MB"
-            mem_style = (
-                "red"
-                if proc.memory_mb > 1000
-                else "yellow"
-                if proc.memory_mb > 500
-                else "green"
-            )
+            mem_style = "red" if proc.memory_mb > 1000 else "yellow" if proc.memory_mb > 500 else "green"
             proc_table.add_row(
                 str(proc.pid),
                 proc.name[:40],
@@ -164,20 +136,8 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
             # Just use it directly
             server_type = ls.cmdline
 
-            mem_style = (
-                "red"
-                if ls.memory_mb > 1000
-                else "yellow"
-                if ls.memory_mb > 200
-                else "green"
-            )
-            cpu_style = (
-                "red"
-                if ls.cpu_percent > 5
-                else "yellow"
-                if ls.cpu_percent > 2
-                else "green"
-            )
+            mem_style = "red" if ls.memory_mb > 1000 else "yellow" if ls.memory_mb > 200 else "green"
+            cpu_style = "red" if ls.cpu_percent > 5 else "yellow" if ls.cpu_percent > 2 else "green"
 
             ls_table.add_row(
                 str(ls.pid),
@@ -225,18 +185,14 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
         paths = get_paths()
         console.print("[cyan]Configuration Paths:[/cyan]")
-        console.print(
-            f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)"
-        )
+        console.print(f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)")
         console.print(f"  MCP Config: {paths.mcp_config_path}")
         console.print()
 
         # All processes detail
         console.print("[cyan]Process Details:[/cyan]")
         if report.windsurf_processes:
-            for proc in sorted(
-                report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True
-            ):
+            for proc in sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True):
                 runtime_hours = proc.runtime_seconds / 3600
                 console.print(f"  PID {proc.pid}: {proc.name}")
                 console.print(
@@ -268,7 +224,8 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         "## Windsurf Resource Usage",
         "",
         f"- **Process Count:** {report.process_count}",
-        f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB ({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)",
+        f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB "
+        f"({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)",
         f"- **Total CPU:** {report.total_windsurf_cpu_percent:.1f}%",
         f"- **Extensions:** {report.extensions_count}",
         f"- **MCP Servers Enabled:** {len(report.mcp_servers_enabled)}",
@@ -300,9 +257,7 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
             else:
                 server_type = "Other"
 
-            lines.append(
-                f"| {ls.pid} | {server_type} | {ls.memory_mb:.0f} MB | {ls.cpu_percent:.1f}% |"
-            )
+            lines.append(f"| {ls.pid} | {server_type} | {ls.memory_mb:.0f} MB | {ls.cpu_percent:.1f}% |")
         lines.append("")
 
     if report.mcp_servers_enabled:
@@ -312,8 +267,7 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
                 "",
             ]
         )
-        for server in report.mcp_servers_enabled:
-            lines.append(f"- {server}")
+        lines.extend(f"- {server}" for server in report.mcp_servers_enabled)
         lines.append("")
 
     if report.log_issues:
@@ -323,8 +277,7 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
                 "",
             ]
         )
-        for issue in report.log_issues:
-            lines.append(f"- {issue}")
+        lines.extend(f"- {issue}" for issue in report.log_issues)
         lines.append("")
 
     with open(output_path, "w") as f:
