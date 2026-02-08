@@ -1,3 +1,12 @@
-"""Windsurf Performance Monitor."""
+"""surfmon.
 
-__version__ = "0.1.0"
+Monitor Windsurf and Windsurf Next resource usage and diagnose problems.
+"""
+
+from __future__ import annotations
+
+from importlib.metadata import version
+
+__all__: list[str] = []
+
+__version__ = version("surfmon")

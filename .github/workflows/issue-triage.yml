@@ -1,0 +1,19 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    if: join(github.event.issue.labels.*.name) == ''
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+    - name: Add needs-triage label
+      run: gh issue edit "$NUMBER" --add-label "needs-triage"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NUMBER: ${{ github.event.issue.number }}

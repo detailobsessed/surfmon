@@ -1,0 +1,127 @@
+default_stages = ["pre-commit"]
+minimum_prek_version = "0.3.2"
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", priority = 0 },
+  { id = "end-of-file-fixer", priority = 0 },
+  { id = "check-yaml", args = ["--allow-multiple-documents"], priority = 0 },
+  { id = "check-toml", priority = 0 },
+  { id = "check-json", priority = 0 },
+  { id = "check-added-large-files", priority = 0 },
+  { id = "check-merge-conflict", priority = 0 },
+  { id = "check-case-conflict", priority = 0 },
+  { id = "check-symlinks", priority = 0 },
+  { id = "check-executables-have-shebangs", priority = 0 },
+  { id = "mixed-line-ending", args = ["--fix=lf"], priority = 0 },
+  { id = "detect-private-key", priority = 0 },
+]
+
+[[repos]]
+repo = "https://github.com/detailobsessed/sync-with-uv"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "sync-with-uv", priority = 0, stages = ["manual"] }]  # TODO: enable once fork supports prek.toml (copier-uv-bleeding#144)
+
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "gitleaks", priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = ""  # prek autoupdate will fill this
+hooks = [
+  { id = "ruff", args = ["--fix"], priority = 1 },
+  { id = "ruff-format", priority = 1 },
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/uv-pre-commit"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "uv-lock", priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/shellcheck-py/shellcheck-py"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "shellcheck", priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/rhysd/actionlint"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "actionlint", priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "typos", priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/igorshubovych/markdownlint-cli"
+rev = ""  # prek autoupdate will fill this
+hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
+
+[[repos]]
+repo = "https://github.com/lycheeverse/lychee"
+rev = "lychee-v0.22.0"
+hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1 }]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "no-commit-to-main"
+name = "prevent commits to main"
+entry = "bash -c 'test \"$(git rev-parse --abbrev-ref HEAD)\" != main || { echo Direct commits to main not allowed. Use a branch + PR. && exit 1; }'"
+language = "system"
+always_run = true
+pass_filenames = false
+priority = 0
+
+[[repos.hooks]]
+id = "ty"
+name = "ty type checker"
+entry = "uv run ty check"
+language = "system"
+types = ["python"]
+pass_filenames = false
+priority = 1
+
+[[repos.hooks]]
+id = "pytest-cov"
+name = "pytest with coverage"
+entry = "uv run pytest --cov=src/surfmon --cov-fail-under=90 --cov-report=term-missing:skip-covered -q"
+language = "system"
+types = ["python"]
+pass_filenames = false
+stages = ["pre-push"]
+priority = 1
+
+[[repos.hooks]]
+id = "docs-build"
+name = "docs build check"
+entry = "bash -c 'test -f htmlcov/index.html || (mkdir -p htmlcov && touch htmlcov/index.html); uv run poe docs-build'"
+language = "system"
+files = { glob = ["docs/**", "mkdocs.yml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "src/**"] }
+pass_filenames = false
+stages = ["pre-push"]
+
+[[repos]]
+repo = "https://github.com/compilerla/conventional-pre-commit"
+rev = ""  # prek autoupdate will fill this
+hooks = [
+  { id = "conventional-pre-commit", stages = ["commit-msg"], priority = 1, args = [
+    "--strict",
+    "--verbose",
+    "feat",
+    "fix",
+    "perf",
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "style",
+    "refactor",
+    "test",
+  ] },
+]

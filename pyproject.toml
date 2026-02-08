@@ -54,7 +54,6 @@ ci = [
     "pytest>=8",
     "pytest-cov>=6",
     "pytest-randomly>=3.15",
-    "pytest-xdist>=3.5",
     "ty>=0.0.14",
     "poethepoet>=0.32",
     "pytest-mock>=3.15.1",
@@ -102,6 +101,13 @@ select = [
     "PIE",  # flake8-pie - misc improvements
     "RET",  # flake8-return - return statement issues
     "RUF",  # Ruff-specific rules
+    "FA",   # flake8-future-annotations
+    "ISC",  # flake8-implicit-str-concat - catch missing commas
+    "ICN",  # flake8-import-conventions
+    "TID",  # flake8-tidy-imports - absolute imports
+    "TC",   # flake8-type-checking - TYPE_CHECKING imports
+    "PTH",  # flake8-use-pathlib - prefer pathlib over os.path
+    "FURB", # refurb - modernize and simplify code
 
     # Performance
     "PERF", # Perflint - performance anti-patterns
@@ -150,7 +156,6 @@ markers = [
 filterwarnings = [
     "error",
     "error::EncodingWarning",
-    "ignore:.*rsyncdir:DeprecationWarning:xdist",
 ]
 
 [tool.coverage.run]
@@ -158,22 +163,16 @@ branch = true
 parallel = true
 source = ["src/", "tests/"]
 
-[tool.coverage.paths]
-equivalent = ["src/", ".venv/lib/*/site-packages/"]
-
 [tool.coverage.report]
 precision = 2
 omit = ["src/*/__init__.py", "src/*/__main__.py", "tests/__init__.py"]
-exclude_lines = ["pragma: no cover", "if TYPE_CHECKING"]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING", "if __name__ == .__main__.:"]
 
 [tool.coverage.json]
 output = "htmlcov/coverage.json"
 
 [tool.ty.environment]
 python-version = "3.14"
-
-[tool.ty.src]
-exclude = ["tests/fixtures/"]
 
 [tool.poe.tasks]
 # Setup
@@ -187,7 +186,7 @@ typecheck = "ty check src tests"
 # Testing
 test = "pytest -m 'not slow'"
 test-all = "pytest"
-test-cov = "pytest --cov=surfmon --cov-report=term-missing --cov-report=html"
+test-cov = "pytest --cov=src/surfmon --cov-report=term-missing --cov-report=html"
 
 # Combined tasks
 check = ["lint", "typecheck"]
@@ -201,9 +200,11 @@ docs-deploy = "mkdocs gh-deploy"
 # Pre-commit
 prek = "prek run --all-files"
 
+# Git utilities
+tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"
+
 # GitHub utilities
 releases = "gh release list --limit 10"
-tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"
 runs = "gh run list --limit 10"
 watch = "gh run watch"
 
@@ -222,6 +223,7 @@ major_on_zero = false
 
 [tool.semantic_release.changelog]
 changelog_file = "CHANGELOG.md"
+mode = "update"
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "deps", "docs", "feat", "fix", "perf", "refactor", "style", "test"]

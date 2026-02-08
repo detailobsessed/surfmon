@@ -1,0 +1,31 @@
+# Lychee link checker configuration
+# https://github.com/lycheeverse/lychee
+
+# Don't check the config file itself (regex patterns get parsed as URLs)
+exclude_path = [".lychee.toml"]
+
+# Exclude placeholder and example URLs
+exclude = [
+    '^https://example\.com',
+    '^https://your-',
+    '^https://pypi\.org/project/my-',
+    '^https://codecov\.io/gh/your-',
+    '^mailto:',
+    '^https://github\.com/detailobsessed/surfmon',
+    '^https://detailobsessed\.github\.io/surfmon',
+]
+
+# Exclude local/private addresses
+exclude_all_private = true
+
+# Don't check mail addresses
+include_mail = false
+
+# Accept common status codes
+accept = [200, 204, 301, 302, 403, 429]
+
+# Timeout per request
+timeout = 30
+
+# Max concurrent requests
+max_concurrency = 16

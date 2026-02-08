@@ -10,7 +10,7 @@ Fork and clone the repository, then:
 
 ```bash
 cd surfmon
-make setup
+uv sync
 ```
 
 > NOTE: If it fails for some reason, you'll need to install [uv](https://github.com/astral-sh/uv) manually.
@@ -21,7 +21,7 @@ make setup
 > curl -LsSf https://astral.sh/uv/install.sh | sh
 > ```
 >
-> Now you can try running `poe setup` again, or simply `uv sync`.
+> Now you can try running `uv sync` again.
 
 You now have the dependencies installed.
 
@@ -49,7 +49,7 @@ As usual:
 1. run `poe test` to run the tests (fix any issues)
 1. if you updated the documentation or the project dependencies:
     1. run `poe docs`
-    1. go to http://localhost:8000 and check that everything looks good
+    1. go to <http://localhost:8000> and check that everything looks good
 1. follow our [commit message convention](#commit-message-convention)
 
 If you are unsure about how to fix or ignore a warning, just let the continuous integration fail, and we will help you during review.
