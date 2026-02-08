@@ -1,13 +1,16 @@
 """Display and formatting utilities for monitoring reports."""
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from .config import get_target_display_name
-from .monitor import MonitoringReport
+
+if TYPE_CHECKING:
+    from .monitor import MonitoringReport
 
 console = Console()
 
@@ -234,8 +237,10 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         "## Windsurf Resource Usage",
         "",
         f"- **Process Count:** {report.process_count}",
-        f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB "
-        f"({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)",
+        (
+            f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB "
+            f"({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)"
+        ),
         f"- **Total CPU:** {report.total_windsurf_cpu_percent:.1f}%",
         f"- **Extensions:** {report.extensions_count}",
         f"- **MCP Servers Enabled:** {len(report.mcp_servers_enabled)}",
@@ -294,5 +299,4 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         lines.extend(f"- {issue}" for issue in report.log_issues)
         lines.append("")
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    Path(output_path).write_text("\n".join(lines), encoding="utf-8")

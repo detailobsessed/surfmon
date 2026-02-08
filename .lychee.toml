@@ -1,8 +1,8 @@
 # Lychee link checker configuration
 # https://github.com/lycheeverse/lychee
 
-# Don't check the config file itself (regex patterns get parsed as URLs)
-exclude_path = [".lychee.toml"]
+# Exclude paths with non-URL content (Jinja templates, JSON reports, config)
+exclude_path = [".lychee.toml", "docs/.overrides", "reports"]
 
 # Exclude placeholder and example URLs
 exclude = [
@@ -13,7 +13,10 @@ exclude = [
     '^mailto:',
     '^https://github\.com/detailobsessed/surfmon',
     '^https://detailobsessed\.github\.io/surfmon',
+    '^http://localhost',
+    '^https://server\.codeium\.com',
 ]
+
 
 # Exclude local/private addresses
 exclude_all_private = true

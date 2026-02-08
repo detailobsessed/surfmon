@@ -2,7 +2,7 @@
 name: Documentation update
 about: Point at unclear, missing or outdated documentation.
 title: "docs: "
-labels: docs
+labels: documentation
 assignees: [ichoosetoaccept]
 ---
 

@@ -1,7 +1,10 @@
 """Compare two monitoring reports to show changes."""
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -12,7 +15,7 @@ console = Console()
 
 def load_report(path: Path) -> dict:
     """Load a JSON report."""
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         return json.load(f)
 
 

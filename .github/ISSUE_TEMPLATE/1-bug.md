@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a bug report to help us improve.
 title: "bug: "
-labels: unconfirmed
+labels: bug
 assignees: [ichoosetoaccept]
 ---
 

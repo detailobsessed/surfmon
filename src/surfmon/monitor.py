@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import operator
 import subprocess  # noqa: S404
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -262,7 +263,7 @@ def get_mcp_config() -> list[str]:
         return []
 
     try:
-        with open(mcp_config_path, encoding="utf-8") as f:
+        with mcp_config_path.open(encoding="utf-8") as f:
             config = json.load(f)
             servers = config.get("mcpServers", {})
             return [name for name, cfg in servers.items() if not cfg.get("disabled", False)]
@@ -509,7 +510,7 @@ def check_log_issues() -> list[str]:
             if main_log.exists():
                 try:
                     # Only read last 50KB to avoid performance issues on large logs
-                    with open(main_log, encoding="utf-8") as f:
+                    with main_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)  # Go to end
                         file_size = f.tell()
                         f.seek(max(0, file_size - 50000))  # Read last 50KB
@@ -547,7 +548,7 @@ def check_log_issues() -> list[str]:
             sharedprocess_log = latest_log / "sharedprocess.log"
             if sharedprocess_log.exists():
                 try:
-                    with open(sharedprocess_log, encoding="utf-8") as f:
+                    with sharedprocess_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)
                         file_size = f.tell()
                         f.seek(max(0, file_size - 30000))
@@ -579,7 +580,7 @@ def check_log_issues() -> list[str]:
                             # Report top 3 problematic extensions
                             sorted_exts = sorted(
                                 extension_errors.items(),
-                                key=lambda x: x[1],
+                                key=operator.itemgetter(1),
                                 reverse=True,
                             )
                             ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:3]])
@@ -595,7 +596,7 @@ def check_log_issues() -> list[str]:
             network_log = latest_log / "network-shared.log"
             if network_log.exists():
                 try:
-                    with open(network_log, encoding="utf-8") as f:
+                    with network_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)
                         file_size = f.tell()
                         f.seek(max(0, file_size - 30000))
@@ -636,7 +637,7 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
     try:
         import re
 
-        with open(main_log, encoding="utf-8") as f:
+        with main_log.open(encoding="utf-8") as f:
             for line in f:
                 # Look for workspace load events
                 # Format: "WindsurfWindowsMainManager: Window will load
@@ -786,5 +787,5 @@ def generate_report() -> MonitoringReport:
 
 def save_report_json(report: MonitoringReport, output_path: Path) -> None:
     """Save report as JSON."""
-    with open(output_path, "w", encoding="utf-8") as f:
+    with output_path.open("w", encoding="utf-8") as f:
         json.dump(asdict(report), f, indent=2)
