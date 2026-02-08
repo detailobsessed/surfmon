@@ -13,6 +13,7 @@ exclude = [
     '^mailto:',
     '^https://github\.com/detailobsessed/surfmon',
     '^https://detailobsessed\.github\.io/surfmon',
+    # Localhost URLs (e.g. docs preview in CONTRIBUTING.md)
     '^http://localhost',
     '^https://server\.codeium\.com',
 ]

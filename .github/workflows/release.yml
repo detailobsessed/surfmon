@@ -14,41 +14,14 @@ permissions:
 jobs:
   release:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    concurrency: release
-    environment: pypi
+    uses: detailobsessed/ci-components/.github/workflows/semantic-release-uv.yml@main
+    with:
+      python-version: "3.14"
+      pypi-publish: "false"
+    secrets: inherit
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        fetch-tags: true
-
-    - name: Setup uv and Python
-      uses: astral-sh/setup-uv@v7.1.5
-      with:
-        python-version: "3.14"
-        enable-cache: true
-
-    - name: Install dependencies
-      run: uv sync --group maintain
-
-    - name: Semantic Release
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: uv run semantic-release version --changelog --push --tag --vcs-release
-
-    - name: Check if release artifacts exist
-      id: dist
-      shell: bash
-      run: |
-        if compgen -G "dist/*" > /dev/null; then
-          echo "has_dist=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "has_dist=false" >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: Publish to PyPI
-      if: steps.dist.outputs.has_dist == 'true'
-      run: uv publish
+  # To enable PyPI publishing:
+  # 1. Re-run copier with publish_to_pypi=true
+  # 2. Set up trusted publisher on PyPI for detailobsessed/surfmon
+  #    - Workflow: release.yml, Environment: pypi
+  # 3. Create 'pypi' environment in GitHub repo settings

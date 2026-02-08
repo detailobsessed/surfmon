@@ -1,6 +1,5 @@
 """Display and formatting utilities for monitoring reports."""
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -10,6 +9,8 @@ from rich.table import Table
 from .config import get_target_display_name
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .monitor import MonitoringReport
 
 console = Console()
@@ -61,7 +62,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     ws_table.add_row("Process Count", str(report.process_count))
 
     mem_gb = report.total_windsurf_memory_mb / 1024
-    mem_pct = (report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100
+    mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
     mem_color = "red" if mem_pct > 20 else "yellow" if mem_pct > 10 else "green"
     ws_table.add_row("Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]")
 
@@ -240,6 +241,8 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         (
             f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB "
             f"({(report.total_windsurf_memory_mb / 1024 / report.system.total_memory_gb) * 100:.1f}% of system)"
+            if report.system.total_memory_gb > 0
+            else f"- **Total Memory:** {report.total_windsurf_memory_mb / 1024:.2f} GB"
         ),
         f"- **Total CPU:** {report.total_windsurf_cpu_percent:.1f}%",
         f"- **Extensions:** {report.extensions_count}",
@@ -299,4 +302,4 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         lines.extend(f"- {issue}" for issue in report.log_issues)
         lines.append("")
 
-    Path(output_path).write_text("\n".join(lines), encoding="utf-8")
+    output_path.write_text("\n".join(lines), encoding="utf-8")

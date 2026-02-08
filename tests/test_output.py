@@ -138,7 +138,7 @@ class TestSaveReportMarkdown:
         save_report_markdown(mock_report, output_path)
 
         assert output_path.exists()
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "# Windsurf Performance Report" in content
         assert "System Resources" in content
 
@@ -148,7 +148,7 @@ class TestSaveReportMarkdown:
         output_path = tmp_path / "report.md"
         save_report_markdown(mock_report, output_path)
 
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "Issues Detected" in content
         assert "Critical issue" in content
 
@@ -157,7 +157,7 @@ class TestSaveReportMarkdown:
         output_path = tmp_path / "report.md"
         save_report_markdown(mock_report, output_path)
 
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "MCP Servers" in content
         assert "server1" in content
 
@@ -174,5 +174,5 @@ class TestSaveReportMarkdown:
         output_path = tmp_path / "report.md"
         save_report_markdown(mock_report, output_path)
 
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "Language Servers" in content

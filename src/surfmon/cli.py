@@ -80,6 +80,47 @@ TargetOption = Annotated[
 ]
 
 
+def simplify_process_name(name: str) -> str:
+    """Simplify Windsurf process names for plot legends.
+
+    Extracts the helper type from names like "Windsurf Helper (GPU)"
+    into "Windsurf Helper GPU" for cleaner display.
+    """
+    if "Helper" in name and "(" in name:
+        return name.split("Helper")[0] + "Helper " + name.split("(")[1].split(")")[0]
+    return name
+
+
+def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
+    """Build per-process memory history from a series of reports.
+
+    Returns a dict mapping simplified process names to lists of memory values,
+    one per report. Processes not present in a report get 0 for that position.
+    """
+    from collections import defaultdict
+
+    process_mem_history: dict[str, list[float]] = {}
+
+    for report_idx, r in enumerate(reports):
+        process_snapshot: dict[str, float] = defaultdict(float)
+        for proc in r["windsurf_processes"]:
+            name = simplify_process_name(proc["name"])
+            process_snapshot[name] += proc["memory_mb"]
+
+        # Append 0 for existing processes not in this snapshot
+        for name in process_mem_history:
+            if name not in process_snapshot:
+                process_mem_history[name].append(0)
+
+        # For processes in this snapshot: pad with leading zeros if new, then append
+        for name, mem in process_snapshot.items():
+            if name not in process_mem_history:
+                process_mem_history[name] = [0.0] * report_idx
+            process_mem_history[name].append(mem)
+
+    return process_mem_history
+
+
 def signal_handler(_signum: int, _frame: object) -> None:
     """Handle interrupt signals gracefully."""
     global stop_monitoring
@@ -107,7 +148,7 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
 
     # Memory
     mem_gb = report.total_windsurf_memory_mb / 1024
-    mem_pct = (mem_gb / report.system.total_memory_gb) * 100
+    mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
     mem_str = f"{mem_gb:.2f} GB ({mem_pct:.1f}%)"
 
     mem_change = ""
@@ -759,8 +800,6 @@ def analyze(
 
     # Generate plots if requested
     if plot:
-        from collections import defaultdict
-
         import matplotlib.dates as mdates
         import matplotlib.pyplot as plt
 
@@ -783,36 +822,12 @@ def analyze(
 
         # Row 1, Col 2: Top 5 Processes by Memory
         ax = axes[0, 1]
-        # Aggregate memory by process name across all reports
-        process_mem_history = defaultdict(list)
-        for r in reports:
-            # Track top processes
-            process_snapshot = defaultdict(float)
-            for proc in r["windsurf_processes"]:
-                # Simplify process name (remove PID-specific parts)
-                name = proc["name"]
-                if "Helper" in name and "(" in name:
-                    # Keep the type: "Helper (GPU)", "Helper (Renderer)", etc.
-                    name = name.split("Helper")[0] + "Helper " + name.split("(")[1].split(")")[0] if "(" in name else name
-                process_snapshot[name] += proc["memory_mb"]
-
-            # Add to history for each process type
-            for name, mem in process_snapshot.items():
-                process_mem_history[name].append(mem)
-
-            # Fill missing values with 0 for processes that don't exist in this snapshot
-            all_names = set(process_mem_history.keys())
-            for name in all_names:
-                if name not in process_snapshot:
-                    process_mem_history[name].append(0)
+        process_mem_history = build_process_memory_history(reports)
 
         # Plot top 5 by peak memory
         top_5 = sorted(process_mem_history.items(), key=lambda x: max(x[1]), reverse=True)[:5]
         colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
         for (name, mem_history), color in zip(top_5, colors, strict=False):
-            # Pad history to match timestamps length
-            while len(mem_history) < len(timestamps):
-                mem_history.append(0)
             ax.plot(
                 timestamps,
                 [m / 1024 for m in mem_history],

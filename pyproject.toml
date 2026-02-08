@@ -165,7 +165,7 @@ source = ["src/", "tests/"]
 
 [tool.coverage.report]
 precision = 2
-omit = ["src/*/__init__.py", "src/*/__main__.py", "tests/__init__.py"]
+omit = ["src/*/__init__.py", "tests/__init__.py"]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING", "if __name__ == .__main__.:"]
 
 [tool.coverage.json]
@@ -179,9 +179,9 @@ python-version = "3.14"
 setup = "uv sync"
 
 # Quality checks
-lint = "ruff check src tests"
-format = "ruff format src tests"
-typecheck = "ty check src tests"
+lint = "ruff check ."
+format = "ruff format ."
+typecheck = "ty check src"
 
 # Testing
 test = "pytest -m 'not slow'"
@@ -206,6 +206,7 @@ tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"
 # GitHub utilities
 releases = "gh release list --limit 10"
 runs = "gh run list --limit 10"
+checks = "gh pr checks --watch"
 watch = "gh run watch"
 
 [tool.semantic_release]

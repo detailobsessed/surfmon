@@ -24,10 +24,16 @@ env:
   PYTHONWARNDEFAULTENCODING: "1"
   PYTHON_VERSIONS: ""
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
 
   changes:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      pull-requests: read
     outputs:
       src: ${{ steps.filter.outputs.src }}
     steps:
@@ -54,7 +60,7 @@ jobs:
       uses: lycheeverse/lychee-action@v2
       with:
         fail: true
-        args: --no-progress .
+        args: --config .lychee.toml --no-progress .
 
   quality:
     needs: changes
