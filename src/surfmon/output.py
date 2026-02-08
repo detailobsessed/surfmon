@@ -74,6 +74,16 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     ws_table.add_row("Active Workspaces", str(len(report.active_workspaces)))
     ws_table.add_row("Launches Today", str(report.windsurf_launches_today))
 
+    # PTY usage
+    if report.pty_info:
+        pty = report.pty_info
+        usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+        pty_color = "red" if pty.windsurf_pty_count >= 200 or usage_pct >= 80 else "yellow" if pty.windsurf_pty_count >= 50 else "green"
+        ws_table.add_row(
+            "PTYs Held",
+            f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim](system: {pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
+        )
+
     console.print(ws_table)
     console.print()
 
@@ -234,14 +244,12 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
     ]
 
     if report.language_servers:
-        lines.extend(
-            [
-                "## Language Servers",
-                "",
-                "| PID | Type | Memory | CPU % |",
-                "|-----|------|--------|-------|",
-            ]
-        )
+        lines.extend([
+            "## Language Servers",
+            "",
+            "| PID | Type | Memory | CPU % |",
+            "|-----|------|--------|-------|",
+        ])
         for ls in report.language_servers:
             cmdline_lower = ls.cmdline.lower()
             if "language_server_macos_arm" in cmdline_lower:
@@ -261,22 +269,28 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         lines.append("")
 
     if report.mcp_servers_enabled:
-        lines.extend(
-            [
-                "## Enabled MCP Servers",
-                "",
-            ]
-        )
+        lines.extend([
+            "## Enabled MCP Servers",
+            "",
+        ])
         lines.extend(f"- {server}" for server in report.mcp_servers_enabled)
         lines.append("")
 
+    if report.pty_info:
+        pty = report.pty_info
+        lines.extend([
+            "## PTY Usage",
+            "",
+            f"- **Windsurf PTYs:** {pty.windsurf_pty_count}",
+            f"- **System PTYs Used:** {pty.system_pty_used} / {pty.system_pty_limit}",
+            "",
+        ])
+
     if report.log_issues:
-        lines.extend(
-            [
-                "## Issues Detected",
-                "",
-            ]
-        )
+        lines.extend([
+            "## Issues Detected",
+            "",
+        ])
         lines.extend(f"- {issue}" for issue in report.log_issues)
         lines.append("")
 

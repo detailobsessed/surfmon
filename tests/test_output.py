@@ -22,6 +22,7 @@ def mock_report():
     report.windsurf_processes = []
     report.active_workspaces = []
     report.windsurf_launches_today = 3
+    report.pty_info = None
 
     # System info
     report.system = MagicMock()

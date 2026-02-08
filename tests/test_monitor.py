@@ -10,8 +10,10 @@ import pytest
 from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
     ProcessInfo,
+    PtyInfo,
     SystemInfo,
     check_log_issues,
+    check_pty_leak,
     count_extensions,
     count_windsurf_launches_today,
     find_language_servers,
@@ -541,6 +543,9 @@ class TestGenerateReport:
         mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
         mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
         mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
         mock_procs.return_value = [mock_process]
@@ -549,6 +554,7 @@ class TestGenerateReport:
         mock_issues.return_value = ["issue1"]
         proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
         mock_proc_info.return_value = proc_info
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=5, system_pty_limit=511, system_pty_used=10)
 
         report = generate_report()
 
@@ -559,6 +565,8 @@ class TestGenerateReport:
         assert len(report.mcp_servers_enabled) == 2
         assert report.extensions_count == 33
         assert len(report.log_issues) == 1
+        assert report.pty_info is not None
+        assert report.pty_info.windsurf_pty_count == 5
 
 
 class TestGetActiveWorkspaces:
@@ -821,6 +829,193 @@ class TestNetworkLogParsing:
         result = check_log_issues()
 
         assert any("telemetry" in issue.lower() for issue in result)
+
+
+class TestCheckPtyLeak:
+    """Tests for check_pty_leak."""
+
+    def test_returns_pty_info(self, mocker):
+        """Should return PtyInfo with counts."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        # Mock sysctl
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        # Mock lsof - simulate Windsurf holding many PTYs
+        lsof_lines = [
+            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            *[f"Windsurf  75486 ismar   {32 + i}u   CHR   15,{i}      0t0  605 /dev/ptmx" for i in range(504)],
+            "preview   50510 ismar   55u   CHR   15,5 0t222204  605 /dev/ptmx",
+        ]
+
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "\n".join(lsof_lines)
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert isinstance(result, PtyInfo)
+        assert result.windsurf_pty_count == 504
+        assert result.system_pty_limit == 511
+        assert result.system_pty_used == 505  # 504 Windsurf + 1 preview
+
+    def test_handles_sysctl_failure(self, mocker):
+        """Should use default limit when sysctl fails."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 1
+        sysctl_result.stdout = ""
+
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "COMMAND     PID  USER   FD   TYPE\n"
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert result.system_pty_limit == 511  # Default
+
+    def test_handles_lsof_failure(self, mocker):
+        """Should return zero counts when lsof fails."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_result = Mock()
+        lsof_result.returncode = 1
+        lsof_result.stdout = ""
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert result.windsurf_pty_count == 0
+        assert result.system_pty_used == 0
+
+    def test_handles_timeout(self, mocker):
+        """Should handle subprocess timeout gracefully."""
+        import subprocess  # noqa: S404
+
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="lsof", timeout=10)
+
+        result = check_pty_leak()
+
+        assert result.windsurf_pty_count == 0
+        assert result.system_pty_limit == 511
+
+    def test_no_windsurf_ptys(self, mocker):
+        """Should correctly count zero Windsurf PTYs when only other apps use them."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = (
+            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n"
+            "preview   50510 ismar   55u   CHR   15,5 0t222204  605 /dev/ptmx\n"
+            "Terminal  12345 ismar   10u   CHR   15,6      0t0  605 /dev/ptmx\n"
+        )
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert result.windsurf_pty_count == 0
+        assert result.system_pty_used == 2
+
+
+class TestPtyLeakIssueDetection:
+    """Tests for PTY leak issue reporting in generate_report."""
+
+    def test_critical_pty_leak_generates_issue(self, mock_process, mocker):
+        """Should generate CRITICAL issue when PTY count >= 200."""
+        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
+        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
+        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
+        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
+        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
+        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+
+        mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
+        mock_procs.return_value = [mock_process]
+        mock_mcp.return_value = []
+        mock_ext_count.return_value = 0
+        mock_issues.return_value = []
+        proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
+        mock_proc_info.return_value = proc_info
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=504, system_pty_limit=511, system_pty_used=509)
+
+        report = generate_report()
+
+        assert report.pty_info is not None
+        assert report.pty_info.windsurf_pty_count == 504
+        assert any("CRITICAL" in issue and "PTY" in issue for issue in report.log_issues)
+
+    def test_warning_pty_leak_generates_issue(self, mock_process, mocker):
+        """Should generate warning issue when PTY count >= 50 but < 200."""
+        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
+        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
+        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
+        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
+        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
+        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+
+        mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
+        mock_procs.return_value = [mock_process]
+        mock_mcp.return_value = []
+        mock_ext_count.return_value = 0
+        mock_issues.return_value = []
+        proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
+        mock_proc_info.return_value = proc_info
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=75, system_pty_limit=511, system_pty_used=100)
+
+        report = generate_report()
+
+        assert any("PTY leak" in issue for issue in report.log_issues)
+        assert not any("CRITICAL" in issue for issue in report.log_issues)
+
+    def test_low_pty_count_no_issue(self, mock_process, mocker):
+        """Should not generate issue when PTY count is low."""
+        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
+        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
+        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
+        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
+        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
+        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+
+        mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
+        mock_procs.return_value = [mock_process]
+        mock_mcp.return_value = []
+        mock_ext_count.return_value = 0
+        mock_issues.return_value = []
+        proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
+        mock_proc_info.return_value = proc_info
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=10, system_pty_limit=511, system_pty_used=20)
+
+        report = generate_report()
+
+        assert not any("PTY" in issue for issue in report.log_issues)
 
 
 class TestSurfmonProcessExclusion:

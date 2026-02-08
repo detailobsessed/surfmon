@@ -149,6 +149,25 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
 
     table.add_row("Lang Servers", str(len(report.language_servers)), ls_change)
 
+    # PTYs
+    if report.pty_info:
+        pty = report.pty_info
+        pty_change = ""
+        if prev_report and prev_report.pty_info:
+            diff = pty.windsurf_pty_count - prev_report.pty_info.windsurf_pty_count
+            if diff != 0:
+                symbol = "↑" if diff > 0 else "↓"
+                color = "red" if diff > 0 else "green"
+                pty_change = f"[{color}]{symbol}{abs(diff)}[/{color}]"
+
+        usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+        pty_color = "red" if pty.windsurf_pty_count >= 200 or usage_pct >= 80 else "yellow" if pty.windsurf_pty_count >= 50 else "green"
+        table.add_row(
+            "PTYs",
+            f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim]({pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
+            pty_change,
+        )
+
     # Issues
     issue_count = len(report.log_issues)
     issue_color = "red" if issue_count > 0 else "green"
@@ -489,14 +508,12 @@ def prune(
             content_str = json.dumps(data_copy, sort_keys=True)
             content_hash = hashlib.sha256(content_str.encode()).hexdigest()
 
-            file_info.append(
-                {
-                    "path": json_file,
-                    "hash": content_hash,
-                    "timestamp": data.get("timestamp", ""),
-                    "size": json_file.stat().st_size,
-                }
-            )
+            file_info.append({
+                "path": json_file,
+                "hash": content_hash,
+                "timestamp": data.get("timestamp", ""),
+                "size": json_file.stat().st_size,
+            })
 
             if content_hash not in content_hashes:
                 content_hashes[content_hash] = []
@@ -620,21 +637,19 @@ def analyze(
         try:
             with open(report_file, encoding="utf-8") as f:
                 data = json.load(f)
-                reports.append(
-                    {
-                        "timestamp": datetime.fromisoformat(data["timestamp"]),
-                        "processes": data["process_count"],
-                        "memory_mb": data["total_windsurf_memory_mb"],
-                        "cpu": data["total_windsurf_cpu_percent"],
-                        "lang_servers": len(data["language_servers"]),
-                        "issues": data["log_issues"],
-                        "file": report_file.name,
-                        "system": data["system"],
-                        "windsurf_processes": data["windsurf_processes"],
-                        "extensions_count": data["extensions_count"],
-                        "mcp_servers_enabled": data["mcp_servers_enabled"],
-                    }
-                )
+                reports.append({
+                    "timestamp": datetime.fromisoformat(data["timestamp"]),
+                    "processes": data["process_count"],
+                    "memory_mb": data["total_windsurf_memory_mb"],
+                    "cpu": data["total_windsurf_cpu_percent"],
+                    "lang_servers": len(data["language_servers"]),
+                    "issues": data["log_issues"],
+                    "file": report_file.name,
+                    "system": data["system"],
+                    "windsurf_processes": data["windsurf_processes"],
+                    "extensions_count": data["extensions_count"],
+                    "mcp_servers_enabled": data["mcp_servers_enabled"],
+                })
         except (json.JSONDecodeError, KeyError) as e:
             console.print(f"[yellow]Warning: Could not parse {report_file.name}: {e}[/yellow]")
 
