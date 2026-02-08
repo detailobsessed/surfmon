@@ -26,6 +26,7 @@ def mock_generate_report(mocker):
     mock_report.extensions_count = 10
     mock_report.mcp_servers_enabled = []
     mock_report.windsurf_processes = []
+    mock_report.pty_info = None
     return mocker.patch("surfmon.cli.generate_report", return_value=mock_report)
 
 
@@ -211,6 +212,10 @@ class TestCleanupCommand:
 
     def test_cleanup_windsurf_running(self, mocker):
         """Should warn when Windsurf is running."""
+        mock_paths = MagicMock()
+        mock_paths.app_name = "Windsurf.app"
+        mocker.patch("surfmon.config.get_paths", return_value=mock_paths)
+
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 1234,
@@ -228,6 +233,10 @@ class TestCleanupCommand:
 
     def test_cleanup_with_orphans_cancelled(self, mocker):
         """Should handle cancelled cleanup."""
+        mock_paths = MagicMock()
+        mock_paths.app_name = "Windsurf.app"
+        mocker.patch("surfmon.config.get_paths", return_value=mock_paths)
+
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 5678,
@@ -246,6 +255,10 @@ class TestCleanupCommand:
 
     def test_cleanup_with_force(self, mocker):
         """Should kill orphans with --force flag."""
+        mock_paths = MagicMock()
+        mock_paths.app_name = "Windsurf.app"
+        mocker.patch("surfmon.config.get_paths", return_value=mock_paths)
+
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 5678,
@@ -502,6 +515,7 @@ class TestCreateSummaryTable:
         prev_report.process_count = 3
         prev_report.total_windsurf_memory_mb = 800.0
         prev_report.total_windsurf_cpu_percent = 8.0
+        prev_report.pty_info = None
 
         table = create_summary_table(report, prev_report)
         assert table is not None

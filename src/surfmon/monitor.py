@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import subprocess  # noqa: S404
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +49,15 @@ class WorkspaceInfo:
 
 
 @dataclass
+class PtyInfo:
+    """PTY usage information for Windsurf."""
+
+    windsurf_pty_count: int
+    system_pty_limit: int
+    system_pty_used: int
+
+
+@dataclass
 class MonitoringReport:
     """Complete monitoring report."""
 
@@ -63,6 +73,7 @@ class MonitoringReport:
     log_issues: list[str]
     active_workspaces: list[WorkspaceInfo]
     windsurf_launches_today: int
+    pty_info: PtyInfo | None = None
 
 
 def get_windsurf_processes() -> list[psutil.Process]:
@@ -328,6 +339,68 @@ def check_orphaned_workspaces() -> list[str]:
         pass  # Silently fail if we can't detect processes or parse cmdline
 
     return issues
+
+
+def check_pty_leak() -> PtyInfo:
+    """Check for PTY (pseudo-terminal) leak by Windsurf.
+
+    Windsurf (and other Electron-based IDEs) can leak PTYs by not closing
+    them when terminal sessions end. This can exhaust the system PTY limit
+    (macOS default: 511), preventing new terminals from being opened anywhere.
+
+    Returns:
+        PtyInfo with Windsurf PTY count, system limit, and total system usage.
+    """
+    windsurf_pty_count = 0
+    system_pty_used = 0
+    system_pty_limit = 511  # macOS default
+
+    # Get system PTY limit
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "kern.tty.ptmx_max"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            system_pty_limit = int(result.stdout.strip())
+    except subprocess.TimeoutExpired, ValueError, OSError:
+        pass
+
+    # Count PTYs using lsof
+    app_name = get_paths().app_name
+    try:
+        result = subprocess.run(
+            ["lsof", "/dev/ptmx"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split("\n")
+            # Skip header line
+            data_lines = lines[1:] if len(lines) > 1 else []
+            system_pty_used = len(data_lines)
+
+            # Count lines matching Windsurf process name
+            # The app_name contains ".app" but lsof COMMAND column shows just the binary name
+            # For "Windsurf.app" -> "Windsurf", for "Windsurf - Next.app" -> "Windsurf"
+            windsurf_cmd = app_name.split(".")[0].strip()  # "Windsurf" or "Windsurf - Next"
+            for line in data_lines:
+                # lsof output: COMMAND PID USER FD TYPE DEVICE ...
+                # COMMAND field is first, may be truncated
+                parts = line.split()
+                if parts and windsurf_cmd.split()[0] in parts[0]:
+                    windsurf_pty_count += 1
+    except subprocess.TimeoutExpired, OSError:
+        pass
+
+    return PtyInfo(
+        windsurf_pty_count=windsurf_pty_count,
+        system_pty_limit=system_pty_limit,
+        system_pty_used=system_pty_used,
+    )
 
 
 def check_log_issues() -> list[str]:
@@ -672,6 +745,28 @@ def generate_report() -> MonitoringReport:
     total_memory = sum(p.memory_mb for p in proc_infos)
     total_cpu = sum(p.cpu_percent for p in proc_infos)
 
+    # Check PTY usage
+    pty_info = check_pty_leak()
+
+    # Build log issues, including PTY leak detection
+    log_issues = check_log_issues()
+
+    # Report PTY leak as an issue
+    if pty_info.windsurf_pty_count > 0:
+        usage_pct = (pty_info.system_pty_used / pty_info.system_pty_limit) * 100 if pty_info.system_pty_limit > 0 else 0
+        if pty_info.windsurf_pty_count >= 200 or usage_pct >= 80:
+            log_issues.append(
+                f"🔴 CRITICAL: Windsurf is holding {pty_info.windsurf_pty_count} PTYs "
+                f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
+                f"- Fix: Restart Windsurf to release leaked PTYs"
+            )
+        elif pty_info.windsurf_pty_count >= 50:
+            log_issues.append(
+                f"⚠️  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
+                f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}) "
+                f"- Monitor closely, restart Windsurf if it keeps growing"
+            )
+
     return MonitoringReport(
         timestamp=datetime.now().isoformat(),
         system=get_system_info(),
@@ -682,9 +777,10 @@ def generate_report() -> MonitoringReport:
         language_servers=find_language_servers(proc_infos),
         mcp_servers_enabled=get_mcp_config(),
         extensions_count=count_extensions(),
-        log_issues=check_log_issues(),
+        log_issues=log_issues,
         active_workspaces=get_active_workspaces(),
         windsurf_launches_today=count_windsurf_launches_today(),
+        pty_info=pty_info,
     )
 
 
