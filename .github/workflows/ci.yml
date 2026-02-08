@@ -26,7 +26,39 @@ env:
 
 jobs:
 
+  changes:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dorny/paths-filter@v3
+      id: filter
+      with:
+        filters: |
+          src:
+            - 'src/**'
+            - 'tests/**'
+            - 'pyproject.toml'
+            - 'uv.lock'
+            - 'docs/**'
+            - 'mkdocs.yml'
+            - '*.md'
+
+  links:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Check links
+      uses: lycheeverse/lychee-action@v2
+      with:
+        fail: true
+        args: --no-progress .
+
   quality:
+    needs: changes
+    if: ${{ needs.changes.outputs.src == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
@@ -92,4 +124,10 @@ jobs:
         path: site/
 
     - name: Run the test suite
-      run: uv run poe test
+      run: uv run poe test-cov
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false

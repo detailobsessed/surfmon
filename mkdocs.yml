@@ -3,7 +3,7 @@ site_description: "Monitor Windsurf and Windsurf Next resource usage and diagnos
 site_url: "https://detailobsessed.github.io/surfmon"
 repo_url: "https://github.com/detailobsessed/surfmon"
 repo_name: "detailobsessed/surfmon"
-site_dir: "site"
+site_dir: site
 watch: [mkdocs.yml, README.md, CONTRIBUTING.md, CHANGELOG.md, src/surfmon]
 copyright: Copyright &copy; 2026 Ismar Iljazovic
 edit_uri: edit/main/docs/
