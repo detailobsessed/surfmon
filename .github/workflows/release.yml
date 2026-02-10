@@ -20,8 +20,26 @@ jobs:
       pypi-publish: "false"
     secrets: inherit
 
-  # To enable PyPI publishing:
-  # 1. Re-run copier with publish_to_pypi=true
-  # 2. Set up trusted publisher on PyPI for detailobsessed/surfmon
-  #    - Workflow: release.yml, Environment: pypi
-  # 3. Create 'pypi' environment in GitHub repo settings
+  pypi-publish:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/surfmon
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+    - name: Checkout release tag
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.release.outputs.version }}
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: "3.14"
+    - name: Build and publish
+      run: |
+        uv build
+        uv publish

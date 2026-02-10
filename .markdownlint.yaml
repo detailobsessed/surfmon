@@ -21,3 +21,6 @@ MD041: false
 
 # Allow duplicate headings with different content (e.g., "Description" in multiple sections)
 MD024: false
+
+# Allow blank lines between consecutive blockquotes (used for callout boxes in README)
+MD028: false

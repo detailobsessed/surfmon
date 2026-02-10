@@ -1,17 +1,17 @@
 # Changes here will be overwritten by Copier.
-_commit: 0.20.3
+_commit: 0.22.0
 _src_path: gh:detailobsessed/copier-uv-bleeding
 author_email: ismar@gmail.com
 author_fullname: Ismar Iljazovic
 author_username: ichoosetoaccept
 copyright_license: MIT
-include_template_dev_scripts: false
+include_template_dev_scripts: true
 project_description: Monitor Windsurf and Windsurf Next resource usage and diagnose
     problems
 project_name: surfmon
 project_type: package
 project_visibility: public
-publish_to_pypi: false
+publish_to_pypi: true
 repository_host: github.com
 repository_namespace: detailobsessed
 repository_provider: github.com
