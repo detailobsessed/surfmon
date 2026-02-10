@@ -42,7 +42,11 @@ htmlcov/
 # OS
 .DS_Store
 
+# MkDocs build output
+site/
+
 # Generated reports
+reports/
 surfmon-*.json
 surfmon-*.md
 

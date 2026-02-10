@@ -73,20 +73,60 @@ WINDSURF_PATHS = {
 _target_override: WindsurfTarget | None = None
 
 
+def _detect_running_target() -> WindsurfTarget | None:
+    """Auto-detect which Windsurf installation is currently running.
+
+    Checks for processes matching each target's app_name.
+    Returns the first target found running, preferring NEXT over STABLE
+    if both are running. Returns None if neither is detected.
+    """
+    import psutil
+
+    running: set[WindsurfTarget] = set()
+
+    for proc in psutil.process_iter(["exe", "cmdline"]):
+        try:
+            exe = proc.info["exe"] or ""
+            cmdline = " ".join(proc.info["cmdline"] or [])
+
+            for target, paths in WINDSURF_PATHS.items():
+                if paths.app_name in exe or paths.app_name in cmdline:
+                    running.add(target)
+
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            pass
+
+    if not running:
+        return None
+    # Prefer NEXT if both are running (it's the active development channel)
+    if WindsurfTarget.NEXT in running:
+        return WindsurfTarget.NEXT
+    return WindsurfTarget.STABLE
+
+
 def get_target() -> WindsurfTarget:
     """Get the current Windsurf target.
 
     Priority:
     1. Programmatically set target (via set_target)
     2. SURFMON_TARGET from env var or .env file
-    3. Default to STABLE
+    3. Auto-detect which Windsurf is running
+    4. Default to STABLE
     """
     if _target_override is not None:
         return _target_override
 
-    target_str = config("SURFMON_TARGET", default="stable").lower()
+    target_str = config("SURFMON_TARGET", default="").lower()
     if target_str == "next":
         return WindsurfTarget.NEXT
+    if target_str == "stable":
+        return WindsurfTarget.STABLE
+
+    # No explicit config — auto-detect from running processes
+    detected = _detect_running_target()
+    if detected is not None:
+        return detected
+
     return WindsurfTarget.STABLE
 
 
