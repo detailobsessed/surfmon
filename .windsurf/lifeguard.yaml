@@ -1,0 +1,7 @@
+rules: []
+memories:
+  - title: Invalid Python 3 except clause syntax causes SyntaxError
+    description: The except clause uses Python 2 syntax `except SyntaxError, UnicodeDecodeError:` which is invalid in Python 3. This will cause a SyntaxError when Python parses this file, making the entire pre-commit hook unusable.
+    file: /Users/ismar/repos/surfmon/scripts/check-pathlib-encoding.py
+    line: 24
+    comment: this is completely wrong. ruff suggests this fix and everything works.

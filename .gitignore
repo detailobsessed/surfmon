@@ -42,6 +42,11 @@ htmlcov/
 # OS
 .DS_Store
 
+# tools
+.coverage*
+.testmondata
+/.pdm-build/
+
 # MkDocs build output
 site/
 

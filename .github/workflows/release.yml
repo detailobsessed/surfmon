@@ -34,7 +34,7 @@ jobs:
     - name: Checkout release tag
       uses: actions/checkout@v6
       with:
-        ref: ${{ needs.release.outputs.version }}
+        ref: ${{ needs.release.outputs.tag }}
     - name: Setup uv
       uses: astral-sh/setup-uv@v7
       with:

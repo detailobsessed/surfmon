@@ -1,7 +1,7 @@
 default_stages = ["pre-commit"]
 minimum_prek_version = "0.3.2"
 # All available: commit-msg, post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-merge-commit, pre-push, pre-rebase, prepare-commit-msg
-default_install_hook_types = ["commit-msg", "post-merge", "pre-commit", "pre-push"]
+default_install_hook_types = ["commit-msg", "post-checkout", "pre-commit", "pre-push"]
 
 [[repos]]
 repo = "builtin"
@@ -40,7 +40,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.10.0"  # prek autoupdate will fill this
+rev = "0.10.2"  # prek autoupdate will fill this
 hooks = [{ id = "uv-lock", priority = 1 }]
 
 [[repos]]
@@ -55,7 +55,7 @@ hooks = [{ id = "actionlint", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "v1.43.3"  # prek autoupdate will fill this
+rev = "v1.43.4"  # prek autoupdate will fill this
 hooks = [{ id = "typos", priority = 1 }]
 
 [[repos]]
@@ -65,7 +65,7 @@ hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
-rev = "lychee-v0.22.0"  # pinned: 'nightly' tag is mutable, update manually
+rev = "nightly"  # lychee tags nightly as latest; prek autoupdate may switch to it
 hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1, types_or = ["markdown", "html", "rst", "yaml"] }]
 
 [[repos]]
@@ -82,6 +82,16 @@ stages = ["pre-push"]
 priority = 0
 
 [[repos.hooks]]
+id = "check-pathlib-encoding"
+name = "pathlib encoding check"
+entry = "python3 scripts/check-pathlib-encoding.py"
+language = "system"
+types = ["python"]
+priority = 1
+# Workaround for ruff PLW1514 false negatives on indirect Path objects.
+# Remove when https://github.com/astral-sh/ruff/issues/19294 is fixed.
+
+[[repos.hooks]]
 id = "ty"
 name = "ty type checker"
 entry = "uv run ty check"
@@ -91,9 +101,19 @@ pass_filenames = false
 priority = 1
 
 [[repos.hooks]]
+id = "pytest-testmon"
+name = "pytest affected tests"
+entry = "uv run pytest --testmon --no-cov"
+language = "system"
+types = ["python"]
+pass_filenames = false
+stages = ["pre-commit"]
+priority = 1
+
+[[repos.hooks]]
 id = "pytest-cov"
 name = "pytest with coverage"
-entry = "uv run pytest --cov=src/surfmon --cov-fail-under=90 --cov-report=term-missing:skip-covered -q"
+entry = "uv run pytest --cov --cov-fail-under=90 --cov-report=term-missing:skip-covered"
 language = "system"
 types = ["python"]
 pass_filenames = false
@@ -116,7 +136,7 @@ entry = "bash scripts/check-template-update.sh"
 language = "system"
 always_run = true
 pass_filenames = false
-stages = ["post-merge"]
+stages = ["post-checkout"]
 
 [[repos]]
 repo = "https://github.com/compilerla/conventional-pre-commit"
