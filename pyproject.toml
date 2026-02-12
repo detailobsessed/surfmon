@@ -202,8 +202,6 @@ docs-deploy = "mkdocs gh-deploy"
 # Pre-commit
 prek = "prek run --all-files"
 
-# Template dev
-verify-scaffold = "bash scripts/verify-scaffold.sh"
 
 # Template utilities
 check-template = "bash scripts/check-template-update.sh"

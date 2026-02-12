@@ -129,7 +129,6 @@ jobs:
         - os: blacksmith-4vcpu-windows-2025
           resolution: lowest-direct
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
 
     steps:
     - name: Checkout

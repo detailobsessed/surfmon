@@ -14,15 +14,59 @@ permissions:
 jobs:
   release:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    uses: detailobsessed/ci-components/.github/workflows/semantic-release-uv.yml@main
-    with:
-      python-version: "3.14"
-      pypi-publish: "false"
-    secrets: inherit
+
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    concurrency: release
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+
+      version: ${{ steps.release.outputs.version }}
+
+      tag: ${{ steps.release.outputs.tag }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: "3.14"
+        enable-cache: true
+
+    - name: Install dependencies
+      run: uv sync --group maintain
+
+    - name: Semantic Release
+      id: release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      run: |
+        set +e
+        uv run semantic-release --strict version --changelog --push --tag --vcs-release
+        exit_code=$?
+        set -e
+        if [ $exit_code -eq 0 ]; then
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          tag=$(git describe --tags --abbrev=0)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+        elif [ $exit_code -eq 2 ]; then
+          echo "No release needed"
+          echo "released=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "Semantic release failed with exit code $exit_code"
+          exit $exit_code
+        fi
 
   pypi-publish:
     needs: release
-    if: needs.release.outputs.released == 'true'
+    if: ${{ needs.release.outputs.released == 'true' }}
+
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -35,10 +79,12 @@ jobs:
       uses: actions/checkout@v6
       with:
         ref: ${{ needs.release.outputs.tag }}
+
     - name: Setup uv
       uses: astral-sh/setup-uv@v7
       with:
         python-version: "3.14"
+
     - name: Build and publish
       run: |
         uv build
