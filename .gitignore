@@ -42,7 +42,16 @@ htmlcov/
 # OS
 .DS_Store
 
+# tools
+.coverage*
+.testmondata
+/.pdm-build/
+
+# MkDocs build output
+site/
+
 # Generated reports
+reports/
 surfmon-*.json
 surfmon-*.md
 

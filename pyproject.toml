@@ -60,6 +60,7 @@ ci = [
 ]
 local = [
     "prek>=0.3.1",
+    "pytest-testmon>=2.2",
 ]
 docs = [
     "markdown-callouts>=0.4",
@@ -149,7 +150,7 @@ docstring-code-line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --cov"
+addopts = "-v"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
@@ -160,7 +161,7 @@ filterwarnings = [
 [tool.coverage.run]
 branch = true
 parallel = true
-source = ["src/", "tests/"]
+source = ["src/"]
 
 [tool.coverage.report]
 precision = 2
@@ -184,8 +185,9 @@ typecheck = "ty check ."
 
 # Testing
 test = "pytest -m 'not slow'"
+test-affected = "pytest --testmon --no-cov"
 test-all = "pytest"
-test-cov = "pytest --cov=src/surfmon --cov-report=term-missing --cov-report=html"
+test-cov = "pytest --cov --cov-report=term-missing --cov-report=html"
 
 # Combined tasks
 check.parallel = ["lint", "typecheck"]
@@ -204,7 +206,8 @@ prek = "prek run --all-files"
 verify-scaffold = "bash scripts/verify-scaffold.sh"
 
 # Template utilities
-update-template = "copier update --trust . --skip-answered"
+check-template = "bash scripts/check-template-update.sh"
+update-template = { shell = "copier update --trust . --skip-answered && uv sync --upgrade && prek autoupdate && echo '  ✓ Dependencies upgraded and hook versions updated'" }
 
 # Git utilities
 tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"

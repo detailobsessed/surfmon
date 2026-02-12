@@ -1,0 +1,29 @@
+name: PR Description
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+    - name: Validate PR description
+      env:
+        BODY: ${{ github.event.pull_request.body }}
+      run: |
+        if [ -z "$BODY" ]; then
+          echo "::error::PR description is empty"
+          exit 1
+        fi
+
+        # Strip HTML comments, headings, checklist lines, and whitespace — what remains is real content
+        content=$(printf '%s\n' "$BODY" | tr -d '\r' | sed '/^<!--.*-->$/d' | sed '/^## /d' | sed '/^- \[[ xX]\]/d' | tr -d '[:space:]')
+        if [ -z "$content" ]; then
+          echo "::error::PR description has no real content — just headings, placeholders, or checklists. Describe your changes."
+          exit 1
+        fi
+
+        echo "✓ PR description looks good"

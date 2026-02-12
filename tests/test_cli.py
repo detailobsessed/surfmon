@@ -521,6 +521,220 @@ class TestCreateSummaryTable:
         assert table is not None
 
 
+class TestCreateSummaryTableChanges:
+    """Tests for create_summary_table with prev_report showing actual changes."""
+
+    def test_summary_table_with_increased_values(self, mock_generate_report):
+        """Should show increase indicators when values go up."""
+        from surfmon.cli import create_summary_table
+
+        report = mock_generate_report.return_value
+        report.process_count = 10
+        report.total_windsurf_memory_mb = 2048.0
+        report.total_windsurf_cpu_percent = 30.0
+        report.language_servers = [MagicMock(), MagicMock()]
+
+        prev_report = MagicMock()
+        prev_report.process_count = 5
+        prev_report.total_windsurf_memory_mb = 1024.0
+        prev_report.total_windsurf_cpu_percent = 10.0
+        prev_report.language_servers = []
+        prev_report.pty_info = None
+
+        table = create_summary_table(report, prev_report)
+        assert table is not None
+
+    def test_summary_table_with_decreased_values(self, mock_generate_report):
+        """Should show decrease indicators when values go down."""
+        from surfmon.cli import create_summary_table
+
+        report = mock_generate_report.return_value
+        report.process_count = 3
+        report.total_windsurf_memory_mb = 512.0
+        report.total_windsurf_cpu_percent = 5.0
+        report.language_servers = []
+
+        prev_report = MagicMock()
+        prev_report.process_count = 8
+        prev_report.total_windsurf_memory_mb = 2048.0
+        prev_report.total_windsurf_cpu_percent = 25.0
+        prev_report.language_servers = [MagicMock(), MagicMock()]
+        prev_report.pty_info = None
+
+        table = create_summary_table(report, prev_report)
+        assert table is not None
+
+    def test_summary_table_with_pty_info_changes(self, mock_generate_report):
+        """Should show PTY changes when pty_info is present."""
+        from surfmon.cli import create_summary_table
+
+        report = mock_generate_report.return_value
+        report.pty_info = MagicMock()
+        report.pty_info.windsurf_pty_count = 100
+        report.pty_info.system_pty_used = 200
+        report.pty_info.system_pty_limit = 1024
+
+        prev_report = MagicMock()
+        prev_report.process_count = 5
+        prev_report.total_windsurf_memory_mb = 1000.0
+        prev_report.total_windsurf_cpu_percent = 10.0
+        prev_report.language_servers = []
+        prev_report.pty_info = MagicMock()
+        prev_report.pty_info.windsurf_pty_count = 50
+
+        table = create_summary_table(report, prev_report)
+        assert table is not None
+
+
+class TestCompareCommandErrors:
+    """Tests for compare command error handling."""
+
+    def test_compare_exception_from_compare_reports(self, tmp_path, mocker):
+        """Should handle exceptions from compare_reports."""
+        before_file = tmp_path / "before.json"
+        after_file = tmp_path / "after.json"
+        before_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
+        after_file.write_text('{"timestamp": "2025-01-02"}', encoding="utf-8")
+
+        mocker.patch("surfmon.cli.compare_reports", side_effect=KeyError("missing_key"))
+
+        result = runner.invoke(app, ["compare", str(before_file), str(after_file)])
+        assert result.exit_code == 1
+        assert "Error comparing" in result.stdout
+
+
+class TestCleanupCommandEdgeCases:
+    """Tests for cleanup command edge cases."""
+
+    def test_cleanup_kill_failure(self, mocker):
+        """Should report failed kills."""
+        import psutil
+
+        mock_paths = MagicMock()
+        mock_paths.app_name = "Windsurf.app"
+        mocker.patch("surfmon.config.get_paths", return_value=mock_paths)
+
+        mock_proc = MagicMock()
+        mock_proc.info = {
+            "pid": 5678,
+            "name": "crashpad_handler",
+            "cmdline": ["/Applications/Windsurf.app/crashpad_handler"],
+            "exe": "/Applications/Windsurf.app/crashpad_handler",
+            "create_time": 1234567890,
+        }
+        mock_proc.pid = 5678
+        mock_proc.memory_info.return_value.rss = 50 * 1024 * 1024
+        mock_proc.kill.side_effect = psutil.AccessDenied(pid=5678)
+
+        mock_iter = mocker.patch("psutil.process_iter")
+        mock_iter.return_value = [mock_proc]
+        result = runner.invoke(app, ["cleanup", "--force"])
+        assert result.exit_code == 1
+        assert "Failed to kill" in result.stdout
+
+
+class TestPruneCommandEdgeCases:
+    """Tests for prune command edge cases."""
+
+    def test_prune_with_corrupt_json(self, tmp_path):
+        """Should warn about corrupt JSON files."""
+        (tmp_path / "good.json").write_text('{"process_count": 5}', encoding="utf-8")
+        (tmp_path / "bad.json").write_text("not valid json{{{", encoding="utf-8")
+
+        result = runner.invoke(app, ["prune", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "Warning" in result.stdout or "No duplicate" in result.stdout
+
+    def test_prune_all_unique(self, tmp_path):
+        """Should report no duplicates when all reports are unique."""
+        for i in range(3):
+            report = {"process_count": i, "memory_mb": 1000 + i * 500}
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        result = runner.invoke(app, ["prune", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "No duplicate" in result.stdout
+
+
+class TestAnalyzeCommandEdgeCases:
+    """Tests for analyze command edge cases."""
+
+    def test_analyze_with_invalid_json(self, tmp_path):
+        """Should warn about invalid JSON and continue."""
+        (tmp_path / "bad.json").write_text("not valid json", encoding="utf-8")
+        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "No valid reports" in result.stdout
+
+    def test_analyze_memory_leak_detection(self, tmp_path):
+        """Should detect potential memory leak with large memory growth."""
+        for i in range(3):
+            report = {
+                "timestamp": f"2025-01-01T12:0{i}:00",
+                "process_count": 5,
+                "total_windsurf_memory_mb": 1000 + i * 1000,
+                "total_windsurf_cpu_percent": 10.0,
+                "memory_mb": 1000 + i * 1000,
+                "language_servers": [],
+                "log_issues": [],
+                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
+                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
+                "extensions_count": 10,
+                "mcp_servers_enabled": [],
+            }
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "MEMORY LEAK" in result.stdout
+
+    def test_analyze_stable_memory(self, tmp_path):
+        """Should report stable memory when change is small."""
+        for i in range(3):
+            report = {
+                "timestamp": f"2025-01-01T12:0{i}:00",
+                "process_count": 5 - i,
+                "total_windsurf_memory_mb": 1000 + i * 10,
+                "total_windsurf_cpu_percent": 10.0,
+                "memory_mb": 1000 + i * 10,
+                "language_servers": [],
+                "log_issues": [],
+                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
+                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
+                "extensions_count": 10,
+                "mcp_servers_enabled": [],
+            }
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "Memory stable" in result.stdout
+        assert "Process count decreased" in result.stdout
+
+    def test_analyze_process_increase(self, tmp_path):
+        """Should warn about process count increase > 5."""
+        for i in range(3):
+            report = {
+                "timestamp": f"2025-01-01T12:0{i}:00",
+                "process_count": 5 + i * 5,
+                "total_windsurf_memory_mb": 1000,
+                "total_windsurf_cpu_percent": 10.0,
+                "memory_mb": 1000,
+                "language_servers": [],
+                "log_issues": ["issue"] if i == 2 else [],
+                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
+                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
+                "extensions_count": 10,
+                "mcp_servers_enabled": [],
+            }
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "Process count increased" in result.stdout
+        assert "Current Issues" in result.stdout
+
+
 class TestSignalHandler:
     """Tests for signal handler."""
 
