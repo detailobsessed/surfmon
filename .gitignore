@@ -44,7 +44,7 @@ htmlcov/
 
 # tools
 .coverage*
-.testmondata
+.testmondata*
 /.pdm-build/
 
 # MkDocs build output

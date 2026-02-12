@@ -242,12 +242,6 @@ else
     warn "CI: no CI workflow found"
 fi
 
-prd=".github/workflows/pr-description.yml"
-if [ -f "$prd" ]; then
-    pass "PR description check workflow present"
-elif [ -d ".github" ]; then
-    warn "PR description check workflow missing"
-fi
 
 rel=".github/workflows/release.yml"
 if [ -f "$rel" ]; then
