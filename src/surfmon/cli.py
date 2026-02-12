@@ -31,6 +31,7 @@ app = typer.Typer(
     name="surfmon",
     help="Monitor Windsurf IDE performance and resource usage",
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 

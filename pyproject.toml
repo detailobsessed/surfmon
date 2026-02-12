@@ -173,6 +173,7 @@ output = "htmlcov/coverage.json"
 
 [tool.ty.environment]
 python-version = "3.14"
+python = ".venv"
 
 [tool.poe.tasks]
 # Setup
