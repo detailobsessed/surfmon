@@ -1,11 +1,25 @@
 """Display and formatting utilities for monitoring reports."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.align import Align
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
+
+__all__ = [
+    "TABLE_WIDTH",
+    "Live",
+    "Table",
+    "console",
+    "display_report",
+    "make_diff_table",
+    "make_kv_table",
+    "make_panel",
+    "make_table",
+    "save_report_markdown",
+]
 
 from .config import get_target_display_name
 
@@ -19,6 +33,35 @@ console = Console()
 TABLE_WIDTH = 90
 
 
+def make_table(title: str | None = None, **kwargs: Any) -> Table:
+    """Create a table with standard width and styling."""
+    return Table(title=title, show_header=True, width=TABLE_WIDTH, **kwargs)
+
+
+def make_kv_table(title: str) -> Table:
+    """Create a key-value table (Metric | Value)."""
+    table = make_table(title)
+    table.add_column("Metric", style="cyan", ratio=1)
+    table.add_column("Value", style="green", ratio=2, overflow="fold")
+    return table
+
+
+def make_diff_table(title: str) -> Table:
+    """Create a comparison table (Metric | Before | After | Change)."""
+    table = make_table(title)
+    table.add_column("Metric", style="cyan", ratio=2)
+    table.add_column("Before", style="dim", ratio=1)
+    table.add_column("After", style="dim", ratio=1)
+    table.add_column("Change", style="green", ratio=2, overflow="fold")
+    return table
+
+
+def make_panel(content: str, *, title: str | None = None, style: str = "cyan", center: bool = False) -> Panel:
+    """Create a panel with standard width and styling."""
+    body = Align.center(content) if center else content
+    return Panel(body, title=title, border_style=style, width=TABLE_WIDTH)
+
+
 def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     """Display report in rich terminal format."""
     console.print()
@@ -28,19 +71,16 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     status = "[red]Not Running[/red]" if report.process_count == 0 else "[green]Running[/green]"
 
     console.print(
-        Panel(
-            Align.center(f"Status: {status}\n[dim]{report.timestamp}[/dim]"),
+        make_panel(
+            f"Status: {status}\n[dim]{report.timestamp}[/dim]",
             title=f"[bold cyan]Surfmon[/bold cyan] - {target_name}",
-            border_style="cyan",
-            width=TABLE_WIDTH,
+            center=True,
         )
     )
     console.print()
 
     # System overview
-    sys_table = Table(title="System Resources", show_header=True, width=TABLE_WIDTH)
-    sys_table.add_column("Metric", style="cyan", ratio=1)
-    sys_table.add_column("Value", style="green", ratio=2, overflow="fold")
+    sys_table = make_kv_table("System Resources")
 
     sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
     sys_table.add_row("Available Memory", f"{report.system.available_memory_gb:.1f} GB")
@@ -60,9 +100,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     console.print()
 
     # Windsurf summary
-    ws_table = Table(title="Windsurf Resource Usage", show_header=True, width=TABLE_WIDTH)
-    ws_table.add_column("Metric", style="cyan", ratio=1)
-    ws_table.add_column("Value", style="green", ratio=2, overflow="fold")
+    ws_table = make_kv_table("Windsurf Resource Usage")
 
     ws_table.add_row("Process Count", str(report.process_count))
 
@@ -98,7 +136,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Active workspaces
     if report.active_workspaces:
-        workspace_table = Table(title="Active Workspaces", show_header=True, width=TABLE_WIDTH)
+        workspace_table = make_table("Active Workspaces")
         workspace_table.add_column("ID", style="dim", max_width=20, overflow="fold")
         workspace_table.add_column("Path", style="cyan", ratio=3, overflow="fold")
         workspace_table.add_column("Exists", style="green", ratio=1)
@@ -121,7 +159,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     if report.windsurf_processes:
         top_procs = sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True)[:10]
 
-        proc_table = Table(title="Top 10 Processes by Memory", show_header=True, width=TABLE_WIDTH)
+        proc_table = make_table("Top 10 Processes by Memory")
         proc_table.add_column("PID", style="dim")
         proc_table.add_column("Name", style="cyan", ratio=3, overflow="fold")
         proc_table.add_column("Memory", justify="right", style="green")
@@ -144,7 +182,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Language servers
     if report.language_servers:
-        ls_table = Table(title="Language Servers", show_header=True, width=TABLE_WIDTH)
+        ls_table = make_table("Language Servers")
         ls_table.add_column("PID", style="dim")
         ls_table.add_column("Type", style="cyan", ratio=3, overflow="fold")
         ls_table.add_column("Memory", justify="right", style="green")
@@ -182,11 +220,10 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     # Issues
     if report.log_issues:
         console.print(
-            Panel(
+            make_panel(
                 "\n".join(report.log_issues),
                 title="[bold red]Issues Detected[/bold red]",
-                border_style="red",
-                width=TABLE_WIDTH,
+                style="red",
             )
         )
         console.print()
