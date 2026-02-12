@@ -6,9 +6,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
+from .output import TABLE_WIDTH
 
 console = Console()
 
@@ -51,19 +54,21 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
 
     console.print()
     console.print(
-        Panel.fit(
-            "[bold cyan]Windsurf Performance Comparison[/bold cyan]\n" + f"Before: {old['timestamp']}\n" + f"After:  {new['timestamp']}",
+        Panel(
+            Align.center(f"Before: {old['timestamp']}\nAfter:  {new['timestamp']}"),
+            title="[bold cyan]Windsurf Performance Comparison[/bold cyan]",
             border_style="cyan",
+            width=TABLE_WIDTH,
         )
     )
     console.print()
 
     # System changes
-    sys_table = Table(title="System Resource Changes", show_header=True)
-    sys_table.add_column("Metric", style="cyan")
-    sys_table.add_column("Before", style="dim")
-    sys_table.add_column("After", style="dim")
-    sys_table.add_column("Change", style="green")
+    sys_table = Table(title="System Resource Changes", show_header=True, width=TABLE_WIDTH)
+    sys_table.add_column("Metric", style="cyan", ratio=2)
+    sys_table.add_column("Before", style="dim", ratio=1)
+    sys_table.add_column("After", style="dim", ratio=1)
+    sys_table.add_column("Change", style="green", ratio=2, overflow="fold")
 
     old_sys = old["system"]
     new_sys = new["system"]
@@ -93,11 +98,11 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     console.print()
 
     # Windsurf changes
-    ws_table = Table(title="Windsurf Resource Changes", show_header=True)
-    ws_table.add_column("Metric", style="cyan")
-    ws_table.add_column("Before", style="dim")
-    ws_table.add_column("After", style="dim")
-    ws_table.add_column("Change", style="green")
+    ws_table = Table(title="Windsurf Resource Changes", show_header=True, width=TABLE_WIDTH)
+    ws_table.add_column("Metric", style="cyan", ratio=2)
+    ws_table.add_column("Before", style="dim", ratio=1)
+    ws_table.add_column("After", style="dim", ratio=1)
+    ws_table.add_column("Change", style="green", ratio=2, overflow="fold")
 
     ws_table.add_row(
         "Process Count",
@@ -153,12 +158,12 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     new_ls = {ls["pid"]: ls for ls in new["language_servers"]}
 
     if old_ls or new_ls:
-        ls_table = Table(title="Language Server Changes", show_header=True)
+        ls_table = Table(title="Language Server Changes", show_header=True, width=TABLE_WIDTH)
         ls_table.add_column("PID", style="dim")
-        ls_table.add_column("Status", style="cyan")
-        ls_table.add_column("Memory Before", justify="right", style="dim")
-        ls_table.add_column("Memory After", justify="right", style="dim")
-        ls_table.add_column("Change", style="green")
+        ls_table.add_column("Status", style="cyan", ratio=1)
+        ls_table.add_column("Memory Before", justify="right", style="dim", ratio=1)
+        ls_table.add_column("Memory After", justify="right", style="dim", ratio=1)
+        ls_table.add_column("Change", style="green", ratio=2, overflow="fold")
 
         # Servers that existed before
         for pid, ls_old in old_ls.items():

@@ -108,7 +108,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
             exists_icon = "✓" if ws.exists else "❌"
             exists_color = "green" if ws.exists else "red"
             workspace_table.add_row(
-                ws.id[:18] + ".." if len(ws.id) > 20 else ws.id,
+                (ws.id[:18] + "..") if len(ws.id) > 20 else ws.id,
                 ws.path,
                 f"[{exists_color}]{exists_icon}[/{exists_color}]",
                 ws.loaded_at or "Unknown",

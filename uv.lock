@@ -742,6 +742,20 @@ wheels = [
 ]
 
 [[package]]
+name = "mkdocs-typer2"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mkdocs" },
+    { name = "pydantic" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/fb/7f1b0fe2eecbcc2700bc8a857f5470ba3c71fc81a727851312c67670dd35/mkdocs_typer2-0.2.0.tar.gz", hash = "sha256:3f389b83f3d5f8d270bf81a2840f9307b74dbce9575243ab1f96d0e89ccbe5a1", size = 29342, upload-time = "2026-01-15T03:19:25.588Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/6e/4b82657b44567f430e35e62c4c22b5cd5fd1f40f369873e2fd92fb77a662/mkdocs_typer2-0.2.0-py3-none-any.whl", hash = "sha256:079fab0b30889f509f9f29a190722aa5cb29a8cf13c231571155fdb69838ec18", size = 14636, upload-time = "2026-01-15T03:19:24.497Z" },
+]
+
+[[package]]
 name = "mkdocstrings"
 version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1343,6 +1357,7 @@ docs = [
     { name = "mkdocs-material-extensions" },
     { name = "mkdocs-minify-plugin" },
     { name = "mkdocs-section-index" },
+    { name = "mkdocs-typer2" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
 local = [
@@ -1384,6 +1399,7 @@ docs = [
     { name = "mkdocs-material-extensions", specifier = ">=1.3" },
     { name = "mkdocs-minify-plugin", specifier = ">=0.8" },
     { name = "mkdocs-section-index", specifier = ">=0.3.9" },
+    { name = "mkdocs-typer2", specifier = ">=0.2.0" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.27" },
 ]
 local = [
