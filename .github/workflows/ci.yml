@@ -65,7 +65,15 @@ jobs:
   quality:
     needs: changes
     if: ${{ github.event_name == 'push' || needs.changes.outputs.src == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      matrix:
+        os:
+        - blacksmith-4vcpu-ubuntu-2404
+        - macos-latest
+        - blacksmith-4vcpu-windows-2025
+        python-version:
+        - "3.14"
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout
@@ -77,7 +85,7 @@ jobs:
     - name: Setup uv and Python
       uses: astral-sh/setup-uv@v7.1.5
       with:
-        python-version: "3.14"
+        python-version: ${{ matrix.python-version }}
         enable-cache: true
         cache-dependency-glob: pyproject.toml
 
@@ -95,6 +103,7 @@ jobs:
 
     - name: Store objects inventory for tests
       uses: actions/upload-artifact@v6
+      if: ${{ matrix.os == 'blacksmith-4vcpu-ubuntu-2404' && matrix.python-version == '3.14' }}
       with:
         name: objects.inv
         path: site/objects.inv
@@ -103,7 +112,23 @@ jobs:
 
     needs:
     - quality
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      matrix:
+        os:
+        - blacksmith-4vcpu-ubuntu-2404
+        - macos-latest
+        - blacksmith-4vcpu-windows-2025
+        python-version:
+        - "3.14"
+        resolution:
+        - highest
+        - lowest-direct
+        exclude:
+        - os: macos-latest
+          resolution: lowest-direct
+        - os: blacksmith-4vcpu-windows-2025
+          resolution: lowest-direct
+    runs-on: ${{ matrix.os }}
     continue-on-error: true
 
     steps:
@@ -116,11 +141,14 @@ jobs:
     - name: Setup uv and Python
       uses: astral-sh/setup-uv@v7.1.5
       with:
-        python-version: "3.14"
+        python-version: ${{ matrix.python-version }}
         enable-cache: true
         cache-dependency-glob: pyproject.toml
+        cache-suffix: ${{ matrix.resolution }}
 
     - name: Install dependencies
+      env:
+        UV_RESOLUTION: ${{ matrix.resolution }}
       run: uv run poe setup
 
     - name: Download objects inventory
@@ -133,6 +161,7 @@ jobs:
       run: uv run poe test-cov
 
     - name: Upload coverage to Codecov
+      if: ${{ matrix.os == 'blacksmith-4vcpu-ubuntu-2404' && matrix.resolution == 'highest' }}
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}

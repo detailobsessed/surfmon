@@ -55,7 +55,7 @@ ci = [
     "pytest-cov>=6",
     "pytest-randomly>=3.15",
     "ty>=0.0.14",
-    "poethepoet>=0.32",
+    "poethepoet>=0.41",
     "pytest-mock>=3.15.1",
 ]
 local = [
@@ -134,7 +134,7 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # Allow assert in tests
+"tests/**" = ["S101", "S603", "S607", "S701", "T201"]  # Allow assert, subprocess, jinja2, print in tests
 
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
@@ -155,7 +155,6 @@ markers = [
 ]
 filterwarnings = [
     "error",
-    "error::EncodingWarning",
 ]
 
 [tool.coverage.run]
@@ -181,7 +180,7 @@ setup = "uv sync"
 # Quality checks
 lint = "ruff check ."
 format = "ruff format ."
-typecheck = "ty check src"
+typecheck = "ty check ."
 
 # Testing
 test = "pytest -m 'not slow'"
@@ -189,7 +188,8 @@ test-all = "pytest"
 test-cov = "pytest --cov=src/surfmon --cov-report=term-missing --cov-report=html"
 
 # Combined tasks
-check = ["lint", "typecheck"]
+check.parallel = ["lint", "typecheck"]
+check.ignore_fail = "return_non_zero"
 fix = ["lint --fix", "format"]
 
 # Documentation
@@ -200,10 +200,18 @@ docs-deploy = "mkdocs gh-deploy"
 # Pre-commit
 prek = "prek run --all-files"
 
+# Template dev
+verify-scaffold = "bash scripts/verify-scaffold.sh"
+
+# Template utilities
+update-template = "copier update --trust . --skip-answered"
+
 # Git utilities
 tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"
 
 # GitHub utilities
+# actions-up: https://github.com/azat-io/actions-up
+actionsup = "actions-up"
 releases = "gh release list --limit 10"
 runs = "gh run list --limit 10"
 checks = "gh pr checks --watch"

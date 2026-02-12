@@ -1,5 +1,7 @@
 default_stages = ["pre-commit"]
 minimum_prek_version = "0.3.2"
+# All available: commit-msg, post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-merge-commit, pre-push, pre-rebase, prepare-commit-msg
+default_install_hook_types = ["commit-msg", "post-merge", "pre-commit", "pre-push"]
 
 [[repos]]
 repo = "builtin"
@@ -64,7 +66,7 @@ hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
 rev = "lychee-v0.22.0"  # pinned: 'nightly' tag is mutable, update manually
-hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1 }]
+hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1, types_or = ["markdown", "html", "rst", "yaml"] }]
 
 [[repos]]
 repo = "local"
@@ -106,6 +108,15 @@ language = "system"
 files = { glob = ["docs/**", "mkdocs.yml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "src/**"] }
 pass_filenames = false
 stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "check-template-update"
+name = "check for template updates"
+entry = "bash scripts/check-template-update.sh"
+language = "system"
+always_run = true
+pass_filenames = false
+stages = ["post-merge"]
 
 [[repos]]
 repo = "https://github.com/compilerla/conventional-pre-commit"
