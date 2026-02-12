@@ -10,7 +10,7 @@ permissions:
 jobs:
   triage:
     if: join(github.event.issue.labels.*.name) == ''
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
     - name: Ensure needs-triage label exists
       run: gh label create "needs-triage" --description "Issue needs triage" --color "FBCA04" || true
