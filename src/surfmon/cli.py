@@ -7,15 +7,11 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
 
 from .compare import compare_reports
 from .config import WindsurfTarget, get_target_display_name, set_target
 from .monitor import MonitoringReport, generate_report, save_report_json
-from .output import TABLE_WIDTH, display_report, save_report_markdown
+from .output import Live, Table, console, display_report, make_kv_table, make_panel, make_table, save_report_markdown
 
 
 def version_callback(value: bool) -> None:
@@ -51,7 +47,6 @@ def main_callback(
     """Monitor Windsurf IDE performance and resource usage."""
 
 
-console = Console()
 stop_monitoring = False
 
 
@@ -131,9 +126,7 @@ def signal_handler(_signum: int, _frame: object) -> None:
 
 def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport | None = None) -> Table:
     """Create a live summary table for watch mode."""
-    table = Table(title=f"Windsurf Monitor - {datetime.now().strftime('%H:%M:%S')}", width=TABLE_WIDTH)
-    table.add_column("Metric", style="cyan", ratio=1)
-    table.add_column("Value", style="green", ratio=2, overflow="fold")
+    table = make_kv_table(f"Windsurf Monitor - {datetime.now().strftime('%H:%M:%S')}")
     table.add_column("Change", style="yellow", ratio=1)
 
     # Process count
@@ -452,7 +445,7 @@ def cleanup(
     # Display what will be killed
     console.print(f"\n[yellow]Found {len(orphaned)} orphaned crash handler(s):[/yellow]\n")
 
-    table = Table(show_header=True, width=TABLE_WIDTH)
+    table = make_table()
     table.add_column("PID", style="dim")
     table.add_column("Age", style="yellow")
     table.add_column("Memory", justify="right", style="cyan")
@@ -606,7 +599,7 @@ def prune(
         raise typer.Exit(code=0)
 
     # Show what will be kept vs removed
-    table = Table(title="Summary", width=TABLE_WIDTH)
+    table = make_table("Summary")
     table.add_column("Category", style="cyan", ratio=2)
     table.add_column("Count", justify="right", style="green", ratio=1)
 
@@ -701,7 +694,7 @@ def analyze(
 
     # Display analysis
     console.print()
-    console.print(Panel("[bold cyan]Historical Analysis[/bold cyan]", border_style="cyan", width=TABLE_WIDTH))
+    console.print(make_panel("[bold cyan]Historical Analysis[/bold cyan]"))
     console.print()
 
     # Session summary
@@ -713,7 +706,7 @@ def analyze(
     console.print()
 
     # Timeline table
-    timeline = Table(title="Timeline", show_header=True, width=TABLE_WIDTH)
+    timeline = make_table("Timeline")
     timeline.add_column("Time", style="dim")
     timeline.add_column("Proc", justify="right")
     timeline.add_column("Memory", justify="right")
@@ -737,7 +730,7 @@ def analyze(
     console.print()
 
     # Key metrics
-    metrics = Table(title="Key Metrics", show_header=True, width=TABLE_WIDTH)
+    metrics = make_table("Key Metrics")
     metrics.add_column("Metric", style="cyan", ratio=2)
     metrics.add_column("Start", justify="right", ratio=1)
     metrics.add_column("End", justify="right", ratio=1)

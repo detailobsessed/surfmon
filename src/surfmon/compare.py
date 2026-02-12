@@ -6,14 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from rich.align import Align
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-
-from .output import TABLE_WIDTH
-
-console = Console()
+from .output import console, make_diff_table, make_panel, make_table
 
 
 def load_report(path: Path) -> dict:
@@ -54,21 +47,16 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
 
     console.print()
     console.print(
-        Panel(
-            Align.center(f"Before: {old['timestamp']}\nAfter:  {new['timestamp']}"),
+        make_panel(
+            f"Before: {old['timestamp']}\nAfter:  {new['timestamp']}",
             title="[bold cyan]Windsurf Performance Comparison[/bold cyan]",
-            border_style="cyan",
-            width=TABLE_WIDTH,
+            center=True,
         )
     )
     console.print()
 
     # System changes
-    sys_table = Table(title="System Resource Changes", show_header=True, width=TABLE_WIDTH)
-    sys_table.add_column("Metric", style="cyan", ratio=2)
-    sys_table.add_column("Before", style="dim", ratio=1)
-    sys_table.add_column("After", style="dim", ratio=1)
-    sys_table.add_column("Change", style="green", ratio=2, overflow="fold")
+    sys_table = make_diff_table("System Resource Changes")
 
     old_sys = old["system"]
     new_sys = new["system"]
@@ -98,11 +86,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     console.print()
 
     # Windsurf changes
-    ws_table = Table(title="Windsurf Resource Changes", show_header=True, width=TABLE_WIDTH)
-    ws_table.add_column("Metric", style="cyan", ratio=2)
-    ws_table.add_column("Before", style="dim", ratio=1)
-    ws_table.add_column("After", style="dim", ratio=1)
-    ws_table.add_column("Change", style="green", ratio=2, overflow="fold")
+    ws_table = make_diff_table("Windsurf Resource Changes")
 
     ws_table.add_row(
         "Process Count",
@@ -158,7 +142,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     new_ls = {ls["pid"]: ls for ls in new["language_servers"]}
 
     if old_ls or new_ls:
-        ls_table = Table(title="Language Server Changes", show_header=True, width=TABLE_WIDTH)
+        ls_table = make_table("Language Server Changes")
         ls_table.add_column("PID", style="dim")
         ls_table.add_column("Status", style="cyan", ratio=1)
         ls_table.add_column("Memory Before", justify="right", style="dim", ratio=1)
