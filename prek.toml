@@ -20,17 +20,17 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/detailobsessed/sync-with-uv"
-rev = ""  # prek autoupdate will fill this
+rev = "v0.6.0-prek"  # prek autoupdate will fill this
 hooks = [{ id = "sync-with-uv", priority = 0, stages = ["manual"] }]  # TODO: enable once fork supports prek.toml (copier-uv-bleeding#144)
 
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
-rev = ""  # prek autoupdate will fill this
+rev = "v8.30.0"  # prek autoupdate will fill this
 hooks = [{ id = "gitleaks", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = ""  # prek autoupdate will fill this
+rev = "v0.15.0"  # prek autoupdate will fill this
 hooks = [
   { id = "ruff", args = ["--fix"], priority = 1 },
   { id = "ruff-format", priority = 1 },
@@ -38,32 +38,32 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = ""  # prek autoupdate will fill this
+rev = "0.10.0"  # prek autoupdate will fill this
 hooks = [{ id = "uv-lock", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/shellcheck-py/shellcheck-py"
-rev = ""  # prek autoupdate will fill this
+rev = "v0.11.0.1"  # prek autoupdate will fill this
 hooks = [{ id = "shellcheck", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"
-rev = ""  # prek autoupdate will fill this
+rev = "v1.7.10"  # prek autoupdate will fill this
 hooks = [{ id = "actionlint", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = ""  # prek autoupdate will fill this
+rev = "v1.43.3"  # prek autoupdate will fill this
 hooks = [{ id = "typos", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/igorshubovych/markdownlint-cli"
-rev = ""  # prek autoupdate will fill this
+rev = "v0.47.0"  # prek autoupdate will fill this
 hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
-rev = "lychee-v0.22.0"
+rev = "lychee-v0.22.0"  # pinned: 'nightly' tag is mutable, update manually
 hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1 }]
 
 [[repos]]
@@ -71,11 +71,12 @@ repo = "local"
 
 [[repos.hooks]]
 id = "no-commit-to-main"
-name = "prevent commits to main"
-entry = "bash -c 'test \"$(git rev-parse --abbrev-ref HEAD)\" != main || { echo Direct commits to main not allowed. Use a branch + PR. && exit 1; }'"
+name = "prevent pushes to main"
+entry = "bash -c 'test \"$(git rev-parse --abbrev-ref HEAD)\" != main || { echo Direct pushes to main not allowed. Use a branch + PR. && exit 1; }'"
 language = "system"
 always_run = true
 pass_filenames = false
+stages = ["pre-push"]
 priority = 0
 
 [[repos.hooks]]
@@ -108,7 +109,7 @@ stages = ["pre-push"]
 
 [[repos]]
 repo = "https://github.com/compilerla/conventional-pre-commit"
-rev = ""  # prek autoupdate will fill this
+rev = "v4.3.0"  # prek autoupdate will fill this
 hooks = [
   { id = "conventional-pre-commit", stages = ["commit-msg"], priority = 1, args = [
     "--strict",

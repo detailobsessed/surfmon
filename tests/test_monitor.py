@@ -680,7 +680,7 @@ class TestSaveReportJson:
         save_report_json(report, output_path)
 
         assert output_path.exists()
-        data = json.loads(output_path.read_text())
+        data = json.loads(output_path.read_text(encoding="utf-8"))
         assert data["timestamp"] == "2026-01-01"
         assert data["process_count"] == 5
 

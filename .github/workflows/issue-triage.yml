@@ -15,5 +15,6 @@ jobs:
     - name: Add needs-triage label
       run: gh issue edit "$NUMBER" --add-label "needs-triage"
       env:
+        GH_REPO: ${{ github.repository }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         NUMBER: ${{ github.event.issue.number }}
