@@ -15,7 +15,7 @@ from rich.table import Table
 from .compare import compare_reports
 from .config import WindsurfTarget, get_target_display_name, set_target
 from .monitor import MonitoringReport, generate_report, save_report_json
-from .output import display_report, save_report_markdown
+from .output import TABLE_WIDTH, display_report, save_report_markdown
 
 
 def version_callback(value: bool) -> None:
@@ -131,10 +131,10 @@ def signal_handler(_signum: int, _frame: object) -> None:
 
 def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport | None = None) -> Table:
     """Create a live summary table for watch mode."""
-    table = Table(title=f"Windsurf Monitor - {datetime.now().strftime('%H:%M:%S')}")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Value", style="green")
-    table.add_column("Change", style="yellow")
+    table = Table(title=f"Windsurf Monitor - {datetime.now().strftime('%H:%M:%S')}", width=TABLE_WIDTH)
+    table.add_column("Metric", style="cyan", ratio=1)
+    table.add_column("Value", style="green", ratio=2, overflow="fold")
+    table.add_column("Change", style="yellow", ratio=1)
 
     # Process count
     proc_change = ""
@@ -452,7 +452,7 @@ def cleanup(
     # Display what will be killed
     console.print(f"\n[yellow]Found {len(orphaned)} orphaned crash handler(s):[/yellow]\n")
 
-    table = Table(show_header=True)
+    table = Table(show_header=True, width=TABLE_WIDTH)
     table.add_column("PID", style="dim")
     table.add_column("Age", style="yellow")
     table.add_column("Memory", justify="right", style="cyan")
@@ -606,9 +606,9 @@ def prune(
         raise typer.Exit(code=0)
 
     # Show what will be kept vs removed
-    table = Table(title="Summary")
-    table.add_column("Category", style="cyan")
-    table.add_column("Count", justify="right", style="green")
+    table = Table(title="Summary", width=TABLE_WIDTH)
+    table.add_column("Category", style="cyan", ratio=2)
+    table.add_column("Count", justify="right", style="green", ratio=1)
 
     table.add_row("Total reports", str(len(json_files)))
     table.add_row("Unique reports", str(unique_reports))
@@ -701,7 +701,7 @@ def analyze(
 
     # Display analysis
     console.print()
-    console.print(Panel.fit("[bold cyan]Historical Analysis[/bold cyan]", border_style="cyan"))
+    console.print(Panel("[bold cyan]Historical Analysis[/bold cyan]", border_style="cyan", width=TABLE_WIDTH))
     console.print()
 
     # Session summary
@@ -713,7 +713,7 @@ def analyze(
     console.print()
 
     # Timeline table
-    timeline = Table(title="Timeline", show_header=True)
+    timeline = Table(title="Timeline", show_header=True, width=TABLE_WIDTH)
     timeline.add_column("Time", style="dim")
     timeline.add_column("Proc", justify="right")
     timeline.add_column("Memory", justify="right")
@@ -737,12 +737,12 @@ def analyze(
     console.print()
 
     # Key metrics
-    metrics = Table(title="Key Metrics", show_header=True)
-    metrics.add_column("Metric", style="cyan")
-    metrics.add_column("Start", justify="right")
-    metrics.add_column("End", justify="right")
-    metrics.add_column("Change", justify="right")
-    metrics.add_column("Peak", justify="right")
+    metrics = Table(title="Key Metrics", show_header=True, width=TABLE_WIDTH)
+    metrics.add_column("Metric", style="cyan", ratio=2)
+    metrics.add_column("Start", justify="right", ratio=1)
+    metrics.add_column("End", justify="right", ratio=1)
+    metrics.add_column("Change", justify="right", ratio=1, overflow="fold")
+    metrics.add_column("Peak", justify="right", ratio=1)
 
     # Process count
     proc_change = reports[-1]["processes"] - reports[0]["processes"]
