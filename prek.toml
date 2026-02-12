@@ -82,9 +82,17 @@ stages = ["pre-push"]
 priority = 0
 
 [[repos.hooks]]
+id = "check-shebang-scripts-are-executable"
+name = "check scripts with shebangs are executable"
+entry = "bash -c 'fail=0; for f in \"$@\"; do if head -c2 \"$f\" | grep -q \"#!\"; then if [ ! -x \"$f\" ]; then echo \"$f: has shebang but is not executable (run: chmod +x $f)\"; fail=1; fi; fi; done; exit $fail' --"
+language = "system"
+types_or = ["bash", "shell", "python", "ruby", "perl"]
+priority = 0
+
+[[repos.hooks]]
 id = "check-pathlib-encoding"
 name = "pathlib encoding check"
-entry = "python3 scripts/check-pathlib-encoding.py"
+entry = "uv run scripts/check-pathlib-encoding.py"
 language = "system"
 types = ["python"]
 priority = 1
