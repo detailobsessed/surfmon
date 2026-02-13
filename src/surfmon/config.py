@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import psutil
 from decouple import config
 
 
@@ -69,8 +70,8 @@ WINDSURF_PATHS = {
     ),
 }
 
-# Global override for programmatic target setting
-_target_override: WindsurfTarget | None = None
+# Mutable state container (avoids global statements)
+_state: dict[str, WindsurfTarget | None] = {"target_override": None}
 
 
 def _detect_running_target() -> WindsurfTarget | None:
@@ -80,8 +81,6 @@ def _detect_running_target() -> WindsurfTarget | None:
     Returns the first target found running, preferring NEXT over STABLE
     if both are running. Returns None if neither is detected.
     """
-    import psutil
-
     running: set[WindsurfTarget] = set()
 
     for proc in psutil.process_iter(["exe", "cmdline"]):
@@ -113,8 +112,8 @@ def get_target() -> WindsurfTarget:
     3. Auto-detect which Windsurf is running
     4. Default to STABLE
     """
-    if _target_override is not None:
-        return _target_override
+    if _state["target_override"] is not None:
+        return _state["target_override"]
 
     target_str = config("SURFMON_TARGET", default="").lower()
     if target_str == "next":
@@ -132,14 +131,12 @@ def get_target() -> WindsurfTarget:
 
 def set_target(target: WindsurfTarget) -> None:
     """Set the Windsurf target programmatically (overrides env/config)."""
-    global _target_override
-    _target_override = target
+    _state["target_override"] = target
 
 
 def reset_target() -> None:
     """Reset to use env/config-based target selection."""
-    global _target_override
-    _target_override = None
+    _state["target_override"] = None
 
 
 def get_paths() -> WindsurfPaths:

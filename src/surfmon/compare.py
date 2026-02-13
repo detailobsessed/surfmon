@@ -15,10 +15,13 @@ def load_report(path: Path) -> dict:
         return json.load(f)
 
 
+_MB_TO_GB_THRESHOLD = 1024
+
+
 def format_memory(mb: float) -> str:
     """Format memory in MB or GB as appropriate."""
-    if mb >= 1024:
-        return f"{mb / 1024:.2f} GB"
+    if mb >= _MB_TO_GB_THRESHOLD:
+        return f"{mb / _MB_TO_GB_THRESHOLD:.2f} GB"
     return f"{mb:.0f} MB"
 
 

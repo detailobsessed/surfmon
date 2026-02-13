@@ -1,26 +1,57 @@
 """Typer-based CLI for Windsurf Performance Monitor."""
 
+import hashlib
+import json
 import signal
 import time
-from datetime import datetime
+from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+import psutil
 import typer
 
+from . import __version__
 from .compare import compare_reports
-from .config import WindsurfTarget, get_target_display_name, set_target
+from .config import WindsurfTarget, get_paths, get_target_display_name, set_target
 from .monitor import MonitoringReport, generate_report, save_report_json
-from .output import Live, Table, console, display_report, make_kv_table, make_panel, make_table, save_report_markdown
+from .output import (
+    CPU_PERCENT_CRITICAL,
+    CPU_PERCENT_WARNING,
+    MB_PER_GB,
+    PTY_COUNT_CRITICAL,
+    PTY_COUNT_WARNING,
+    PTY_USAGE_PERCENT_CRITICAL,
+    WINDSURF_MEM_PERCENT_CRITICAL,
+    WINDSURF_MEM_PERCENT_WARNING,
+    Live,
+    Table,
+    console,
+    display_report,
+    make_kv_table,
+    make_panel,
+    make_table,
+    save_report_markdown,
+)
+
+# Analyze command thresholds
+ANALYZE_MEM_GB_HIGH = 6
+ANALYZE_MEM_GB_MEDIUM = 4
+ANALYZE_PROC_CHANGE_SIGNIFICANT = 5
+ANALYZE_MEM_CHANGE_LEAK_GB = 0.5
+ANALYZE_MEM_CHANGE_GROWTH_GB = 0.2
+MEM_DIFF_SIGNIFICANT_GB = 0.01
+CPU_DIFF_SIGNIFICANT = 0.5
 
 
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
-        from . import __version__
-
         typer.echo(f"surfmon {__version__}")
-        raise typer.Exit()
+        raise typer.Exit
 
 
 app = typer.Typer(
@@ -47,7 +78,7 @@ def main_callback(
     """Monitor Windsurf IDE performance and resource usage."""
 
 
-stop_monitoring = False
+_state: dict[str, bool] = {"stop_monitoring": False}
 
 
 def target_callback(value: str | None) -> str | None:
@@ -83,7 +114,7 @@ def simplify_process_name(name: str) -> str:
     into "Windsurf Helper GPU" for cleaner display.
     """
     if "Helper" in name and "(" in name:
-        return name.split("Helper")[0] + "Helper " + name.split("(")[1].split(")")[0]
+        return name.split("Helper", maxsplit=1)[0] + "Helper " + name.split("(")[1].split(")")[0]
     return name
 
 
@@ -93,8 +124,6 @@ def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
     Returns a dict mapping simplified process names to lists of memory values,
     one per report. Processes not present in a report get 0 for that position.
     """
-    from collections import defaultdict
-
     process_mem_history: dict[str, list[float]] = {}
 
     for report_idx, r in enumerate(reports):
@@ -104,9 +133,9 @@ def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
             process_snapshot[name] += proc["memory_mb"]
 
         # Append 0 for existing processes not in this snapshot
-        for name in process_mem_history:
+        for name, history in process_mem_history.items():
             if name not in process_snapshot:
-                process_mem_history[name].append(0)
+                history.append(0)
 
         # For processes in this snapshot: pad with leading zeros if new, then append
         for name, mem in process_snapshot.items():
@@ -119,14 +148,13 @@ def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
 
 def signal_handler(_signum: int, _frame: object) -> None:
     """Handle interrupt signals gracefully."""
-    global stop_monitoring
-    stop_monitoring = True
+    _state["stop_monitoring"] = True
     console.print("\n[yellow]Stopping monitoring...[/yellow]")
 
 
 def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport | None = None) -> Table:
     """Create a live summary table for watch mode."""
-    table = make_kv_table(f"Windsurf Monitor - {datetime.now().strftime('%H:%M:%S')}")
+    table = make_kv_table(f"Windsurf Monitor - {datetime.now(tz=UTC).astimezone().strftime('%H:%M:%S')}")
     table.add_column("Change", style="yellow", ratio=1)
 
     # Process count
@@ -141,32 +169,38 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
     table.add_row("Processes", str(report.process_count), proc_change)
 
     # Memory
-    mem_gb = report.total_windsurf_memory_mb / 1024
+    mem_gb = report.total_windsurf_memory_mb / MB_PER_GB
     mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
     mem_str = f"{mem_gb:.2f} GB ({mem_pct:.1f}%)"
 
     mem_change = ""
     if prev_report:
-        prev_mem_gb = prev_report.total_windsurf_memory_mb / 1024
+        prev_mem_gb = prev_report.total_windsurf_memory_mb / MB_PER_GB
         diff = mem_gb - prev_mem_gb
-        if abs(diff) > 0.01:
+        if abs(diff) > MEM_DIFF_SIGNIFICANT_GB:
             symbol = "↑" if diff > 0 else "↓"
             color = "red" if diff > 0 else "green"
             mem_change = f"[{color}]{symbol}{abs(diff):.2f}GB[/{color}]"
 
-    mem_color = "red" if mem_pct > 20 else "yellow" if mem_pct > 10 else "green"
+    mem_color = "red" if mem_pct > WINDSURF_MEM_PERCENT_CRITICAL else "yellow" if mem_pct > WINDSURF_MEM_PERCENT_WARNING else "green"
     table.add_row("Memory", f"[{mem_color}]{mem_str}[/{mem_color}]", mem_change)
 
     # CPU
     cpu_change = ""
     if prev_report:
         diff = report.total_windsurf_cpu_percent - prev_report.total_windsurf_cpu_percent
-        if abs(diff) > 0.5:
+        if abs(diff) > CPU_DIFF_SIGNIFICANT:
             symbol = "↑" if diff > 0 else "↓"
             color = "red" if diff > 0 else "green"
             cpu_change = f"[{color}]{symbol}{abs(diff):.1f}%[/{color}]"
 
-    cpu_color = "red" if report.total_windsurf_cpu_percent > 50 else "yellow" if report.total_windsurf_cpu_percent > 20 else "green"
+    cpu_color = (
+        "red"
+        if report.total_windsurf_cpu_percent > CPU_PERCENT_CRITICAL
+        else "yellow"
+        if report.total_windsurf_cpu_percent > CPU_PERCENT_WARNING
+        else "green"
+    )
     table.add_row(
         "CPU",
         f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]",
@@ -196,7 +230,13 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
                 pty_change = f"[{color}]{symbol}{abs(diff)}[/{color}]"
 
         usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
-        pty_color = "red" if pty.windsurf_pty_count >= 200 or usage_pct >= 80 else "yellow" if pty.windsurf_pty_count >= 50 else "green"
+        pty_color = (
+            "red"
+            if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
+            else "yellow"
+            if pty.windsurf_pty_count >= PTY_COUNT_WARNING
+            else "green"
+        )
         table.add_row(
             "PTYs",
             f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim]({pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
@@ -251,9 +291,7 @@ def check(
 
         # Handle --save flag (auto-generate filenames)
         if save:
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
             json_path = Path(f"surfmon-{timestamp}.json")
             markdown_path = Path(f"surfmon-{timestamp}.md")
 
@@ -297,11 +335,10 @@ def watch(
     Each watch session creates a new timestamped folder.
     """
     # Reset stop flag at start of watch (in case of previous Ctrl+C)
-    global stop_monitoring
-    stop_monitoring = False
+    _state["stop_monitoring"] = False
 
     # Create session-specific subdirectory
-    session_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    session_timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
     session_dir = output_dir / session_timestamp
     session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -326,7 +363,7 @@ def watch(
 
     try:
         with Live(console=console, refresh_per_second=4) as live:
-            while not stop_monitoring:
+            while not _state["stop_monitoring"]:
                 if max_reports > 0 and report_count >= max_reports:
                     break
 
@@ -339,7 +376,7 @@ def watch(
                 # Save report periodically
                 current_time = time.time()
                 if current_time - last_save >= save_interval:
-                    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
                     json_path = session_dir / f"{timestamp}.json"
                     save_report_json(report, json_path)
                     last_save = current_time
@@ -394,12 +431,6 @@ def cleanup(
     remain running after Windsurf has been closed. These processes
     can accumulate over time and waste system resources.
     """
-    from datetime import datetime
-
-    import psutil
-
-    from .config import get_paths
-
     app_name = get_paths().app_name
 
     # Find orphaned crashpad handlers
@@ -426,7 +457,7 @@ def cleanup(
             # Track crashpad handlers
             if "crashpad" in name.lower():
                 create_time = proc.info["create_time"]
-                age_days = (datetime.now().timestamp() - create_time) / 86400
+                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
                 orphaned.append((proc, age_days))
 
         except psutil.NoSuchProcess, psutil.AccessDenied:
@@ -506,9 +537,6 @@ def prune(
 
     By default, always keeps the latest report even if it's a duplicate.
     """
-    import hashlib
-    import json
-
     if not directory.exists():
         console.print(f"[red]Error: Directory not found: {directory}[/red]")
         raise typer.Exit(code=1)
@@ -640,6 +668,14 @@ def prune(
         raise typer.Exit(code=1)
 
 
+def _parse_timestamp(raw: str) -> datetime:
+    """Parse a report timestamp, normalizing naive timestamps to UTC."""
+    ts = datetime.fromisoformat(raw)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return ts
+
+
 @app.command()
 def analyze(
     directory: Annotated[Path, typer.Argument(help="Directory containing JSON reports to analyze")],
@@ -654,9 +690,6 @@ def analyze(
     - Performance degradation
     - Recurring issues
     """
-    import json
-    from datetime import datetime
-
     if not directory.exists():
         console.print(f"[red]Error: Directory not found: {directory}[/red]")
         raise typer.Exit(code=1)
@@ -673,7 +706,7 @@ def analyze(
             with report_file.open(encoding="utf-8") as f:
                 data = json.load(f)
                 reports.append({
-                    "timestamp": datetime.fromisoformat(data["timestamp"]),
+                    "timestamp": _parse_timestamp(data["timestamp"]),
                     "processes": data["process_count"],
                     "memory_mb": data["total_windsurf_memory_mb"],
                     "cpu": data["total_windsurf_cpu_percent"],
@@ -715,8 +748,8 @@ def analyze(
     timeline.add_column("Issues", justify="right")
 
     for r in reports:
-        mem_gb = r["memory_mb"] / 1024
-        mem_color = "red" if mem_gb > 6 else "yellow" if mem_gb > 4 else "green"
+        mem_gb = r["memory_mb"] / MB_PER_GB
+        mem_color = "red" if mem_gb > ANALYZE_MEM_GB_HIGH else "yellow" if mem_gb > ANALYZE_MEM_GB_MEDIUM else "green"
         timeline.add_row(
             r["timestamp"].strftime("%H:%M"),
             str(r["processes"]),
@@ -739,7 +772,7 @@ def analyze(
 
     # Process count
     proc_change = reports[-1]["processes"] - reports[0]["processes"]
-    proc_color = "red" if proc_change > 5 else "yellow" if proc_change > 0 else "green"
+    proc_color = "red" if proc_change > ANALYZE_PROC_CHANGE_SIGNIFICANT else "yellow" if proc_change > 0 else "green"
     metrics.add_row(
         "Processes",
         str(reports[0]["processes"]),
@@ -749,14 +782,14 @@ def analyze(
     )
 
     # Memory
-    mem_change = (reports[-1]["memory_mb"] - reports[0]["memory_mb"]) / 1024
-    mem_color = "red" if mem_change > 0.5 else "yellow" if mem_change > 0.2 else "green"
+    mem_change = (reports[-1]["memory_mb"] - reports[0]["memory_mb"]) / MB_PER_GB
+    mem_color = "red" if mem_change > ANALYZE_MEM_CHANGE_LEAK_GB else "yellow" if mem_change > ANALYZE_MEM_CHANGE_GROWTH_GB else "green"
     metrics.add_row(
         "Memory",
-        f"{reports[0]['memory_mb'] / 1024:.2f} GB",
-        f"{reports[-1]['memory_mb'] / 1024:.2f} GB",
+        f"{reports[0]['memory_mb'] / MB_PER_GB:.2f} GB",
+        f"{reports[-1]['memory_mb'] / MB_PER_GB:.2f} GB",
         f"[{mem_color}]{mem_change:+.2f} GB[/{mem_color}]",
-        f"{max(r['memory_mb'] for r in reports) / 1024:.2f} GB",
+        f"{max(r['memory_mb'] for r in reports) / MB_PER_GB:.2f} GB",
     )
 
     # CPU
@@ -773,14 +806,14 @@ def analyze(
 
     # Analysis
     console.print("[bold cyan]Analysis:[/bold cyan]")
-    if mem_change > 0.5:
+    if mem_change > ANALYZE_MEM_CHANGE_LEAK_GB:
         console.print(f"  [red]⚠️  POTENTIAL MEMORY LEAK: {mem_change:.2f} GB growth[/red]")
-    elif mem_change > 0.2:
+    elif mem_change > ANALYZE_MEM_CHANGE_GROWTH_GB:
         console.print(f"  [yellow]⚠️  Memory growth: {mem_change:.2f} GB[/yellow]")
     else:
         console.print(f"  [green]✓ Memory stable (change: {mem_change:+.2f} GB)[/green]")
 
-    if proc_change > 5:
+    if proc_change > ANALYZE_PROC_CHANGE_SIGNIFICANT:
         console.print(f"  [yellow]⚠️  Process count increased by {proc_change}[/yellow]")
     elif proc_change < 0:
         console.print(f"  [green]✓ Process count decreased by {abs(proc_change)}[/green]")
@@ -794,9 +827,6 @@ def analyze(
 
     # Generate plots if requested
     if plot:
-        import matplotlib.dates as mdates
-        import matplotlib.pyplot as plt
-
         fig, axes = plt.subplots(3, 3, figsize=(18, 14))
         fig.suptitle("Windsurf Performance Analysis", fontsize=18, y=0.995)
 

@@ -3,14 +3,31 @@
 import contextlib
 import json
 import operator
+import re
 import subprocess  # noqa: S404
-from dataclasses import asdict, dataclass
-from datetime import datetime
+import time
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psutil
 
 from surfmon.config import get_paths
+
+# Monitoring thresholds
+CMDLINE_TRUNCATE_LEN = 200
+PATH_COMPONENTS_SHORT = 3
+MAX_DISPLAY_ITEMS = 3
+TELEMETRY_ERROR_THRESHOLD = 5
+EXTENSION_ERROR_LINES_THRESHOLD = 10
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+SECONDS_PER_DAY = 86400
+PTY_CRITICAL_COUNT = 200
+PTY_WARNING_COUNT = 50
+PTY_USAGE_CRITICAL_PERCENT = 80
+LOG_TAIL_BYTES = 50000
+SHARED_LOG_TAIL_BYTES = 30000
 
 
 @dataclass
@@ -109,7 +126,7 @@ def get_windsurf_processes() -> list[psutil.Process]:
                 # Check if this is the main Windsurf/Electron process (not a helper/crashpad)
                 if (
                     (
-                        name.lower() in ["windsurf", "electron"]
+                        name.lower() in {"windsurf", "electron"}
                         or f"{app_name}/Contents/MacOS/Windsurf" in exe
                         or f"{app_name}/Contents/MacOS/Electron" in exe
                     )
@@ -150,7 +167,7 @@ def get_process_info(proc: psutil.Process, initial_cpu: float = 0.0) -> ProcessI
             memory_percent = proc.memory_percent()
             num_threads = proc.num_threads()
             create_time = proc.create_time()
-            runtime = datetime.now().timestamp() - create_time
+            runtime = datetime.now(tz=UTC).timestamp() - create_time
 
             return ProcessInfo(
                 pid=proc.pid,
@@ -182,18 +199,7 @@ def get_system_info() -> SystemInfo:
 
 
 def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
-    """Identify language server processes and extract context.
-
-    Returns new ProcessInfo objects with enhanced cmdline showing:
-    - Workspace ID (what project it's indexing)
-    - Language (e.g., Java, Python, Go)
-    - Special flags (indexing, LSP mode, etc.)
-
-    Note: Returns new objects to avoid mutating the input list.
-    """
-    import re
-    from dataclasses import replace
-
+    """Identify language server processes from the process list."""
     keywords = [
         "language_server",
         "jdtls",
@@ -221,7 +227,7 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
             workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
             # Shorten to last 2-3 path components
             parts = workspace.split("/")
-            workspace_short = "/".join(parts[-3:]) if len(parts) > 3 else workspace
+            workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
             enhanced_cmdline = f"{p.name} [workspace: {workspace_short}]"
 
         # Extract language for JDT LS
@@ -244,8 +250,8 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
                 enhanced_cmdline = f"{p.name} [Rust Language Server]"
 
         # If not enhanced, truncate the original cmdline if too long
-        if enhanced_cmdline is None and len(cmdline) > 200:
-            enhanced_cmdline = cmdline[:200] + "..."
+        if enhanced_cmdline is None and len(cmdline) > CMDLINE_TRUNCATE_LEN:
+            enhanced_cmdline = cmdline[:CMDLINE_TRUNCATE_LEN] + "..."
 
         # Create new ProcessInfo with enhanced cmdline (or original if no enhancement)
         if enhanced_cmdline is not None:
@@ -293,7 +299,6 @@ def check_orphaned_workspaces() -> list[str]:
     that can waste 1+ GB of RAM and hundreds of MB of disk space.
     """
     issues = []
-    import re
 
     # Find all running language servers using psutil
     try:
@@ -363,6 +368,7 @@ def check_pty_leak() -> PtyInfo:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             system_pty_limit = int(result.stdout.strip())
@@ -377,6 +383,7 @@ def check_pty_leak() -> PtyInfo:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0:
             lines = result.stdout.strip().split("\n")
@@ -438,7 +445,7 @@ def check_log_issues() -> list[str]:
             # Check if this is the main Windsurf/Electron process (not helper/crashpad)
             if (
                 (
-                    name.lower() in ["windsurf", "electron"]
+                    name.lower() in {"windsurf", "electron"}
                     or f"{app_name}/Contents/MacOS/Windsurf" in exe
                     or f"{app_name}/Contents/MacOS/Electron" in exe
                 )
@@ -450,7 +457,7 @@ def check_log_issues() -> list[str]:
             # Track crashpad handlers
             if "crashpad" in name.lower():
                 create_time = proc.info["create_time"]
-                age_days = (datetime.now().timestamp() - create_time) / 86400
+                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
                 orphaned.append((proc.info["pid"], age_days))
 
         except psutil.NoSuchProcess, psutil.AccessDenied:
@@ -464,19 +471,19 @@ def check_log_issues() -> list[str]:
         # Format age in human-readable format
         if oldest_days < 1:
             # Less than a day - show hours/minutes/seconds
-            oldest_seconds = oldest_days * 86400
-            if oldest_seconds < 60:
+            oldest_seconds = oldest_days * SECONDS_PER_DAY
+            if oldest_seconds < SECONDS_PER_MINUTE:
                 age_str = f"{oldest_seconds:.0f}s"
-            elif oldest_seconds < 3600:
-                age_str = f"{oldest_seconds / 60:.0f}m"
+            elif oldest_seconds < SECONDS_PER_HOUR:
+                age_str = f"{oldest_seconds / SECONDS_PER_MINUTE:.0f}m"
             else:
-                hours = int(oldest_seconds / 3600)
-                minutes = int((oldest_seconds % 3600) / 60)
+                hours = int(oldest_seconds / SECONDS_PER_HOUR)
+                minutes = int((oldest_seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
                 age_str = f"{hours}h {minutes}m"
         else:
             age_str = f"{oldest_days:.1f} days"
 
-        pids_str = ", ".join(pids[:3]) + (", ..." if len(pids) > 3 else "")
+        pids_str = ", ".join(pids[:MAX_DISPLAY_ITEMS]) + (", ..." if len(pids) > MAX_DISPLAY_ITEMS else "")
         issues.append(f"⚠️  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force")
 
     # Check for logs directory in extensions (causing package.json error)
@@ -513,19 +520,17 @@ def check_log_issues() -> list[str]:
                     with main_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)  # Go to end
                         file_size = f.tell()
-                        f.seek(max(0, file_size - 50000))  # Read last 50KB
+                        f.seek(max(0, file_size - LOG_TAIL_BYTES))  # Read last 50KB
                         content = f.read()
 
                         # Extension host crashes (non-zero exit codes only)
-                        import re
-
                         crash_lines = re.findall(
                             r"Extension host with pid (\d+) exited with code: (\d+)",
                             content,
                         )
                         crashes = [pid for pid, code in crash_lines if code != "0"]
                         if crashes:
-                            pids_str = ", ".join(crashes[:3]) + (", ..." if len(crashes) > 3 else "")
+                            pids_str = ", ".join(crashes[:MAX_DISPLAY_ITEMS]) + (", ..." if len(crashes) > MAX_DISPLAY_ITEMS else "")
                             issues.append(f"🔴 {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
 
                         # Update service errors
@@ -551,12 +556,10 @@ def check_log_issues() -> list[str]:
                     with sharedprocess_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)
                         file_size = f.tell()
-                        f.seek(max(0, file_size - 30000))
+                        f.seek(max(0, file_size - SHARED_LOG_TAIL_BYTES))
                         content = f.read()
 
                         # Extract specific extension errors
-                        import re
-
                         error_lines = [
                             line
                             for line in content.split("\n")
@@ -583,9 +586,9 @@ def check_log_issues() -> list[str]:
                                 key=operator.itemgetter(1),
                                 reverse=True,
                             )
-                            ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:3]])
-                            issues.append(f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > 3 else ''}")
-                        elif len(error_lines) > 10:
+                            ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:MAX_DISPLAY_ITEMS]])
+                            issues.append(f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}")
+                        elif len(error_lines) > EXTENSION_ERROR_LINES_THRESHOLD:
                             # Generic error count if we can't identify extensions
                             issues.append(f"⚠️  {len(error_lines)} extension errors in shared process")
 
@@ -599,11 +602,11 @@ def check_log_issues() -> list[str]:
                     with network_log.open(encoding="utf-8") as f:
                         f.seek(0, 2)
                         file_size = f.tell()
-                        f.seek(max(0, file_size - 30000))
+                        f.seek(max(0, file_size - SHARED_LOG_TAIL_BYTES))
                         content = f.read()
 
                         telemetry_errors = content.count("windsurf-telemetry.codeium.com")
-                        if telemetry_errors > 5:
+                        if telemetry_errors > TELEMETRY_ERROR_THRESHOLD:
                             issues.append(f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)")
                 except OSError, UnicodeDecodeError:
                     pass  # Can't read or decode network-shared.log
@@ -635,8 +638,6 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
         return workspaces
 
     try:
-        import re
-
         with main_log.open(encoding="utf-8") as f:
             for line in f:
                 # Look for workspace load events
@@ -682,7 +683,7 @@ def count_windsurf_launches_today() -> int:
     if not log_base.exists():
         return 0
 
-    today = datetime.now().date()
+    today = datetime.now(tz=UTC).date()
     launches = 0
 
     try:
@@ -696,7 +697,7 @@ def count_windsurf_launches_today() -> int:
                 dir_name = log_dir.name
                 if "T" in dir_name:
                     date_str = dir_name.split("T")[0]  # Get YYYYMMDD part
-                    dir_date = datetime.strptime(date_str, "%Y%m%d").date()
+                    dir_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=UTC).date()
 
                     if dir_date == today:
                         launches += 1
@@ -710,8 +711,6 @@ def count_windsurf_launches_today() -> int:
 
 def generate_report() -> MonitoringReport:
     """Generate complete monitoring report with optimized CPU sampling."""
-    import time
-
     # Get processes
     procs = get_windsurf_processes()
 
@@ -755,13 +754,13 @@ def generate_report() -> MonitoringReport:
     # Report PTY leak as an issue
     if pty_info.windsurf_pty_count > 0:
         usage_pct = (pty_info.system_pty_used / pty_info.system_pty_limit) * 100 if pty_info.system_pty_limit > 0 else 0
-        if pty_info.windsurf_pty_count >= 200 or usage_pct >= 80:
+        if pty_info.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
             log_issues.append(
                 f"🔴 CRITICAL: Windsurf is holding {pty_info.windsurf_pty_count} PTYs "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
                 f"- Fix: Restart Windsurf to release leaked PTYs"
             )
-        elif pty_info.windsurf_pty_count >= 50:
+        elif pty_info.windsurf_pty_count >= PTY_WARNING_COUNT:
             log_issues.append(
                 f"⚠️  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}) "
@@ -769,7 +768,7 @@ def generate_report() -> MonitoringReport:
             )
 
     return MonitoringReport(
-        timestamp=datetime.now().isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         system=get_system_info(),
         windsurf_processes=proc_infos,
         total_windsurf_memory_mb=total_memory,
