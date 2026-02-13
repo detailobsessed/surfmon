@@ -149,13 +149,6 @@ select = [
     # Print statements (use logging instead)
     "T20",  # flake8-print
 ]
-ignore = [
-    # TODO(#22): Remove after refactoring oversized functions to meet pylint defaults
-    "PLR0912",  # too-many-branches (12 max)
-    "PLR0914",  # too-many-locals (15 max)
-    "PLR0915",  # too-many-statements (50 max)
-    "PLR1702",  # too-many-nested-blocks (5 max)
-]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
