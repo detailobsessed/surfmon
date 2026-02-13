@@ -50,7 +50,7 @@ maintain = [
     "python-semantic-release>=10",
 ]
 ci = [
-    "ruff>=0.14",
+    "ruff>=0.15.1",
     "pytest>=8",
     "pytest-cov>=6",
     "pytest-randomly>=3.15",
@@ -160,6 +160,7 @@ select = [
     "PLC2701",    # Private name imports for testing internals
     "ARG002",     # Unused method arguments (fixtures)
     "DTZ005",     # Naive datetime in tests is fine
+    "RUF069",     # Float equality with mocked exact values is fine
 ]
 
 [tool.ruff.lint.pylint]

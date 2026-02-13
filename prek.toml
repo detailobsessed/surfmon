@@ -32,7 +32,7 @@ hooks = [{ id = "gitleaks", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.0"  # prek autoupdate will fill this
+rev = "v0.15.1"  # prek autoupdate will fill this
 hooks = [
   { id = "ruff", args = ["--fix"], priority = 1 },
   { id = "ruff-format", priority = 1 },
