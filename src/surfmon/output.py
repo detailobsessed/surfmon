@@ -30,6 +30,7 @@ __all__ = [
 ]
 
 from .config import get_paths, get_target_display_name
+from .monitor import PTY_CRITICAL_COUNT, PTY_USAGE_CRITICAL_PERCENT, PTY_WARNING_COUNT
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,9 +49,6 @@ WINDSURF_MEM_PERCENT_CRITICAL = 20
 WINDSURF_MEM_PERCENT_WARNING = 10
 CPU_PERCENT_CRITICAL = 50
 CPU_PERCENT_WARNING = 20
-PTY_COUNT_CRITICAL = 200
-PTY_COUNT_WARNING = 50
-PTY_USAGE_PERCENT_CRITICAL = 80
 PROCESS_MEMORY_HIGH_MB = 1000
 PROCESS_MEMORY_MEDIUM_MB = 500
 LS_MEMORY_HIGH_MB = 1000
@@ -154,9 +152,9 @@ def _display_windsurf_table(report: MonitoringReport) -> None:
         usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
         pty_color = (
             "red"
-            if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
+            if pty.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT
             else "yellow"
-            if pty.windsurf_pty_count >= PTY_COUNT_WARNING
+            if pty.windsurf_pty_count >= PTY_WARNING_COUNT
             else "green"
         )
         ws_table.add_row(
