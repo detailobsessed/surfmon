@@ -15,14 +15,19 @@ import typer
 from . import __version__
 from .compare import compare_reports
 from .config import WindsurfTarget, get_paths, get_target_display_name, set_target
-from .monitor import MonitoringReport, generate_report, is_main_windsurf_process, save_report_json
+from .monitor import (
+    PTY_CRITICAL_COUNT,
+    PTY_USAGE_CRITICAL_PERCENT,
+    PTY_WARNING_COUNT,
+    MonitoringReport,
+    generate_report,
+    is_main_windsurf_process,
+    save_report_json,
+)
 from .output import (
     CPU_PERCENT_CRITICAL,
     CPU_PERCENT_WARNING,
     MB_PER_GB,
-    PTY_COUNT_CRITICAL,
-    PTY_COUNT_WARNING,
-    PTY_USAGE_PERCENT_CRITICAL,
     WINDSURF_MEM_PERCENT_CRITICAL,
     WINDSURF_MEM_PERCENT_WARNING,
     Live,
@@ -176,9 +181,9 @@ def _add_pty_row(table: Table, report: MonitoringReport, prev_report: Monitoring
     usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
     pty_color = (
         "red"
-        if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
+        if pty.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT
         else "yellow"
-        if pty.windsurf_pty_count >= PTY_COUNT_WARNING
+        if pty.windsurf_pty_count >= PTY_WARNING_COUNT
         else "green"
     )
     table.add_row(
