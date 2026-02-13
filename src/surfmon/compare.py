@@ -43,22 +43,8 @@ def format_diff(old: float, new: float, is_memory: bool = False, reverse: bool =
     return f"[{color}]{symbol} {abs(diff):.1f} ({pct_change:+.1f}%)[/{color}]"
 
 
-def compare_reports(old_path: Path, new_path: Path) -> None:
-    """Compare two monitoring reports and display differences."""
-    old = load_report(old_path)
-    new = load_report(new_path)
-
-    console.print()
-    console.print(
-        make_panel(
-            f"Before: {old['timestamp']}\nAfter:  {new['timestamp']}",
-            title="[bold cyan]Windsurf Performance Comparison[/bold cyan]",
-            center=True,
-        )
-    )
-    console.print()
-
-    # System changes
+def _display_system_changes(old: dict, new: dict) -> None:
+    """Display system resource changes between two reports."""
     sys_table = make_diff_table("System Resource Changes")
 
     old_sys = old["system"]
@@ -88,7 +74,9 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     console.print(sys_table)
     console.print()
 
-    # Windsurf changes
+
+def _display_windsurf_changes(old: dict, new: dict) -> None:
+    """Display Windsurf resource changes between two reports."""
     ws_table = make_diff_table("Windsurf Resource Changes")
 
     ws_table.add_row(
@@ -102,11 +90,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
         "Total Memory",
         format_memory(old["total_windsurf_memory_mb"]),
         format_memory(new["total_windsurf_memory_mb"]),
-        format_diff(
-            old["total_windsurf_memory_mb"],
-            new["total_windsurf_memory_mb"],
-            is_memory=True,
-        ),
+        format_diff(old["total_windsurf_memory_mb"], new["total_windsurf_memory_mb"], is_memory=True),
     )
 
     ws_table.add_row(
@@ -140,55 +124,40 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     console.print(ws_table)
     console.print()
 
-    # Language server changes
+
+def _display_ls_changes(old: dict, new: dict) -> None:
+    """Display language server changes between two reports."""
     old_ls = {ls["pid"]: ls for ls in old["language_servers"]}
     new_ls = {ls["pid"]: ls for ls in new["language_servers"]}
 
-    if old_ls or new_ls:
-        ls_table = make_table("Language Server Changes")
-        ls_table.add_column("PID", style="dim")
-        ls_table.add_column("Status", style="cyan", ratio=1)
-        ls_table.add_column("Memory Before", justify="right", style="dim", ratio=1)
-        ls_table.add_column("Memory After", justify="right", style="dim", ratio=1)
-        ls_table.add_column("Change", style="green", ratio=2, overflow="fold")
+    if not (old_ls or new_ls):
+        return
 
-        # Servers that existed before
-        for pid, ls_old in old_ls.items():
-            if pid in new_ls:
-                ls_new = new_ls[pid]
-                status = "Active"
-                mem_change = format_diff(ls_old["memory_mb"], ls_new["memory_mb"], is_memory=True)
-                ls_table.add_row(
-                    str(pid),
-                    status,
-                    format_memory(ls_old["memory_mb"]),
-                    format_memory(ls_new["memory_mb"]),
-                    mem_change,
-                )
-            else:
-                ls_table.add_row(
-                    str(pid),
-                    "[red]Stopped[/red]",
-                    format_memory(ls_old["memory_mb"]),
-                    "-",
-                    "",
-                )
+    ls_table = make_table("Language Server Changes")
+    ls_table.add_column("PID", style="dim")
+    ls_table.add_column("Status", style="cyan", ratio=1)
+    ls_table.add_column("Memory Before", justify="right", style="dim", ratio=1)
+    ls_table.add_column("Memory After", justify="right", style="dim", ratio=1)
+    ls_table.add_column("Change", style="green", ratio=2, overflow="fold")
 
-        # New servers
-        for pid, ls_new in new_ls.items():
-            if pid not in old_ls:
-                ls_table.add_row(
-                    str(pid),
-                    "[green]Started[/green]",
-                    "-",
-                    format_memory(ls_new["memory_mb"]),
-                    "",
-                )
+    for pid, ls_old in old_ls.items():
+        if pid in new_ls:
+            ls_new = new_ls[pid]
+            mem_change = format_diff(ls_old["memory_mb"], ls_new["memory_mb"], is_memory=True)
+            ls_table.add_row(str(pid), "Active", format_memory(ls_old["memory_mb"]), format_memory(ls_new["memory_mb"]), mem_change)
+        else:
+            ls_table.add_row(str(pid), "[red]Stopped[/red]", format_memory(ls_old["memory_mb"]), "-", "")
 
-        console.print(ls_table)
-        console.print()
+    for pid, ls_new in new_ls.items():
+        if pid not in old_ls:
+            ls_table.add_row(str(pid), "[green]Started[/green]", "-", format_memory(ls_new["memory_mb"]), "")
 
-    # Issue changes
+    console.print(ls_table)
+    console.print()
+
+
+def _display_issue_changes(old: dict, new: dict) -> None:
+    """Display issue changes between two reports."""
     old_issues = set(old["log_issues"])
     new_issues = set(new["log_issues"])
 
@@ -196,34 +165,57 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     new_found = new_issues - old_issues
     persisting = old_issues & new_issues
 
-    if resolved or new_found or persisting:
-        console.print("[bold cyan]Issue Changes:[/bold cyan]")
-        console.print()
-
-        if resolved:
-            console.print("[bold green]✓ Resolved:[/bold green]")
-            for issue in resolved:
-                console.print(f"  {issue}")
-            console.print()
-
-        if new_found:
-            console.print("[bold red]⚠ New Issues:[/bold red]")
-            for issue in new_found:
-                console.print(f"  {issue}")
-            console.print()
-
-        if persisting:
-            console.print("[bold yellow]• Still Present:[/bold yellow]")
-            for issue in persisting:
-                console.print(f"  {issue}")
-            console.print()
-    else:
+    if not (resolved or new_found or persisting):
         console.print("[green]✓ No issues in either report[/green]")
         console.print()
+        return
+
+    console.print("[bold cyan]Issue Changes:[/bold cyan]")
+    console.print()
+
+    if resolved:
+        console.print("[bold green]✓ Resolved:[/bold green]")
+        for issue in resolved:
+            console.print(f"  {issue}")
+        console.print()
+
+    if new_found:
+        console.print("[bold red]⚠ New Issues:[/bold red]")
+        for issue in new_found:
+            console.print(f"  {issue}")
+        console.print()
+
+    if persisting:
+        console.print("[bold yellow]• Still Present:[/bold yellow]")
+        for issue in persisting:
+            console.print(f"  {issue}")
+        console.print()
+
+
+def compare_reports(old_path: Path, new_path: Path) -> None:
+    """Compare two monitoring reports and display differences."""
+    old = load_report(old_path)
+    new = load_report(new_path)
+
+    console.print()
+    console.print(
+        make_panel(
+            f"Before: {old['timestamp']}\nAfter:  {new['timestamp']}",
+            title="[bold cyan]Windsurf Performance Comparison[/bold cyan]",
+            center=True,
+        )
+    )
+    console.print()
+
+    _display_system_changes(old, new)
+    _display_windsurf_changes(old, new)
+    _display_ls_changes(old, new)
+    _display_issue_changes(old, new)
 
     # Summary
     mem_improved = new["total_windsurf_memory_mb"] < old["total_windsurf_memory_mb"]
     proc_reduced = new["process_count"] < old["process_count"]
+    new_found = set(new["log_issues"]) - set(old["log_issues"])
 
     if mem_improved and proc_reduced and not new_found:
         console.print("[bold green]🎉 Overall: Performance IMPROVED![/bold green]")
