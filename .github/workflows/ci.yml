@@ -159,9 +159,22 @@ jobs:
     - name: Run the test suite
       run: uv run poe test-cov
 
-    - name: Upload coverage to Codecov
+    - name: Extract coverage percentage
       if: ${{ matrix.os == 'blacksmith-4vcpu-ubuntu-2404' && matrix.resolution == 'highest' }}
-      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      id: coverage
+      run: |
+        total=$(uv run coverage report --format=total)
+        echo "total=$total" >> "$GITHUB_OUTPUT"
+
+    - name: Update coverage badge
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.os == 'blacksmith-4vcpu-ubuntu-2404' && matrix.resolution == 'highest' }}
+      uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483 # v1.7.0
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+        auth: ${{ secrets.GIST_TOKEN }}
+        gistID: 759ab8d29e8650758515a72c9d8262d2
+        filename: coverage.json
+        label: coverage
+        message: ${{ steps.coverage.outputs.total }}%
+        valColorRange: ${{ steps.coverage.outputs.total }}
+        minColorRange: 50
+        maxColorRange: 90

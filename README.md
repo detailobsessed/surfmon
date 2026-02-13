@@ -9,7 +9,7 @@
 [![documentation](https://img.shields.io/badge/docs-mkdocs-708FCC.svg?style=flat)](https://detailobsessed.github.io/surfmon/)
 [![pypi version](https://img.shields.io/pypi/v/surfmon.svg)](https://pypi.org/project/surfmon/)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
-[![codecov](https://codecov.io/gh/detailobsessed/surfmon/branch/main/graph/badge.svg)](https://codecov.io/gh/detailobsessed/surfmon)
+[![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ichoosetoaccept/759ab8d29e8650758515a72c9d8262d2/raw/coverage.json)](https://github.com/detailobsessed/surfmon/actions?query=workflow%3Aci)
 
 **Surf**ace **Mon**itor for Windsurf IDE — a performance monitoring and diagnostics tool for [Windsurf](https://codeium.com/windsurf) (Stable and Next).
 
