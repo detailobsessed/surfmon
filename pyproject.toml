@@ -164,6 +164,7 @@ select = [
     "ARG002",     # Unused method arguments (fixtures)
     "DTZ005",     # Naive datetime in tests is fine
     "RUF069",     # Float equality with mocked exact values is fine
+    "PLR0904",    # Test classes naturally have many test methods
 ]
 
 [tool.ruff.lint.pylint]
