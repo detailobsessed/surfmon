@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
 
 console = Console()
 
+TABLE_WIDTH = 90
+
 
 def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     """Display report in rich terminal format."""
@@ -25,17 +28,19 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     status = "[red]Not Running[/red]" if report.process_count == 0 else "[green]Running[/green]"
 
     console.print(
-        Panel.fit(
-            f"[bold cyan]Surfmon[/bold cyan] - {target_name} Status: {status}\n" + f"[dim]{report.timestamp}[/dim]",
+        Panel(
+            Align.center(f"Status: {status}\n[dim]{report.timestamp}[/dim]"),
+            title=f"[bold cyan]Surfmon[/bold cyan] - {target_name}",
             border_style="cyan",
+            width=TABLE_WIDTH,
         )
     )
     console.print()
 
     # System overview
-    sys_table = Table(title="System Resources", show_header=True)
-    sys_table.add_column("Metric", style="cyan")
-    sys_table.add_column("Value", style="green")
+    sys_table = Table(title="System Resources", show_header=True, width=TABLE_WIDTH)
+    sys_table.add_column("Metric", style="cyan", ratio=1)
+    sys_table.add_column("Value", style="green", ratio=2, overflow="fold")
 
     sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
     sys_table.add_row("Available Memory", f"{report.system.available_memory_gb:.1f} GB")
@@ -55,9 +60,9 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     console.print()
 
     # Windsurf summary
-    ws_table = Table(title="Windsurf Resource Usage", show_header=True)
-    ws_table.add_column("Metric", style="cyan")
-    ws_table.add_column("Value", style="green")
+    ws_table = Table(title="Windsurf Resource Usage", show_header=True, width=TABLE_WIDTH)
+    ws_table.add_column("Metric", style="cyan", ratio=1)
+    ws_table.add_column("Value", style="green", ratio=2, overflow="fold")
 
     ws_table.add_row("Process Count", str(report.process_count))
 
@@ -93,11 +98,11 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Active workspaces
     if report.active_workspaces:
-        workspace_table = Table(title="Active Workspaces", show_header=True)
-        workspace_table.add_column("ID", style="dim", max_width=20)
-        workspace_table.add_column("Path", style="cyan")
-        workspace_table.add_column("Exists", style="green")
-        workspace_table.add_column("Loaded At", style="dim")
+        workspace_table = Table(title="Active Workspaces", show_header=True, width=TABLE_WIDTH)
+        workspace_table.add_column("ID", style="dim", max_width=20, overflow="fold")
+        workspace_table.add_column("Path", style="cyan", ratio=3, overflow="fold")
+        workspace_table.add_column("Exists", style="green", ratio=1)
+        workspace_table.add_column("Loaded At", style="dim", ratio=2, overflow="fold")
 
         for ws in report.active_workspaces:
             exists_icon = "✓" if ws.exists else "❌"
@@ -116,9 +121,9 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     if report.windsurf_processes:
         top_procs = sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True)[:10]
 
-        proc_table = Table(title="Top 10 Processes by Memory", show_header=True)
+        proc_table = Table(title="Top 10 Processes by Memory", show_header=True, width=TABLE_WIDTH)
         proc_table.add_column("PID", style="dim")
-        proc_table.add_column("Name", style="cyan")
+        proc_table.add_column("Name", style="cyan", ratio=3, overflow="fold")
         proc_table.add_column("Memory", justify="right", style="green")
         proc_table.add_column("CPU %", justify="right", style="yellow")
         proc_table.add_column("Threads", justify="right", style="dim")
@@ -139,9 +144,9 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     # Language servers
     if report.language_servers:
-        ls_table = Table(title="Language Servers", show_header=True)
+        ls_table = Table(title="Language Servers", show_header=True, width=TABLE_WIDTH)
         ls_table.add_column("PID", style="dim")
-        ls_table.add_column("Type", style="cyan")
+        ls_table.add_column("Type", style="cyan", ratio=3, overflow="fold")
         ls_table.add_column("Memory", justify="right", style="green")
         ls_table.add_column("CPU %", justify="right", style="yellow")
 
@@ -181,6 +186,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
                 "\n".join(report.log_issues),
                 title="[bold red]Issues Detected[/bold red]",
                 border_style="red",
+                width=TABLE_WIDTH,
             )
         )
         console.print()
