@@ -154,6 +154,12 @@ select = [
 "src/surfmon/cli.py" = [
     "PLC0415",    # Lazy matplotlib import — heavy library (~1s) only needed for --plot
 ]
+"scripts/**" = [
+    "T201",       # Scripts naturally print output
+]
+"docs/hooks/**" = [
+    "T201",       # Hooks may print diagnostics
+]
 "tests/**" = [
     "S101", "S603", "S607", "S701",  # Allow assert, subprocess, jinja2 in tests
     "T201",       # Allow print in tests

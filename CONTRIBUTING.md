@@ -2,9 +2,14 @@
 
 Contributions are welcome, and they are greatly appreciated! Every little bit helps, and credit will always be given.
 
-## Environment setup
+## Requirements
 
-Nothing easier!
+- Python 3.14+
+- [uv](https://github.com/astral-sh/uv) package manager
+- [prek](https://github.com/j178/prek) (pre-commit hook runner) — installed automatically by uv
+- Windsurf IDE installed (needed to run surfmon)
+
+## Environment setup
 
 Fork and clone the repository, then:
 
@@ -27,13 +32,22 @@ You now have the dependencies installed.
 
 You can run the application with `uv run surfmon [ARGS...]`.
 
-Run `poe --help` to see all the available tasks!
+Run `poe` to see all the available tasks.
 
 ## Tasks
 
 The project uses [poe the poet](https://github.com/nat-n/poethepoet) as a task runner. Tasks are defined in `pyproject.toml` under the `[tool.poe.tasks]` section. Run `poe` to list all available tasks.
 
-If you work in VSCode, we provide [tasks](https://code.visualstudio.com/docs/editor/tasks) that you can run from the command palette (Ctrl+Shift+P > Tasks: Run Task).
+Key tasks:
+
+- `poe lint` — run ruff linter
+- `poe format` — auto-format with ruff
+- `poe typecheck` — run ty type checker
+- `poe check` — run lint + typecheck in parallel
+- `poe test` — run tests (excludes slow tests)
+- `poe test-all` — run all tests including slow
+- `poe fix` — auto-fix lint issues and format
+- `poe docs` — serve documentation locally
 
 ## Development
 
@@ -80,15 +94,15 @@ Scope and body are optional. Type can be:
 - `perf`: About performance.
 - `refactor`: Changes that are not features or bug fixes.
 - `style`: A change in code style/format.
-- `tests`: About tests.
+- `test`: About tests.
 
 If you write a body, please add trailers at the end (for example issues and PR references, or co-authors), without relying on GitHub's flavored Markdown:
 
 ```
 Body.
 
-Issue #10: https://github.com/namespace/project/issues/10
-Related to PR namespace/other-project#15: https://github.com/namespace/other-project/pull/15
+Issue #10: https://github.com/detailobsessed/surfmon/issues/10
+Related to PR detailobsessed/surfmon#15: https://github.com/detailobsessed/surfmon/pull/15
 ```
 
 These "trailers" must appear at the end of the body, without any blank lines between them. The trailer title can contain any character except colons `:`. We expect a full URI for each trailer, not just GitHub autolinks (for example, full GitHub URLs for commits and issues, not the hash or the #issue-number).

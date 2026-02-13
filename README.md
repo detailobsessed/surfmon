@@ -1,5 +1,9 @@
 # Surfmon
 
+<p align="center">
+  <img src="docs/screenshots/header.gif" alt="surfmon header" width="800">
+</p>
+
 [![ci](https://github.com/detailobsessed/surfmon/workflows/ci/badge.svg)](https://github.com/detailobsessed/surfmon/actions?query=workflow%3Aci)
 [![release](https://github.com/detailobsessed/surfmon/workflows/release/badge.svg)](https://github.com/detailobsessed/surfmon/actions?query=workflow%3Arelease)
 [![documentation](https://img.shields.io/badge/docs-mkdocs-708FCC.svg?style=flat)](https://detailobsessed.github.io/surfmon/)
@@ -8,6 +12,29 @@
 [![codecov](https://codecov.io/gh/detailobsessed/surfmon/branch/main/graph/badge.svg)](https://codecov.io/gh/detailobsessed/surfmon)
 
 **Surf**ace **Mon**itor for Windsurf IDE — a performance monitoring and diagnostics tool for [Windsurf](https://codeium.com/windsurf) (Stable and Next).
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Why Use Surfmon?](#why-use-surfmon)
+- [Commands](#commands)
+  - [check — Quick Performance Snapshot](#check--quick-performance-snapshot)
+  - [watch — Live Monitoring Dashboard](#watch--live-monitoring-dashboard)
+  - [analyze — Historical Trend Analysis](#analyze--historical-trend-analysis)
+  - [compare — Before/After Diff](#compare--beforeafter-diff)
+  - [cleanup — Remove Orphaned Processes](#cleanup--remove-orphaned-processes)
+  - [prune — Deduplicate Watch Reports](#prune--deduplicate-watch-reports)
+- [What It Monitors](#what-it-monitors)
+- [Auto-Detection](#auto-detection)
+- [Exit Codes](#exit-codes)
+- [Common Issues](#common-issues)
+- [Development](#development)
+  - [Package Structure](#package-structure)
+  - [Running Tests](#running-tests)
+  - [Dependencies](#dependencies)
+  - [Requirements](#requirements)
+  - [Creating Screenshots](#creating-screenshots)
 
 ## Installation
 
@@ -19,6 +46,13 @@ Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv tool install surfmon
+```
+
+Or run directly without installing:
+
+```bash
+uvx surfmon check    # Using uvx
+pipx run surfmon check    # Using pipx
 ```
 
 For development:
@@ -38,12 +72,22 @@ surfmon check
 # Verbose output with all process details
 surfmon check -v
 
-# Save reports (auto-named with timestamp)
+# Save reports (auto-named with timestamp, enables verbose output)
 surfmon check -s
 
 # Target a specific Windsurf installation
 surfmon check -t next
 ```
+
+![Basic Check](docs/screenshots/check-basic.png)
+
+## Why Use Surfmon?
+
+- 🔍 **Debug Performance Issues** — Identify memory leaks, CPU spikes, and resource bottlenecks
+- 📊 **Monitor Over Time** — Track resource usage trends with watch sessions and historical analysis
+- 🧹 **Clean Up Resources** — Remove orphaned processes and duplicate reports
+- 🔧 **Troubleshoot Crashes** — Detect extension host crashes, language server issues, and PTY leaks
+- 📈 **Visualize Trends** — Generate matplotlib plots showing resource usage over time
 
 ## Commands
 
@@ -54,9 +98,10 @@ The main command. Shows system resources, Windsurf memory/CPU, active workspaces
 ```bash
 surfmon check                        # Basic check
 surfmon check -v                     # Verbose (all processes)
-surfmon check -s                     # Auto-save JSON + Markdown reports
+surfmon check -s                     # Auto-save JSON + Markdown reports (enables verbose)
 surfmon check --json report.json     # Save JSON to specific path
 surfmon check --md report.md         # Save Markdown to specific path
+surfmon check --json r.json --md r.md  # Save both formats with custom names
 ```
 
 ### `watch` — Live Monitoring Dashboard
@@ -64,21 +109,31 @@ surfmon check --md report.md         # Save Markdown to specific path
 Continuously monitors Windsurf with a live-updating terminal dashboard. Saves periodic JSON snapshots for historical analysis.
 
 ```bash
-surfmon watch                          # Default: 5s interval, save every 5min
+surfmon watch                          # Default: 5s interval, save every 5min to ../reports/watch
 surfmon watch -i 10 -s 600             # Check every 10s, save every 10min
 surfmon watch -i 10 -n 720             # 720 checks = 2 hours
 surfmon watch -o ~/windsurf-reports    # Custom output directory
 ```
 
+![Watch Dashboard](docs/screenshots/watch.gif)
+
 ### `analyze` — Historical Trend Analysis
 
-Analyzes JSON reports from `watch` sessions to detect memory leaks, process growth, and performance degradation. Optionally generates a 9-panel matplotlib visualization.
+Analyzes JSON reports from `watch` sessions (or any directory containing JSON reports) to detect memory leaks, process growth, and performance degradation. Optionally generates a 9-panel matplotlib visualization.
 
 ```bash
 surfmon analyze reports/watch/20260204-134518/
 surfmon analyze reports/watch/20260204-134518/ --plot
 surfmon analyze reports/watch/20260204-134518/ --plot --output analysis.png
 ```
+
+**Terminal Output:**
+
+![Analyze Report](docs/screenshots/analyze.png)
+
+**Generated Matplotlib Visualization:**
+
+![Analysis Plot](docs/screenshots/surfmon-analysis.png)
 
 ### `compare` — Before/After Diff
 
@@ -89,9 +144,11 @@ surfmon check --json after.json
 surfmon compare before.json after.json
 ```
 
+![Compare Reports](docs/screenshots/compare.png)
+
 ### `cleanup` — Remove Orphaned Processes
 
-Detects and kills orphaned `chrome_crashpad_handler` processes left behind after Windsurf exits.
+Detects and kills orphaned `chrome_crashpad_handler` processes left behind after Windsurf exits. Windsurf must be closed for this command to work.
 
 ```bash
 surfmon cleanup             # Interactive (asks for confirmation)
@@ -186,3 +243,35 @@ poe typecheck         # ty check
 - Python 3.14+
 - macOS (tested), Linux (untested), Windows (untested) though it should work
 - Windsurf IDE installed
+
+### Creating Screenshots
+
+Screenshots in this README were created using:
+
+- **Static images** ([termshot](https://github.com/homeport/termshot)) - Captures terminal output as PNG
+- **Animated GIF** ([vhs](https://github.com/charmbracelet/vhs)) - Records terminal sessions as GIF
+
+To recreate the watch GIF:
+
+```bash
+brew install vhs gifsicle
+
+# Create tape file
+cat > watch-demo.tape << 'EOF'
+Output docs/screenshots/watch.gif
+Set FontSize 13
+Set Width 900
+Set Height 400
+Set Theme "Catppuccin Mocha"
+Set BorderRadius 10
+Set WindowBar Colorful
+Set WindowBarSize 30
+Type "uvx surfmon watch --interval 2 --max 15"
+Enter
+Sleep 32s
+EOF
+
+# Generate and optimize
+vhs watch-demo.tape
+gifsicle -O3 --colors 256 docs/screenshots/watch.gif -o docs/screenshots/watch.gif
+```
