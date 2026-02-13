@@ -11,7 +11,7 @@ hooks = [
   { id = "check-yaml", args = ["--allow-multiple-documents"], priority = 0 },
   { id = "check-toml", priority = 0 },
   { id = "check-json", priority = 0 },
-  { id = "check-added-large-files", priority = 0 },
+  { id = "check-added-large-files", args = ["--maxkb=1024"], priority = 0 },
   { id = "check-merge-conflict", priority = 0 },
   { id = "check-case-conflict", priority = 0 },
   { id = "check-symlinks", priority = 0 },
