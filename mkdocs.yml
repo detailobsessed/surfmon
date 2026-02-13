@@ -18,7 +18,9 @@ nav:
   - Overview: index.md
   - Changelog: changelog.md
   - License: license.md
-- API reference: reference/api.md
+- Reference:
+  - CLI: reference/cli.md
+  - API: reference/api.md
 - Development:
   - Contributing: contributing.md
   - Code of Conduct: code_of_conduct.md
@@ -100,6 +102,7 @@ plugins:
 - markdown-exec
 - section-index
 - coverage
+- mkdocs-typer2
 - mkdocstrings:
     handlers:
       python:
