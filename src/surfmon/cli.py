@@ -150,20 +150,51 @@ def signal_handler(_signum: int, _frame: object) -> None:
     console.print("\n[yellow]Stopping monitoring...[/yellow]")
 
 
+def _format_change(diff: float, threshold: float = 0, fmt: str = "d", suffix: str = "") -> str:
+    """Format a numeric diff as a Rich-styled change indicator.
+
+    Returns empty string if abs(diff) <= threshold.
+    """
+    if abs(diff) <= threshold:
+        return ""
+    symbol = "↑" if diff > 0 else "↓"
+    color = "red" if diff > 0 else "green"
+    formatted = f"{abs(diff):{fmt}}"
+    return f"[{color}]{symbol}{formatted}{suffix}[/{color}]"
+
+
+def _add_pty_row(table: Table, report: MonitoringReport, prev_report: MonitoringReport | None) -> None:
+    """Add PTY usage row to the summary table."""
+    if not report.pty_info:
+        return
+
+    pty = report.pty_info
+    pty_change = ""
+    if prev_report and prev_report.pty_info:
+        pty_change = _format_change(pty.windsurf_pty_count - prev_report.pty_info.windsurf_pty_count)
+
+    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+    pty_color = (
+        "red"
+        if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
+        else "yellow"
+        if pty.windsurf_pty_count >= PTY_COUNT_WARNING
+        else "green"
+    )
+    table.add_row(
+        "PTYs",
+        f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim]({pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
+        pty_change,
+    )
+
+
 def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport | None = None) -> Table:
     """Create a live summary table for watch mode."""
     table = make_kv_table(f"Windsurf Monitor - {datetime.now(tz=UTC).astimezone().strftime('%H:%M:%S')}")
     table.add_column("Change", style="yellow", ratio=1)
 
     # Process count
-    proc_change = ""
-    if prev_report:
-        diff = report.process_count - prev_report.process_count
-        if diff != 0:
-            symbol = "↑" if diff > 0 else "↓"
-            color = "red" if diff > 0 else "green"
-            proc_change = f"[{color}]{symbol}{abs(diff)}[/{color}]"
-
+    proc_change = _format_change(report.process_count - prev_report.process_count) if prev_report else ""
     table.add_row("Processes", str(report.process_count), proc_change)
 
     # Memory
@@ -174,11 +205,7 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
     mem_change = ""
     if prev_report:
         prev_mem_gb = prev_report.total_windsurf_memory_mb / MB_PER_GB
-        diff = mem_gb - prev_mem_gb
-        if abs(diff) > MEM_DIFF_SIGNIFICANT_GB:
-            symbol = "↑" if diff > 0 else "↓"
-            color = "red" if diff > 0 else "green"
-            mem_change = f"[{color}]{symbol}{abs(diff):.2f}GB[/{color}]"
+        mem_change = _format_change(mem_gb - prev_mem_gb, threshold=MEM_DIFF_SIGNIFICANT_GB, fmt=".2f", suffix="GB")
 
     mem_color = "red" if mem_pct > WINDSURF_MEM_PERCENT_CRITICAL else "yellow" if mem_pct > WINDSURF_MEM_PERCENT_WARNING else "green"
     table.add_row("Memory", f"[{mem_color}]{mem_str}[/{mem_color}]", mem_change)
@@ -186,11 +213,12 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
     # CPU
     cpu_change = ""
     if prev_report:
-        diff = report.total_windsurf_cpu_percent - prev_report.total_windsurf_cpu_percent
-        if abs(diff) > CPU_DIFF_SIGNIFICANT:
-            symbol = "↑" if diff > 0 else "↓"
-            color = "red" if diff > 0 else "green"
-            cpu_change = f"[{color}]{symbol}{abs(diff):.1f}%[/{color}]"
+        cpu_change = _format_change(
+            report.total_windsurf_cpu_percent - prev_report.total_windsurf_cpu_percent,
+            threshold=CPU_DIFF_SIGNIFICANT,
+            fmt=".1f",
+            suffix="%",
+        )
 
     cpu_color = (
         "red"
@@ -206,40 +234,11 @@ def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport
     )
 
     # Language servers
-    ls_change = ""
-    if prev_report:
-        diff = len(report.language_servers) - len(prev_report.language_servers)
-        if diff != 0:
-            symbol = "↑" if diff > 0 else "↓"
-            color = "red" if diff > 0 else "green"
-            ls_change = f"[{color}]{symbol}{abs(diff)}[/{color}]"
-
+    ls_change = _format_change(len(report.language_servers) - len(prev_report.language_servers)) if prev_report else ""
     table.add_row("Lang Servers", str(len(report.language_servers)), ls_change)
 
     # PTYs
-    if report.pty_info:
-        pty = report.pty_info
-        pty_change = ""
-        if prev_report and prev_report.pty_info:
-            diff = pty.windsurf_pty_count - prev_report.pty_info.windsurf_pty_count
-            if diff != 0:
-                symbol = "↑" if diff > 0 else "↓"
-                color = "red" if diff > 0 else "green"
-                pty_change = f"[{color}]{symbol}{abs(diff)}[/{color}]"
-
-        usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
-        pty_color = (
-            "red"
-            if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
-            else "yellow"
-            if pty.windsurf_pty_count >= PTY_COUNT_WARNING
-            else "green"
-        )
-        table.add_row(
-            "PTYs",
-            f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim]({pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
-            pty_change,
-        )
+    _add_pty_row(table, report, prev_report)
 
     # Issues
     issue_count = len(report.log_issues)
@@ -430,38 +429,8 @@ def cleanup(
     can accumulate over time and waste system resources.
     """
     app_name = get_paths().app_name
+    main_windsurf_found, orphaned = _find_orphaned_crashpad_procs(app_name)
 
-    # Find orphaned crashpad handlers
-    orphaned = []
-    main_windsurf_found = False
-
-    for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
-        try:
-            name = proc.info["name"] or ""
-            exe = proc.info["exe"] or ""
-            cmdline = " ".join(proc.info["cmdline"] or [])
-
-            if app_name not in exe and app_name not in cmdline:
-                continue
-
-            # Check if main Windsurf process
-            if (
-                name.lower() == "windsurf"
-                or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                or ("Windsurf" in name and "Helper" not in name and "crashpad" not in name.lower())
-            ):
-                main_windsurf_found = True
-
-            # Track crashpad handlers
-            if "crashpad" in name.lower():
-                create_time = proc.info["create_time"]
-                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
-                orphaned.append((proc, age_days))
-
-        except psutil.NoSuchProcess, psutil.AccessDenied:
-            pass
-
-    # Check if Windsurf is running
     if main_windsurf_found:
         console.print("[yellow]⚠ Windsurf is currently running. Crash handlers are not orphaned.[/yellow]")
         console.print("[dim]Close Windsurf first before running cleanup.[/dim]")
@@ -489,25 +458,14 @@ def cleanup(
     console.print(table)
     console.print()
 
-    # Confirm before killing
     if not force:
         confirm = typer.confirm("Kill these processes?")
         if not confirm:
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(code=0)
 
-    # Kill the processes
-    killed = 0
-    failed = []
+    killed, failed = _kill_processes(orphaned)
 
-    for proc, _ in orphaned:
-        try:
-            proc.kill()
-            killed += 1
-        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-            failed.append((proc.pid, str(e)))
-
-    # Report results
     if killed > 0:
         console.print(f"[green]✓ Successfully killed {killed} process(es)[/green]")
 
@@ -516,6 +474,64 @@ def cleanup(
         for pid, error in failed:
             console.print(f"  PID {pid}: {error}")
         raise typer.Exit(code=1)
+
+
+def _hash_report_files(json_files: list[Path]) -> dict[str, list[Path]]:
+    """Hash JSON report files by content (excluding timestamp).
+
+    Returns dict mapping content hash to list of files with that content.
+    """
+    content_hashes: dict[str, list[Path]] = {}
+
+    for json_file in json_files:
+        try:
+            with json_file.open(encoding="utf-8") as f:
+                data = json.load(f)
+
+            data_copy = data.copy()
+            data_copy.pop("timestamp", None)
+
+            content_str = json.dumps(data_copy, sort_keys=True)
+            content_hash = hashlib.sha256(content_str.encode()).hexdigest()
+
+            if content_hash not in content_hashes:
+                content_hashes[content_hash] = []
+            content_hashes[content_hash].append(json_file)
+
+        except (json.JSONDecodeError, OSError) as e:
+            console.print(f"[yellow]Warning: Could not read {json_file.name}: {e}[/yellow]")
+
+    return content_hashes
+
+
+def _find_duplicate_files(content_hashes: dict[str, list[Path]], keep_latest: bool) -> tuple[list[Path], int]:
+    """Identify duplicate files to remove. Returns (duplicates, unique_count)."""
+    duplicates: list[Path] = []
+    unique_count = 0
+
+    for files in content_hashes.values():
+        unique_count += 1
+        if len(files) > 1:
+            files_sorted = sorted(files)
+            if keep_latest:
+                duplicates.extend(files_sorted[:-1])
+            else:
+                duplicates.extend(files_sorted[1:])
+
+    return duplicates, unique_count
+
+
+def _delete_files(files: list[Path]) -> tuple[int, list[tuple[str, str]]]:
+    """Delete files and return (deleted_count, failed_list)."""
+    deleted = 0
+    failed = []
+    for file in files:
+        try:
+            file.unlink()
+            deleted += 1
+        except OSError as e:
+            failed.append((file.name, str(e)))
+    return deleted, failed
 
 
 @app.command()
@@ -543,77 +559,24 @@ def prune(
         console.print(f"[red]Error: Not a directory: {directory}[/red]")
         raise typer.Exit(code=1)
 
-    # Find all JSON files
     json_files = sorted(directory.glob("*.json"))
-
     if not json_files:
         console.print(f"[yellow]No JSON files found in {directory}[/yellow]")
         raise typer.Exit(code=0)
 
     console.print(f"[cyan]Analyzing {len(json_files)} report(s)...[/cyan]\n")
 
-    # Group by content hash (excluding timestamp)
-    content_hashes = {}
-    file_info = []
-
-    for json_file in json_files:
-        try:
-            with json_file.open(encoding="utf-8") as f:
-                data = json.load(f)
-
-            # Remove timestamp for comparison (it will always differ)
-            data_copy = data.copy()
-            data_copy.pop("timestamp", None)
-
-            # Create hash of content
-            content_str = json.dumps(data_copy, sort_keys=True)
-            content_hash = hashlib.sha256(content_str.encode()).hexdigest()
-
-            file_info.append({
-                "path": json_file,
-                "hash": content_hash,
-                "timestamp": data.get("timestamp", ""),
-                "size": json_file.stat().st_size,
-            })
-
-            if content_hash not in content_hashes:
-                content_hashes[content_hash] = []
-            content_hashes[content_hash].append(json_file)
-
-        except (json.JSONDecodeError, OSError) as e:
-            console.print(f"[yellow]Warning: Could not read {json_file.name}: {e}[/yellow]")
-
-    # Find duplicates
-    duplicates_to_remove = []
-    unique_reports = 0
-
-    for files in content_hashes.values():
-        if len(files) > 1:
-            # Sort by filename (which contains timestamp)
-            files_sorted = sorted(files)
-
-            # Keep first occurrence (oldest), remove rest
-            if keep_latest:
-                # Keep the latest (last in sorted list)
-                duplicates_to_remove.extend(files_sorted[:-1])
-            else:
-                # Keep the first (oldest)
-                duplicates_to_remove.extend(files_sorted[1:])
-
-            unique_reports += 1
-        else:
-            unique_reports += 1
+    content_hashes = _hash_report_files(json_files)
+    duplicates_to_remove, unique_reports = _find_duplicate_files(content_hashes, keep_latest)
 
     if not duplicates_to_remove:
         console.print("[green]✓ No duplicate reports found[/green]")
         console.print(f"All {len(json_files)} reports are unique.")
         raise typer.Exit(code=0)
 
-    # Calculate space savings
     total_size = sum(f.stat().st_size for f in duplicates_to_remove)
     size_mb = total_size / 1024 / 1024
 
-    # Display results
     console.print(f"[yellow]Found {len(duplicates_to_remove)} duplicate report(s)[/yellow]")
     console.print(f"Space to reclaim: {size_mb:.2f} MB\n")
 
@@ -624,37 +587,24 @@ def prune(
         console.print("\n[cyan]Run without --dry-run to actually delete these files[/cyan]")
         raise typer.Exit(code=0)
 
-    # Show what will be kept vs removed
+    # Show summary table
     table = make_table("Summary")
     table.add_column("Category", style="cyan", ratio=2)
     table.add_column("Count", justify="right", style="green", ratio=1)
-
     table.add_row("Total reports", str(len(json_files)))
     table.add_row("Unique reports", str(unique_reports))
     table.add_row("Duplicates to remove", str(len(duplicates_to_remove)))
     table.add_row("Space to reclaim", f"{size_mb:.2f} MB")
-
     console.print(table)
     console.print()
 
-    # Confirm
     confirm = typer.confirm("Delete duplicate reports?")
     if not confirm:
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(code=0)
 
-    # Delete duplicates
-    deleted = 0
-    failed = []
+    deleted, failed = _delete_files(duplicates_to_remove)
 
-    for file in duplicates_to_remove:
-        try:
-            file.unlink()
-            deleted += 1
-        except OSError as e:
-            failed.append((file.name, str(e)))
-
-    # Report results
     if deleted > 0:
         console.print(f"[green]✓ Successfully deleted {deleted} duplicate report(s)[/green]")
         console.print(f"[green]✓ Reclaimed {size_mb:.2f} MB[/green]")
@@ -674,25 +624,8 @@ def _parse_timestamp(raw: str) -> datetime:
     return ts.astimezone(UTC)
 
 
-@app.command()
-def analyze(
-    directory: Annotated[Path, typer.Argument(help="Directory containing JSON reports to analyze")],
-    plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate visualizations")] = False,
-    output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plots to file")] = None,
-) -> None:
-    """Analyze historical reports to identify trends and issues.
-
-    Examines multiple JSON reports from watch mode to detect:
-    - Memory leaks and growth patterns
-    - Process count changes
-    - Performance degradation
-    - Recurring issues
-    """
-    if not directory.exists():
-        console.print(f"[red]Error: Directory not found: {directory}[/red]")
-        raise typer.Exit(code=1)
-
-    # Load all reports
+def _load_reports(directory: Path) -> list[dict]:
+    """Load and parse JSON report files from a directory."""
     report_files = sorted(directory.glob("*.json"))
     if not report_files:
         console.print(f"[yellow]No JSON reports found in {directory}[/yellow]")
@@ -723,11 +656,11 @@ def analyze(
         console.print("[red]No valid reports found[/red]")
         raise typer.Exit(code=1)
 
-    # Display analysis
-    console.print()
-    console.print(make_panel("[bold cyan]Historical Analysis[/bold cyan]"))
-    console.print()
+    return reports
 
+
+def _display_analysis_summary(reports: list[dict]) -> None:
+    """Display timeline, key metrics, and analysis text."""
     # Session summary
     duration = reports[-1]["timestamp"] - reports[0]["timestamp"]
     console.print(
@@ -761,6 +694,35 @@ def analyze(
     console.print()
 
     # Key metrics
+    _display_key_metrics(reports)
+
+    # Analysis
+    mem_change = (reports[-1]["memory_mb"] - reports[0]["memory_mb"]) / MB_PER_GB
+    proc_change = reports[-1]["processes"] - reports[0]["processes"]
+
+    console.print("[bold cyan]Analysis:[/bold cyan]")
+    if mem_change > ANALYZE_MEM_CHANGE_LEAK_GB:
+        console.print(f"  [red]⚠️  POTENTIAL MEMORY LEAK: {mem_change:.2f} GB growth[/red]")
+    elif mem_change > ANALYZE_MEM_CHANGE_GROWTH_GB:
+        console.print(f"  [yellow]⚠️  Memory growth: {mem_change:.2f} GB[/yellow]")
+    else:
+        console.print(f"  [green]✓ Memory stable (change: {mem_change:+.2f} GB)[/green]")
+
+    if proc_change > ANALYZE_PROC_CHANGE_SIGNIFICANT:
+        console.print(f"  [yellow]⚠️  Process count increased by {proc_change}[/yellow]")
+    elif proc_change < 0:
+        console.print(f"  [green]✓ Process count decreased by {abs(proc_change)}[/green]")
+
+    # Issues
+    final_issues = reports[-1]["issues"]
+    if final_issues:
+        console.print(f"\n[bold red]Current Issues ({len(final_issues)}):[/bold red]")
+        for issue in final_issues:
+            console.print(f"  • {issue}")
+
+
+def _display_key_metrics(reports: list[dict]) -> None:
+    """Display key metrics comparison table."""
     metrics = make_table("Key Metrics")
     metrics.add_column("Metric", style="cyan", ratio=2)
     metrics.add_column("Start", justify="right", ratio=1)
@@ -802,216 +764,264 @@ def analyze(
     console.print(metrics)
     console.print()
 
-    # Analysis
-    console.print("[bold cyan]Analysis:[/bold cyan]")
-    if mem_change > ANALYZE_MEM_CHANGE_LEAK_GB:
-        console.print(f"  [red]⚠️  POTENTIAL MEMORY LEAK: {mem_change:.2f} GB growth[/red]")
-    elif mem_change > ANALYZE_MEM_CHANGE_GROWTH_GB:
-        console.print(f"  [yellow]⚠️  Memory growth: {mem_change:.2f} GB[/yellow]")
-    else:
-        console.print(f"  [green]✓ Memory stable (change: {mem_change:+.2f} GB)[/green]")
 
-    if proc_change > ANALYZE_PROC_CHANGE_SIGNIFICANT:
-        console.print(f"  [yellow]⚠️  Process count increased by {proc_change}[/yellow]")
-    elif proc_change < 0:
-        console.print(f"  [green]✓ Process count decreased by {abs(proc_change)}[/green]")
+def _plot_memory_charts(axes, timestamps: list, reports: list[dict]) -> None:
+    """Plot Row 1: Memory charts (total, top 5 processes, system pressure)."""
+    import matplotlib.dates as mdates
 
-    # Issues
-    final_issues = reports[-1]["issues"]
-    if final_issues:
-        console.print(f"\n[bold red]Current Issues ({len(final_issues)}):[/bold red]")
-        for issue in final_issues:
-            console.print(f"  • {issue}")
+    # Total Memory Usage
+    ax = axes[0, 0]
+    windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
+    system_avail = [r["system"]["available_memory_gb"] for r in reports]
+    ax.plot(timestamps, windsurf_mem, "b-o", label="Windsurf", linewidth=2)
+    ax.plot(timestamps, system_avail, "g--", label="System Available", alpha=0.7)
+    ax.set_ylabel("Memory (GB)", fontsize=10)
+    ax.set_title("Memory Usage", fontsize=11, fontweight="bold")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-    # Generate plots if requested
-    if plot:
-        import matplotlib.dates as mdates
-        import matplotlib.pyplot as plt
+    # Top 5 Processes by Memory
+    ax = axes[0, 1]
+    process_mem_history = build_process_memory_history(reports)
+    top_5 = sorted(process_mem_history.items(), key=lambda x: max(x[1]), reverse=True)[:5]
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    for (name, mem_history), color in zip(top_5, colors, strict=False):
+        ax.plot(timestamps, [m / 1024 for m in mem_history], "-o", label=name, color=color, linewidth=1.5)
+    ax.set_ylabel("Memory (GB)", fontsize=10)
+    ax.set_title("Top 5 Processes by Memory", fontsize=11, fontweight="bold")
+    ax.legend(fontsize=7, loc="best")
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        fig, axes = plt.subplots(3, 3, figsize=(18, 14))
-        fig.suptitle("Windsurf Performance Analysis", fontsize=18, y=0.995)
+    # System Memory Pressure
+    ax = axes[0, 2]
+    total_mem = [r["system"]["total_memory_gb"] for r in reports]
+    used_mem = [r["system"]["total_memory_gb"] - r["system"]["available_memory_gb"] for r in reports]
+    windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
+    ax.fill_between(timestamps, 0, used_mem, alpha=0.3, color="orange", label="Other Apps")
+    ax.fill_between(
+        timestamps,
+        [u - w for u, w in zip(used_mem, windsurf_mem, strict=True)],
+        used_mem,
+        alpha=0.6,
+        color="blue",
+        label="Windsurf",
+    )
+    ax.axhline(y=total_mem[0], color="r", linestyle="--", alpha=0.5, label=f"Total: {total_mem[0]:.1f} GB")
+    ax.set_ylabel("Memory (GB)", fontsize=10)
+    ax.set_title("System Memory Pressure", fontsize=11, fontweight="bold")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        timestamps = [r["timestamp"] for r in reports]
 
-        # Row 1, Col 1: Total Memory Usage
-        ax = axes[0, 0]
-        windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
-        system_avail = [r["system"]["available_memory_gb"] for r in reports]
-        ax.plot(timestamps, windsurf_mem, "b-o", label="Windsurf", linewidth=2)
-        ax.plot(timestamps, system_avail, "g--", label="System Available", alpha=0.7)
-        ax.set_ylabel("Memory (GB)", fontsize=10)
-        ax.set_title("Memory Usage", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+def _plot_row2_charts(axes, timestamps: list, reports: list[dict]) -> None:
+    """Plot Row 2: Process types, swap usage, language servers & extensions."""
+    import matplotlib.dates as mdates
 
-        # Row 1, Col 2: Top 5 Processes by Memory
-        ax = axes[0, 1]
-        process_mem_history = build_process_memory_history(reports)
-
-        # Plot top 5 by peak memory
-        top_5 = sorted(process_mem_history.items(), key=lambda x: max(x[1]), reverse=True)[:5]
-        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-        for (name, mem_history), color in zip(top_5, colors, strict=False):
-            ax.plot(
-                timestamps,
-                [m / 1024 for m in mem_history],
-                "-o",
-                label=name,
-                color=color,
-                linewidth=1.5,
-            )
-        ax.set_ylabel("Memory (GB)", fontsize=10)
-        ax.set_title("Top 5 Processes by Memory", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=7, loc="best")
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-
-        # Row 1, Col 3: System Memory Pressure
-        ax = axes[0, 2]
-        total_mem = [r["system"]["total_memory_gb"] for r in reports]
-        used_mem = [r["system"]["total_memory_gb"] - r["system"]["available_memory_gb"] for r in reports]
-        windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
-        ax.fill_between(timestamps, 0, used_mem, alpha=0.3, color="orange", label="Other Apps")
-        ax.fill_between(
-            timestamps,
-            [u - w for u, w in zip(used_mem, windsurf_mem, strict=True)],
-            used_mem,
-            alpha=0.6,
-            color="blue",
-            label="Windsurf",
-        )
-        ax.axhline(
-            y=total_mem[0],
-            color="r",
-            linestyle="--",
-            alpha=0.5,
-            label=f"Total: {total_mem[0]:.1f} GB",
-        )
-        ax.set_ylabel("Memory (GB)", fontsize=10)
-        ax.set_title("System Memory Pressure", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-
-        # Row 2, Col 1: Process Count by Type
-        ax = axes[1, 0]
-        # Count different process types
-        helper_counts = []
-        renderer_counts = []
-        plugin_counts = []
-        main_counts = []
-        for r in reports:
-            helpers = sum(
+    # Process Count by Type
+    ax = axes[1, 0]
+    helper_counts, renderer_counts, plugin_counts, main_counts = [], [], [], []
+    for r in reports:
+        procs = r["windsurf_processes"]
+        helper_counts.append(
+            sum(
                 1
-                for p in r["windsurf_processes"]
+                for p in procs
                 if "Helper" in p["name"] and "Renderer" not in p["name"] and "Plugin" not in p["name"] and "GPU" not in p["name"]
             )
-            renderers = sum(1 for p in r["windsurf_processes"] if "Renderer" in p["name"])
-            plugins = sum(1 for p in r["windsurf_processes"] if "Plugin" in p["name"])
-            main = sum(
-                1 for p in r["windsurf_processes"] if "Electron" in p["name"] or ("Windsurf" in p["name"] and "Helper" not in p["name"])
-            )
-            helper_counts.append(helpers)
-            renderer_counts.append(renderers)
-            plugin_counts.append(plugins)
-            main_counts.append(main)
-
-        ax.stackplot(
-            timestamps,
-            main_counts,
-            helper_counts,
-            renderer_counts,
-            plugin_counts,
-            labels=["Main", "Helpers", "Renderers", "Plugins"],
-            colors=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"],
-            alpha=0.7,
         )
-        ax.set_ylabel("Process Count", fontsize=10)
-        ax.set_title("Process Count by Type", fontsize=11, fontweight="bold")
-        ax.legend(loc="upper left", fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        renderer_counts.append(sum(1 for p in procs if "Renderer" in p["name"]))
+        plugin_counts.append(sum(1 for p in procs if "Plugin" in p["name"]))
+        main_counts.append(sum(1 for p in procs if "Electron" in p["name"] or ("Windsurf" in p["name"] and "Helper" not in p["name"])))
 
-        # Row 2, Col 2: Swap Usage
-        ax = axes[1, 1]
-        swap_used = [r["system"]["swap_used_gb"] for r in reports]
-        swap_total = [r["system"]["swap_total_gb"] for r in reports]
-        ax.plot(timestamps, swap_used, "r-o", linewidth=2, label="Used")
-        ax.axhline(
-            y=swap_total[0],
-            color="gray",
-            linestyle="--",
-            alpha=0.5,
-            label=f"Total: {swap_total[0]:.1f} GB",
-        )
-        ax.fill_between(timestamps, 0, swap_used, alpha=0.3, color="red")
-        ax.set_ylabel("Swap (GB)", fontsize=10)
-        ax.set_title("Swap Usage", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    ax.stackplot(
+        timestamps,
+        main_counts,
+        helper_counts,
+        renderer_counts,
+        plugin_counts,
+        labels=["Main", "Helpers", "Renderers", "Plugins"],
+        colors=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"],
+        alpha=0.7,
+    )
+    ax.set_ylabel("Process Count", fontsize=10)
+    ax.set_title("Process Count by Type", fontsize=11, fontweight="bold")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        # Row 2, Col 3: Language Servers & Extensions
-        ax = axes[1, 2]
-        ax2 = ax.twinx()
-        ls_count = [r["lang_servers"] for r in reports]
-        ext_count = [r["extensions_count"] for r in reports]
-        line1 = ax.plot(timestamps, ls_count, "b-o", linewidth=2, label="Language Servers")
-        line2 = ax2.plot(timestamps, ext_count, "g-s", linewidth=2, label="Extensions")
-        ax.set_ylabel("Language Servers", color="b", fontsize=10)
-        ax2.set_ylabel("Extensions", color="g", fontsize=10)
-        ax.tick_params(axis="y", labelcolor="b")
-        ax2.tick_params(axis="y", labelcolor="g")
-        ax.set_title("Language Servers & Extensions", fontsize=11, fontweight="bold")
-        lines = line1 + line2
-        labels = [line.get_label() for line in lines]
-        ax.legend(lines, labels, loc="upper left", fontsize=8)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    # Swap Usage
+    ax = axes[1, 1]
+    swap_used = [r["system"]["swap_used_gb"] for r in reports]
+    swap_total = [r["system"]["swap_total_gb"] for r in reports]
+    ax.plot(timestamps, swap_used, "r-o", linewidth=2, label="Used")
+    ax.axhline(y=swap_total[0], color="gray", linestyle="--", alpha=0.5, label=f"Total: {swap_total[0]:.1f} GB")
+    ax.fill_between(timestamps, 0, swap_used, alpha=0.3, color="red")
+    ax.set_ylabel("Swap (GB)", fontsize=10)
+    ax.set_title("Swap Usage", fontsize=11, fontweight="bold")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        # Row 3, Col 1: Thread Count
-        ax = axes[2, 0]
-        total_threads = [sum(p["num_threads"] for p in r["windsurf_processes"]) for r in reports]
-        ax.plot(timestamps, total_threads, "purple", marker="o", linewidth=2)
-        ax.fill_between(timestamps, 0, total_threads, alpha=0.3, color="purple")
-        ax.set_ylabel("Thread Count", fontsize=10)
-        ax.set_title("Total Thread Count", fontsize=11, fontweight="bold")
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    # Language Servers & Extensions
+    ax = axes[1, 2]
+    ax2 = ax.twinx()
+    ls_count = [r["lang_servers"] for r in reports]
+    ext_count = [r["extensions_count"] for r in reports]
+    line1 = ax.plot(timestamps, ls_count, "b-o", linewidth=2, label="Language Servers")
+    line2 = ax2.plot(timestamps, ext_count, "g-s", linewidth=2, label="Extensions")
+    ax.set_ylabel("Language Servers", color="b", fontsize=10)
+    ax2.set_ylabel("Extensions", color="g", fontsize=10)
+    ax.tick_params(axis="y", labelcolor="b")
+    ax2.tick_params(axis="y", labelcolor="g")
+    ax.set_title("Language Servers & Extensions", fontsize=11, fontweight="bold")
+    lines = line1 + line2
+    ax.legend(lines, [line.get_label() for line in lines], loc="upper left", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        # Row 3, Col 2: Average Memory per Process
-        ax = axes[2, 1]
-        avg_mem = [r["memory_mb"] / r["processes"] if r["processes"] > 0 else 0 for r in reports]
-        ax.plot(timestamps, avg_mem, "orange", marker="o", linewidth=2)
-        ax.set_ylabel("Memory per Process (MB)", fontsize=10)
-        ax.set_title("Average Memory per Process", fontsize=11, fontweight="bold")
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        # Row 3, Col 3: Issues Over Time
-        ax = axes[2, 2]
-        issue_counts = [len(r["issues"]) for r in reports]
-        ax.plot(timestamps, issue_counts, "m-o", linewidth=2)
-        ax.fill_between(timestamps, 0, issue_counts, alpha=0.3, color="magenta")
-        ax.set_ylabel("Issue Count", fontsize=10)
-        ax.set_title("Issues Detected", fontsize=11, fontweight="bold")
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+def _plot_row3_charts(axes, timestamps: list, reports: list[dict]) -> None:
+    """Plot Row 3: Thread count, average memory per process, issues over time."""
+    import matplotlib.dates as mdates
 
-        # Rotate all x-axis labels for better readability
-        for ax in axes.flat:
-            for label in ax.get_xticklabels():
-                label.set_rotation(45)
-                label.set_ha("right")
+    # Thread Count
+    ax = axes[2, 0]
+    total_threads = [sum(p["num_threads"] for p in r["windsurf_processes"]) for r in reports]
+    ax.plot(timestamps, total_threads, "purple", marker="o", linewidth=2)
+    ax.fill_between(timestamps, 0, total_threads, alpha=0.3, color="purple")
+    ax.set_ylabel("Thread Count", fontsize=10)
+    ax.set_title("Total Thread Count", fontsize=11, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        plt.tight_layout()
+    # Average Memory per Process
+    ax = axes[2, 1]
+    avg_mem = [r["memory_mb"] / r["processes"] if r["processes"] > 0 else 0 for r in reports]
+    ax.plot(timestamps, avg_mem, "orange", marker="o", linewidth=2)
+    ax.set_ylabel("Memory per Process (MB)", fontsize=10)
+    ax.set_title("Average Memory per Process", fontsize=11, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-        if output:
-            plt.savefig(output, dpi=150, bbox_inches="tight")
-            console.print(f"\n[green]✓ Plot saved to {output}[/green]")
-        else:
-            plt.show()
+    # Issues Over Time
+    ax = axes[2, 2]
+    issue_counts = [len(r["issues"]) for r in reports]
+    ax.plot(timestamps, issue_counts, "m-o", linewidth=2)
+    ax.fill_between(timestamps, 0, issue_counts, alpha=0.3, color="magenta")
+    ax.set_ylabel("Issue Count", fontsize=10)
+    ax.set_title("Issues Detected", fontsize=11, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+
+
+def _generate_analysis_plots(reports: list[dict], output: Path | None) -> None:
+    """Generate 3x3 matplotlib analysis plots."""
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(3, 3, figsize=(18, 14))
+    fig.suptitle("Windsurf Performance Analysis", fontsize=18, y=0.995)
+
+    timestamps = [r["timestamp"] for r in reports]
+
+    _plot_memory_charts(axes, timestamps, reports)
+    _plot_row2_charts(axes, timestamps, reports)
+    _plot_row3_charts(axes, timestamps, reports)
+
+    # Rotate all x-axis labels for better readability
+    for ax in axes.flat:
+        for label in ax.get_xticklabels():
+            label.set_rotation(45)
+            label.set_ha("right")
+
+    plt.tight_layout()
+
+    if output:
+        plt.savefig(output, dpi=150, bbox_inches="tight")
+        console.print(f"\n[green]✓ Plot saved to {output}[/green]")
+    else:
+        plt.show()
+
+
+@app.command()
+def analyze(
+    directory: Annotated[Path, typer.Argument(help="Directory containing JSON reports to analyze")],
+    plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate visualizations")] = False,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plots to file")] = None,
+) -> None:
+    """Analyze historical reports to identify trends and issues.
+
+    Examines multiple JSON reports from watch mode to detect:
+    - Memory leaks and growth patterns
+    - Process count changes
+    - Performance degradation
+    - Recurring issues
+    """
+    if not directory.exists():
+        console.print(f"[red]Error: Directory not found: {directory}[/red]")
+        raise typer.Exit(code=1)
+
+    reports = _load_reports(directory)
+
+    console.print()
+    console.print(make_panel("[bold cyan]Historical Analysis[/bold cyan]"))
+    console.print()
+
+    _display_analysis_summary(reports)
+
+    if plot:
+        _generate_analysis_plots(reports, output)
+
+
+def _find_orphaned_crashpad_procs(app_name: str) -> tuple[bool, list[tuple[psutil.Process, float]]]:
+    """Scan for orphaned crashpad handler processes.
+
+    Returns:
+        Tuple of (main_windsurf_found, list of (process, age_days) pairs).
+    """
+    orphaned = []
+    main_windsurf_found = False
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
+        try:
+            name = proc.info["name"] or ""
+            exe = proc.info["exe"] or ""
+            cmdline = " ".join(proc.info["cmdline"] or [])
+
+            if app_name not in exe and app_name not in cmdline:
+                continue
+
+            if (
+                name.lower() == "windsurf"
+                or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                or ("Windsurf" in name and "Helper" not in name and "crashpad" not in name.lower())
+            ):
+                main_windsurf_found = True
+
+            if "crashpad" in name.lower():
+                create_time = proc.info["create_time"]
+                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
+                orphaned.append((proc, age_days))
+
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            pass
+
+    return main_windsurf_found, orphaned
+
+
+def _kill_processes(processes: list[tuple[psutil.Process, float]]) -> tuple[int, list[tuple[int, str]]]:
+    """Kill a list of processes. Returns (killed_count, failed_list)."""
+    killed = 0
+    failed = []
+    for proc, _ in processes:
+        try:
+            proc.kill()
+            killed += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+            failed.append((proc.pid, str(e)))
+    return killed, failed
 
 
 def main():

@@ -59,6 +59,7 @@ LS_CPU_HIGH = 5
 LS_CPU_MEDIUM = 2
 WORKSPACE_ID_MAX_LEN = 20
 WORKSPACE_ID_TRUNCATE_LEN = 18
+CMDLINE_DISPLAY_MAX_LEN = 100
 
 
 def make_table(title: str | None = None, **kwargs: Any) -> Table:
@@ -90,24 +91,8 @@ def make_panel(content: str, *, title: str | None = None, style: str = "cyan", c
     return Panel(body, title=title, border_style=style, width=TABLE_WIDTH)
 
 
-def display_report(report: MonitoringReport, verbose: bool = False) -> None:
-    """Display report in rich terminal format."""
-    console.print()
-
-    # Determine Windsurf status
-    target_name = get_target_display_name()
-    status = "[red]Not Running[/red]" if report.process_count == 0 else "[green]Running[/green]"
-
-    console.print(
-        make_panel(
-            f"Status: {status}\n[dim]{report.timestamp}[/dim]",
-            title=f"[bold cyan]Surfmon[/bold cyan] - {target_name}",
-            center=True,
-        )
-    )
-    console.print()
-
-    # System overview
+def _display_system_table(report: MonitoringReport) -> None:
+    """Display system resources table."""
     sys_table = make_kv_table("System Resources")
 
     sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
@@ -133,7 +118,9 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     console.print(sys_table)
     console.print()
 
-    # Windsurf summary
+
+def _display_windsurf_table(report: MonitoringReport) -> None:
+    """Display Windsurf resource usage table."""
     ws_table = make_kv_table("Windsurf Resource Usage")
 
     ws_table.add_row("Process Count", str(report.process_count))
@@ -180,79 +167,138 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     console.print(ws_table)
     console.print()
 
-    # Active workspaces
-    if report.active_workspaces:
-        workspace_table = make_table("Active Workspaces")
-        workspace_table.add_column("ID", style="dim", max_width=20, overflow="fold")
-        workspace_table.add_column("Path", style="cyan", ratio=3, overflow="fold")
-        workspace_table.add_column("Exists", style="green", ratio=1)
-        workspace_table.add_column("Loaded At", style="dim", ratio=2, overflow="fold")
 
-        for ws in report.active_workspaces:
-            exists_icon = "✓" if ws.exists else "❌"
-            exists_color = "green" if ws.exists else "red"
-            workspace_table.add_row(
-                (ws.id[:WORKSPACE_ID_TRUNCATE_LEN] + "..") if len(ws.id) > WORKSPACE_ID_MAX_LEN else ws.id,
-                ws.path,
-                f"[{exists_color}]{exists_icon}[/{exists_color}]",
-                ws.loaded_at or "Unknown",
-            )
+def _display_workspaces_table(report: MonitoringReport) -> None:
+    """Display active workspaces table."""
+    if not report.active_workspaces:
+        return
 
-        console.print(workspace_table)
-        console.print()
+    workspace_table = make_table("Active Workspaces")
+    workspace_table.add_column("ID", style="dim", max_width=20, overflow="fold")
+    workspace_table.add_column("Path", style="cyan", ratio=3, overflow="fold")
+    workspace_table.add_column("Exists", style="green", ratio=1)
+    workspace_table.add_column("Loaded At", style="dim", ratio=2, overflow="fold")
 
-    # Top processes
+    for ws in report.active_workspaces:
+        exists_icon = "✓" if ws.exists else "❌"
+        exists_color = "green" if ws.exists else "red"
+        workspace_table.add_row(
+            (ws.id[:WORKSPACE_ID_TRUNCATE_LEN] + "..") if len(ws.id) > WORKSPACE_ID_MAX_LEN else ws.id,
+            ws.path,
+            f"[{exists_color}]{exists_icon}[/{exists_color}]",
+            ws.loaded_at or "Unknown",
+        )
+
+    console.print(workspace_table)
+    console.print()
+
+
+def _display_processes_table(report: MonitoringReport) -> None:
+    """Display top processes by memory table."""
+    if not report.windsurf_processes:
+        return
+
+    top_procs = sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True)[:10]
+
+    proc_table = make_table("Top 10 Processes by Memory")
+    proc_table.add_column("PID", style="dim")
+    proc_table.add_column("Name", style="cyan", ratio=3, overflow="fold")
+    proc_table.add_column("Memory", justify="right", style="green")
+    proc_table.add_column("CPU %", justify="right", style="yellow")
+    proc_table.add_column("Threads", justify="right", style="dim")
+
+    for proc in top_procs:
+        mem_str = f"{proc.memory_mb:.0f} MB"
+        mem_style = "red" if proc.memory_mb > PROCESS_MEMORY_HIGH_MB else "yellow" if proc.memory_mb > PROCESS_MEMORY_MEDIUM_MB else "green"
+        proc_table.add_row(
+            str(proc.pid),
+            proc.name[:40],
+            f"[{mem_style}]{mem_str}[/{mem_style}]",
+            f"{proc.cpu_percent:.1f}",
+            str(proc.num_threads),
+        )
+
+    console.print(proc_table)
+    console.print()
+
+
+def _display_language_servers_table(report: MonitoringReport) -> None:
+    """Display language servers table."""
+    if not report.language_servers:
+        return
+
+    ls_table = make_table("Language Servers")
+    ls_table.add_column("PID", style="dim")
+    ls_table.add_column("Type", style="cyan", ratio=3, overflow="fold")
+    ls_table.add_column("Memory", justify="right", style="green")
+    ls_table.add_column("CPU %", justify="right", style="yellow")
+
+    for ls in report.language_servers:
+        server_type = ls.cmdline
+        mem_style = "red" if ls.memory_mb > LS_MEMORY_HIGH_MB else "yellow" if ls.memory_mb > LS_MEMORY_MEDIUM_MB else "green"
+        cpu_style = "red" if ls.cpu_percent > LS_CPU_HIGH else "yellow" if ls.cpu_percent > LS_CPU_MEDIUM else "green"
+
+        ls_table.add_row(
+            str(ls.pid),
+            server_type,
+            f"[{mem_style}]{ls.memory_mb:.0f} MB[/{mem_style}]",
+            f"[{cpu_style}]{ls.cpu_percent:.1f}[/{cpu_style}]",
+        )
+
+    console.print(ls_table)
+    console.print()
+
+
+def _display_verbose_info(report: MonitoringReport) -> None:
+    """Display verbose diagnostic information."""
+    console.print("[bold cyan]Verbose Diagnostic Information:[/bold cyan]")
+    console.print()
+
+    paths = get_paths()
+    console.print("[cyan]Configuration Paths:[/cyan]")
+    console.print(f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)")
+    console.print(f"  MCP Config: {paths.mcp_config_path}")
+    console.print()
+
+    console.print("[cyan]Process Details:[/cyan]")
     if report.windsurf_processes:
-        top_procs = sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True)[:10]
-
-        proc_table = make_table("Top 10 Processes by Memory")
-        proc_table.add_column("PID", style="dim")
-        proc_table.add_column("Name", style="cyan", ratio=3, overflow="fold")
-        proc_table.add_column("Memory", justify="right", style="green")
-        proc_table.add_column("CPU %", justify="right", style="yellow")
-        proc_table.add_column("Threads", justify="right", style="dim")
-
-        for proc in top_procs:
-            mem_str = f"{proc.memory_mb:.0f} MB"
-            mem_style = (
-                "red" if proc.memory_mb > PROCESS_MEMORY_HIGH_MB else "yellow" if proc.memory_mb > PROCESS_MEMORY_MEDIUM_MB else "green"
+        for proc in sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True):
+            runtime_hours = proc.runtime_seconds / 3600
+            console.print(f"  PID {proc.pid}: {proc.name}")
+            console.print(
+                f"    Memory: {proc.memory_mb:.0f} MB | CPU: {proc.cpu_percent:.1f}% | "
+                f"Threads: {proc.num_threads} | Runtime: {runtime_hours:.1f}h"
             )
-            proc_table.add_row(
-                str(proc.pid),
-                proc.name[:40],
-                f"[{mem_style}]{mem_str}[/{mem_style}]",
-                f"{proc.cpu_percent:.1f}",
-                str(proc.num_threads),
-            )
-
-        console.print(proc_table)
+            cmdline_display = proc.cmdline[:CMDLINE_DISPLAY_MAX_LEN] + ("..." if len(proc.cmdline) > CMDLINE_DISPLAY_MAX_LEN else "")
+            console.print(f"    [dim]{cmdline_display}[/dim]")
+            console.print()
+    else:
+        console.print("  [dim]No Windsurf processes running[/dim]")
         console.print()
 
-    # Language servers
-    if report.language_servers:
-        ls_table = make_table("Language Servers")
-        ls_table.add_column("PID", style="dim")
-        ls_table.add_column("Type", style="cyan", ratio=3, overflow="fold")
-        ls_table.add_column("Memory", justify="right", style="green")
-        ls_table.add_column("CPU %", justify="right", style="yellow")
 
-        for ls in report.language_servers:
-            # The cmdline was enhanced by find_language_servers to include context
-            # Just use it directly
-            server_type = ls.cmdline
+def display_report(report: MonitoringReport, verbose: bool = False) -> None:
+    """Display report in rich terminal format."""
+    console.print()
 
-            mem_style = "red" if ls.memory_mb > LS_MEMORY_HIGH_MB else "yellow" if ls.memory_mb > LS_MEMORY_MEDIUM_MB else "green"
-            cpu_style = "red" if ls.cpu_percent > LS_CPU_HIGH else "yellow" if ls.cpu_percent > LS_CPU_MEDIUM else "green"
+    # Determine Windsurf status
+    target_name = get_target_display_name()
+    status = "[red]Not Running[/red]" if report.process_count == 0 else "[green]Running[/green]"
 
-            ls_table.add_row(
-                str(ls.pid),
-                server_type,
-                f"[{mem_style}]{ls.memory_mb:.0f} MB[/{mem_style}]",
-                f"[{cpu_style}]{ls.cpu_percent:.1f}[/{cpu_style}]",
-            )
+    console.print(
+        make_panel(
+            f"Status: {status}\n[dim]{report.timestamp}[/dim]",
+            title=f"[bold cyan]Surfmon[/bold cyan] - {target_name}",
+            center=True,
+        )
+    )
+    console.print()
 
-        console.print(ls_table)
-        console.print()
+    _display_system_table(report)
+    _display_windsurf_table(report)
+    _display_workspaces_table(report)
+    _display_processes_table(report)
+    _display_language_servers_table(report)
 
     # MCP servers
     if report.mcp_servers_enabled:
@@ -279,34 +325,8 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
         console.print("[green]✓ No critical issues detected[/green]")
         console.print()
 
-    # Verbose output - additional diagnostic information
     if verbose:
-        # Show detailed system info
-        console.print("[bold cyan]Verbose Diagnostic Information:[/bold cyan]")
-        console.print()
-
-        # Config paths - use configured paths for current target
-        paths = get_paths()
-        console.print("[cyan]Configuration Paths:[/cyan]")
-        console.print(f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)")
-        console.print(f"  MCP Config: {paths.mcp_config_path}")
-        console.print()
-
-        # All processes detail
-        console.print("[cyan]Process Details:[/cyan]")
-        if report.windsurf_processes:
-            for proc in sorted(report.windsurf_processes, key=lambda p: p.memory_mb, reverse=True):
-                runtime_hours = proc.runtime_seconds / 3600
-                console.print(f"  PID {proc.pid}: {proc.name}")
-                console.print(
-                    f"    Memory: {proc.memory_mb:.0f} MB | CPU: {proc.cpu_percent:.1f}% | "
-                    f"Threads: {proc.num_threads} | Runtime: {runtime_hours:.1f}h"
-                )
-                console.print(f"    [dim]{proc.cmdline[:100]}...[/dim]")
-                console.print()
-        else:
-            console.print("  [dim]No Windsurf processes running[/dim]")
-            console.print()
+        _display_verbose_info(report)
 
 
 def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:

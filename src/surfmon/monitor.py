@@ -198,6 +198,41 @@ def get_system_info() -> SystemInfo:
     )
 
 
+def _enhance_language_server_cmdline(p: ProcessInfo) -> str | None:
+    """Build an enhanced cmdline description for a language server process."""
+    cmdline = p.cmdline
+    cmdline_lower = cmdline.lower()
+    enhanced = None
+
+    # Extract workspace ID for Codeium language server
+    workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
+    if workspace_match:
+        workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
+        parts = workspace.split("/")
+        workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
+        enhanced = f"{p.name} [workspace: {workspace_short}]"
+
+    # Extract language for JDT LS
+    elif "jdtls" in cmdline_lower or "eclipse.jdt" in cmdline_lower:
+        data_match = re.search(r"-data\s+(\S+)", cmdline)
+        project = data_match.group(1).split("/")[-1] if data_match else None
+        enhanced = f"{p.name} [Java: {project}]" if project else f"{p.name} [Java Language Server]"
+
+    # Other language servers - identify by keyword
+    elif "gopls" in cmdline_lower:
+        enhanced = f"{p.name} [Go Language Server]"
+    elif "pyright" in cmdline_lower or "pylance" in cmdline_lower:
+        enhanced = f"{p.name} [Python Language Server]"
+    elif "rust-analyzer" in cmdline_lower:
+        enhanced = f"{p.name} [Rust Language Server]"
+
+    # Truncate long cmdlines if no enhancement found
+    elif len(cmdline) > CMDLINE_TRUNCATE_LEN:
+        enhanced = cmdline[:CMDLINE_TRUNCATE_LEN] + "..."
+
+    return enhanced
+
+
 def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
     """Identify language server processes from the process list."""
     keywords = [
@@ -218,44 +253,9 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
         if not any(kw in p.cmdline.lower() for kw in keywords):
             continue
 
-        cmdline = p.cmdline
-        enhanced_cmdline = None
-
-        # Extract workspace ID for Codeium language server
-        workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
-        if workspace_match:
-            workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
-            # Shorten to last 2-3 path components
-            parts = workspace.split("/")
-            workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
-            enhanced_cmdline = f"{p.name} [workspace: {workspace_short}]"
-
-        # Extract language for JDT LS
-        if enhanced_cmdline is None and ("jdtls" in cmdline.lower() or "eclipse.jdt" in cmdline.lower()):
-            # Try to find project path
-            data_match = re.search(r"-data\s+(\S+)", cmdline)
-            if data_match:
-                project = data_match.group(1).split("/")[-1]
-                enhanced_cmdline = f"{p.name} [Java: {project}]"
-            else:
-                enhanced_cmdline = f"{p.name} [Java Language Server]"
-
-        # Other language servers - identify by name
-        if enhanced_cmdline is None:
-            if "gopls" in cmdline.lower():
-                enhanced_cmdline = f"{p.name} [Go Language Server]"
-            elif "pyright" in cmdline.lower() or "pylance" in cmdline.lower():
-                enhanced_cmdline = f"{p.name} [Python Language Server]"
-            elif "rust-analyzer" in cmdline.lower():
-                enhanced_cmdline = f"{p.name} [Rust Language Server]"
-
-        # If not enhanced, truncate the original cmdline if too long
-        if enhanced_cmdline is None and len(cmdline) > CMDLINE_TRUNCATE_LEN:
-            enhanced_cmdline = cmdline[:CMDLINE_TRUNCATE_LEN] + "..."
-
-        # Create new ProcessInfo with enhanced cmdline (or original if no enhancement)
-        if enhanced_cmdline is not None:
-            result.append(replace(p, cmdline=enhanced_cmdline))
+        enhanced = _enhance_language_server_cmdline(p)
+        if enhanced is not None:
+            result.append(replace(p, cmdline=enhanced))
         else:
             result.append(p)
 
@@ -292,6 +292,49 @@ def count_extensions() -> int:
     return count
 
 
+def _check_orphaned_workspace_proc(cmdline: str, proc: psutil.Process) -> str | None:
+    """Check a single language server process for orphaned workspace indexing.
+
+    Returns an issue string if the process is indexing a non-existent workspace, else None.
+    """
+    if "language_server_macos_arm" not in cmdline:
+        return None
+
+    workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
+    database_match = re.search(r"--database_dir\s+(\S+)", cmdline)
+
+    if not (workspace_match and database_match):
+        return None
+
+    workspace_id = workspace_match.group(1)
+    database_dir = database_match.group(1)
+
+    # Convert workspace_id to actual path
+    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
+    workspace_path_obj = Path("/" + workspace_path)
+
+    if workspace_path_obj.exists():
+        return None
+
+    # Get database size
+    db_path = Path(database_dir)
+    db_size_mb = 0
+    if db_path.exists():
+        db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
+
+    # Get memory usage from the process
+    mem_mb = 0
+    with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+        mem_mb = proc.memory_info().rss / 1024 / 1024
+
+    workspace_short = "/".join(workspace_path.split("/")[-3:]) if "/" in workspace_path else workspace_path
+    return (
+        f"🔴 CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
+        f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
+        f"Fix: Close Windsurf, run: rm -rf {database_dir}"
+    )
+
+
 def check_orphaned_workspaces() -> list[str]:
     """Check for orphaned workspace indexes consuming memory and disk space.
 
@@ -300,45 +343,13 @@ def check_orphaned_workspaces() -> list[str]:
     """
     issues = []
 
-    # Find all running language servers using psutil
     try:
         for proc in psutil.process_iter(["pid", "name", "cmdline"]):
             try:
                 cmdline = " ".join(proc.info["cmdline"] or [])
-                if "language_server_macos_arm" not in cmdline:
-                    continue
-
-                # Extract workspace_id and database_dir from cmdline
-                workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
-                database_match = re.search(r"--database_dir\s+(\S+)", cmdline)
-
-                if workspace_match and database_match:
-                    workspace_id = workspace_match.group(1)
-                    database_dir = database_match.group(1)
-
-                    # Convert workspace_id to actual path
-                    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
-                    workspace_path_obj = Path("/" + workspace_path)
-
-                    # Check if workspace exists
-                    if not workspace_path_obj.exists():
-                        # Get database size
-                        db_path = Path(database_dir)
-                        db_size_mb = 0
-                        if db_path.exists():
-                            db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
-
-                        # Get memory usage from the process
-                        mem_mb = 0
-                        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-                            mem_mb = proc.memory_info().rss / 1024 / 1024
-
-                        workspace_short = "/".join(workspace_path.split("/")[-3:]) if "/" in workspace_path else workspace_path
-                        issues.append(
-                            f"🔴 CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
-                            f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
-                            f"Fix: Close Windsurf, run: rm -rf {database_dir}"
-                        )
+                issue = _check_orphaned_workspace_proc(cmdline, proc)
+                if issue:
+                    issues.append(issue)
             except psutil.NoSuchProcess, psutil.AccessDenied:
                 continue
     except psutil.Error, OSError, re.error:
@@ -411,6 +422,175 @@ def check_pty_leak() -> PtyInfo:
     )
 
 
+def _format_age_str(days: float) -> str:
+    """Format age in days to human-readable string."""
+    if days >= 1:
+        return f"{days:.1f} days"
+    oldest_seconds = days * SECONDS_PER_DAY
+    if oldest_seconds < SECONDS_PER_MINUTE:
+        return f"{oldest_seconds:.0f}s"
+    if oldest_seconds < SECONDS_PER_HOUR:
+        return f"{oldest_seconds / SECONDS_PER_MINUTE:.0f}m"
+    hours = int(oldest_seconds / SECONDS_PER_HOUR)
+    minutes = int((oldest_seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
+    return f"{hours}h {minutes}m"
+
+
+def _read_log_tail(log_path: Path, tail_bytes: int) -> str | None:
+    """Read the last tail_bytes of a log file, or None on failure."""
+    if not log_path.exists():
+        return None
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            f.seek(0, 2)
+            file_size = f.tell()
+            f.seek(max(0, file_size - tail_bytes))
+            return f.read()
+    except OSError, UnicodeDecodeError:
+        return None
+
+
+def _check_orphaned_crashpad_handlers() -> list[str]:
+    """Check for orphaned crashpad handler processes."""
+    orphaned = []
+    main_windsurf_found = False
+    app_name = get_paths().app_name
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
+        try:
+            name = proc.info["name"] or ""
+            exe = proc.info["exe"] or ""
+            cmdline = " ".join(proc.info["cmdline"] or [])
+
+            if app_name not in exe and app_name not in cmdline:
+                continue
+
+            if (
+                (
+                    name.lower() in {"windsurf", "electron"}
+                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
+                    or f"{app_name}/Contents/MacOS/Electron" in exe
+                )
+                and "Helper" not in name
+                and "crashpad" not in name.lower()
+            ):
+                main_windsurf_found = True
+
+            if "crashpad" in name.lower():
+                create_time = proc.info["create_time"]
+                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
+                orphaned.append((proc.info["pid"], age_days))
+
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            pass
+
+    if main_windsurf_found or not orphaned:
+        return []
+
+    pids = [str(pid) for pid, _ in orphaned]
+    oldest_days = max(age for _, age in orphaned)
+    age_str = _format_age_str(oldest_days)
+    pids_str = ", ".join(pids[:MAX_DISPLAY_ITEMS]) + (", ..." if len(pids) > MAX_DISPLAY_ITEMS else "")
+    return [f"⚠️  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force"]
+
+
+def _check_extension_logs_dir() -> list[str]:
+    """Check for logs directory in extensions folder (package.json error)."""
+    paths = get_paths()
+    logs_dir = paths.extensions_dir / "logs"
+    if not logs_dir.exists():
+        return []
+
+    culprit = "unknown extension"
+    try:
+        log_files = list(logs_dir.glob("*.log"))
+        if log_files:
+            culprit = log_files[0].stem
+    except OSError:
+        pass
+
+    return [
+        (
+            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
+            f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
+        )
+    ]
+
+
+def _check_main_log_issues(latest_log: Path) -> list[str]:
+    """Check main.log for extension host crashes, OOM, and renderer crashes."""
+    content = _read_log_tail(latest_log / "main.log", LOG_TAIL_BYTES)
+    if content is None:
+        return []
+
+    issues = []
+
+    # Extension host crashes (non-zero exit codes only)
+    crash_lines = re.findall(
+        r"Extension host with pid (\d+) exited with code: (\d+)",
+        content,
+    )
+    crashes = [pid for pid, code in crash_lines if code != "0"]
+    if crashes:
+        pids_str = ", ".join(crashes[:MAX_DISPLAY_ITEMS]) + (", ..." if len(crashes) > MAX_DISPLAY_ITEMS else "")
+        issues.append(f"🔴 {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
+
+    if "UpdateService error" in content:
+        issues.append("⚠️  Update service timeouts detected (check NextDNS)")
+
+    if "out of memory" in content.lower() or "oom" in content.lower():
+        issues.append("🔴 Out of memory errors detected")
+
+    renderer_crashes = content.count("GPU process crashed")
+    if renderer_crashes > 0:
+        issues.append(f"⚠️  {renderer_crashes} GPU/renderer crashes detected")
+
+    return issues
+
+
+def _check_shared_process_log_issues(latest_log: Path) -> list[str]:
+    """Check sharedprocess.log for extension errors."""
+    content = _read_log_tail(latest_log / "sharedprocess.log", SHARED_LOG_TAIL_BYTES)
+    if content is None:
+        return []
+
+    error_lines = [
+        line
+        for line in content.split("\n")
+        if "[error]" in line.lower() and "ENOENT" not in line and "marketplace" not in line and "logs/package.json" not in line
+    ]
+
+    # Try to extract extension IDs from errors
+    extension_errors: dict[str, int] = {}
+    for line in error_lines:
+        ext_match = re.search(r"([a-z0-9-]+\.[a-z0-9-]+)", line.lower())
+        if ext_match:
+            ext_id = ext_match.group(1)
+            extension_errors[ext_id] = extension_errors.get(ext_id, 0) + 1
+
+    if extension_errors:
+        sorted_exts = sorted(extension_errors.items(), key=operator.itemgetter(1), reverse=True)
+        ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:MAX_DISPLAY_ITEMS]])
+        return [f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}"]
+
+    if len(error_lines) > EXTENSION_ERROR_LINES_THRESHOLD:
+        return [f"⚠️  {len(error_lines)} extension errors in shared process"]
+
+    return []
+
+
+def _check_network_log_issues(latest_log: Path) -> list[str]:
+    """Check network-shared.log for telemetry connection failures."""
+    content = _read_log_tail(latest_log / "network-shared.log", SHARED_LOG_TAIL_BYTES)
+    if content is None:
+        return []
+
+    telemetry_errors = content.count("windsurf-telemetry.codeium.com")
+    if telemetry_errors > TELEMETRY_ERROR_THRESHOLD:
+        return [f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)"]
+    return []
+
+
 def check_log_issues() -> list[str]:
     """Check for common issues in Windsurf logs.
 
@@ -425,193 +605,40 @@ def check_log_issues() -> list[str]:
     """
     issues = []
 
-    # Check for orphaned workspace indexes (CRITICAL issue)
     issues.extend(check_orphaned_workspaces())
-
-    # Check for orphaned crashpad handlers
-    orphaned = []
-    main_windsurf_found = False
-    app_name = get_paths().app_name
-
-    for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
-        try:
-            name = proc.info["name"] or ""
-            exe = proc.info["exe"] or ""
-            cmdline = " ".join(proc.info["cmdline"] or [])
-
-            if app_name not in exe and app_name not in cmdline:
-                continue
-
-            # Check if this is the main Windsurf/Electron process (not helper/crashpad)
-            if (
-                (
-                    name.lower() in {"windsurf", "electron"}
-                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                    or f"{app_name}/Contents/MacOS/Electron" in exe
-                )
-                and "Helper" not in name
-                and "crashpad" not in name.lower()
-            ):
-                main_windsurf_found = True
-
-            # Track crashpad handlers
-            if "crashpad" in name.lower():
-                create_time = proc.info["create_time"]
-                age_days = (datetime.now(tz=UTC).timestamp() - create_time) / 86400
-                orphaned.append((proc.info["pid"], age_days))
-
-        except psutil.NoSuchProcess, psutil.AccessDenied:
-            pass
-
-    # If no main process but crashpad handlers exist, they're orphaned
-    if not main_windsurf_found and orphaned:
-        pids = [str(pid) for pid, _ in orphaned]
-        oldest_days = max(age for _, age in orphaned)
-
-        # Format age in human-readable format
-        if oldest_days < 1:
-            # Less than a day - show hours/minutes/seconds
-            oldest_seconds = oldest_days * SECONDS_PER_DAY
-            if oldest_seconds < SECONDS_PER_MINUTE:
-                age_str = f"{oldest_seconds:.0f}s"
-            elif oldest_seconds < SECONDS_PER_HOUR:
-                age_str = f"{oldest_seconds / SECONDS_PER_MINUTE:.0f}m"
-            else:
-                hours = int(oldest_seconds / SECONDS_PER_HOUR)
-                minutes = int((oldest_seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
-                age_str = f"{hours}h {minutes}m"
-        else:
-            age_str = f"{oldest_days:.1f} days"
-
-        pids_str = ", ".join(pids[:MAX_DISPLAY_ITEMS]) + (", ..." if len(pids) > MAX_DISPLAY_ITEMS else "")
-        issues.append(f"⚠️  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force")
-
-    # Check for logs directory in extensions (causing package.json error)
-    paths = get_paths()
-    logs_dir = paths.extensions_dir / "logs"
-    if logs_dir.exists():
-        # Try to identify which extension created it
-        culprit = "unknown extension"
-        try:
-            log_files = list(logs_dir.glob("*.log"))
-            if log_files:
-                # Get the name from the first log file
-                culprit = log_files[0].stem  # e.g., "marimo.log" -> "marimo"
-        except OSError:
-            pass  # Can't read logs directory
-
-        issues.append(
-            f"⚠️  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
-            f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
-        )
+    issues.extend(_check_orphaned_crashpad_handlers())
+    issues.extend(_check_extension_logs_dir())
 
     # Check latest log directory
-    log_base = paths.logs_dir
+    log_base = get_paths().logs_dir
     if log_base.exists():
         log_dirs = sorted(log_base.iterdir(), reverse=True)
         if log_dirs:
             latest_log = log_dirs[0]
-
-            # Check main.log for extension host crashes and critical errors
-            main_log = latest_log / "main.log"
-            if main_log.exists():
-                try:
-                    # Only read last 50KB to avoid performance issues on large logs
-                    with main_log.open(encoding="utf-8") as f:
-                        f.seek(0, 2)  # Go to end
-                        file_size = f.tell()
-                        f.seek(max(0, file_size - LOG_TAIL_BYTES))  # Read last 50KB
-                        content = f.read()
-
-                        # Extension host crashes (non-zero exit codes only)
-                        crash_lines = re.findall(
-                            r"Extension host with pid (\d+) exited with code: (\d+)",
-                            content,
-                        )
-                        crashes = [pid for pid, code in crash_lines if code != "0"]
-                        if crashes:
-                            pids_str = ", ".join(crashes[:MAX_DISPLAY_ITEMS]) + (", ..." if len(crashes) > MAX_DISPLAY_ITEMS else "")
-                            issues.append(f"🔴 {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
-
-                        # Update service errors
-                        if "UpdateService error" in content:
-                            issues.append("⚠️  Update service timeouts detected (check NextDNS)")
-
-                        # OOM errors
-                        if "out of memory" in content.lower() or "oom" in content.lower():
-                            issues.append("🔴 Out of memory errors detected")
-
-                        # Renderer crashes
-                        renderer_crashes = content.count("GPU process crashed")
-                        if renderer_crashes > 0:
-                            issues.append(f"⚠️  {renderer_crashes} GPU/renderer crashes detected")
-
-                except OSError, UnicodeDecodeError:
-                    pass  # Can't read or decode main.log
-
-            # Check shared process log for extension errors
-            sharedprocess_log = latest_log / "sharedprocess.log"
-            if sharedprocess_log.exists():
-                try:
-                    with sharedprocess_log.open(encoding="utf-8") as f:
-                        f.seek(0, 2)
-                        file_size = f.tell()
-                        f.seek(max(0, file_size - SHARED_LOG_TAIL_BYTES))
-                        content = f.read()
-
-                        # Extract specific extension errors
-                        error_lines = [
-                            line
-                            for line in content.split("\n")
-                            if "[error]" in line.lower()
-                            # Skip known harmless errors
-                            and "ENOENT" not in line
-                            and "marketplace" not in line
-                            and "logs/package.json" not in line  # Already reported separately
-                        ]
-
-                        # Try to extract extension IDs from errors
-                        extension_errors = {}
-                        for line in error_lines:
-                            # Look for extension IDs in format: publisher.extension-name
-                            ext_match = re.search(r"([a-z0-9-]+\.[a-z0-9-]+)", line.lower())
-                            if ext_match:
-                                ext_id = ext_match.group(1)
-                                extension_errors[ext_id] = extension_errors.get(ext_id, 0) + 1
-
-                        if extension_errors:
-                            # Report top 3 problematic extensions
-                            sorted_exts = sorted(
-                                extension_errors.items(),
-                                key=operator.itemgetter(1),
-                                reverse=True,
-                            )
-                            ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:MAX_DISPLAY_ITEMS]])
-                            issues.append(f"⚠️  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}")
-                        elif len(error_lines) > EXTENSION_ERROR_LINES_THRESHOLD:
-                            # Generic error count if we can't identify extensions
-                            issues.append(f"⚠️  {len(error_lines)} extension errors in shared process")
-
-                except OSError, UnicodeDecodeError:
-                    pass  # Can't read or decode sharedprocess.log
-
-            # Check network errors
-            network_log = latest_log / "network-shared.log"
-            if network_log.exists():
-                try:
-                    with network_log.open(encoding="utf-8") as f:
-                        f.seek(0, 2)
-                        file_size = f.tell()
-                        f.seek(max(0, file_size - SHARED_LOG_TAIL_BYTES))
-                        content = f.read()
-
-                        telemetry_errors = content.count("windsurf-telemetry.codeium.com")
-                        if telemetry_errors > TELEMETRY_ERROR_THRESHOLD:
-                            issues.append(f"⚠️  {telemetry_errors} telemetry connection failures (check NextDNS)")
-                except OSError, UnicodeDecodeError:
-                    pass  # Can't read or decode network-shared.log
+            issues.extend(_check_main_log_issues(latest_log))
+            issues.extend(_check_shared_process_log_issues(latest_log))
+            issues.extend(_check_network_log_issues(latest_log))
 
     return issues
+
+
+def _parse_workspace_from_log_line(line: str) -> WorkspaceInfo | None:
+    """Parse a workspace load event from a log line, or return None."""
+    if "Window will load" not in line or "workspaceUri" not in line:
+        return None
+
+    id_match = re.search(r'"id":"([^"]+)"', line)
+    path_match = re.search(r'"fsPath":"([^"]+)"', line)
+    if not (id_match and path_match):
+        return None
+
+    time_match = re.match(r"^([^ ]+\s+[^ ]+)", line)
+    return WorkspaceInfo(
+        id=id_match.group(1),
+        path=path_match.group(1),
+        exists=Path(path_match.group(1)).exists(),
+        loaded_at=time_match.group(1) if time_match else None,
+    )
 
 
 def get_active_workspaces() -> list[WorkspaceInfo]:
@@ -620,53 +647,26 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
     Returns:
         List of WorkspaceInfo with ID, path, existence status, and load time.
     """
-    workspaces = []
+    workspaces: list[WorkspaceInfo] = []
     log_base = get_paths().logs_dir
 
     if not log_base.exists():
         return workspaces
 
-    # Find most recent log directory
     log_dirs = sorted(log_base.iterdir(), reverse=True)
     if not log_dirs:
         return workspaces
 
-    latest_log = log_dirs[0]
-    main_log = latest_log / "main.log"
-
+    main_log = log_dirs[0] / "main.log"
     if not main_log.exists():
         return workspaces
 
     try:
         with main_log.open(encoding="utf-8") as f:
             for line in f:
-                # Look for workspace load events
-                # Format: "WindsurfWindowsMainManager: Window will load
-                # {"workspaceUri":{"id":"...","configPath":{..."fsPath":"/path/..."...}}}"
-                if "Window will load" in line and "workspaceUri" in line:
-                    # Extract workspace ID and path using regex
-                    id_match = re.search(r'"id":"([^"]+)"', line)
-                    path_match = re.search(r'"fsPath":"([^"]+)"', line)
-                    time_match = re.match(r"^([^ ]+\s+[^ ]+)", line)
-
-                    if id_match and path_match:
-                        workspace_id = id_match.group(1)
-                        workspace_path = path_match.group(1)
-                        loaded_at = time_match.group(1) if time_match else None
-
-                        # Check if path exists
-                        path_exists = Path(workspace_path).exists()
-
-                        # Check if already added (avoid duplicates)
-                        if not any(w.id == workspace_id for w in workspaces):
-                            workspaces.append(
-                                WorkspaceInfo(
-                                    id=workspace_id,
-                                    path=workspace_path,
-                                    exists=path_exists,
-                                    loaded_at=loaded_at,
-                                )
-                            )
+                ws = _parse_workspace_from_log_line(line)
+                if ws and not any(w.id == ws.id for w in workspaces):
+                    workspaces.append(ws)
     except OSError, UnicodeDecodeError:
         pass  # Can't read or parse main.log for workspaces
 

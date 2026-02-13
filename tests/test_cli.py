@@ -613,7 +613,7 @@ class TestCleanupCommandEdgeCases:
 
         mock_paths = MagicMock()
         mock_paths.app_name = "Windsurf.app"
-        mocker.patch("surfmon.config.get_paths", return_value=mock_paths)
+        mocker.patch("surfmon.cli.get_paths", return_value=mock_paths)
 
         mock_proc = MagicMock()
         mock_proc.info = {
@@ -627,7 +627,7 @@ class TestCleanupCommandEdgeCases:
         mock_proc.memory_info.return_value.rss = 50 * 1024 * 1024
         mock_proc.kill.side_effect = psutil.AccessDenied(pid=5678)
 
-        mock_iter = mocker.patch("psutil.process_iter")
+        mock_iter = mocker.patch("surfmon.cli.psutil.process_iter")
         mock_iter.return_value = [mock_proc]
         result = runner.invoke(app, ["cleanup", "--force"])
         assert result.exit_code == 1
