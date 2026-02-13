@@ -17,7 +17,7 @@ import typer
 from . import __version__
 from .compare import compare_reports
 from .config import WindsurfTarget, get_paths, get_target_display_name, set_target
-from .monitor import MonitoringReport, generate_report, save_report_json
+from .monitor import MonitoringReport, generate_report, is_main_windsurf_process, save_report_json
 from .output import (
     CPU_PERCENT_CRITICAL,
     CPU_PERCENT_WARNING,
@@ -987,11 +987,7 @@ def _find_orphaned_crashpad_procs(app_name: str) -> tuple[bool, list[tuple[psuti
             if app_name not in exe and app_name not in cmdline:
                 continue
 
-            if (
-                name.lower() == "windsurf"
-                or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                or ("Windsurf" in name and "Helper" not in name and "crashpad" not in name.lower())
-            ):
+            if is_main_windsurf_process(name, exe, app_name):
                 main_windsurf_found = True
 
             if "crashpad" in name.lower():

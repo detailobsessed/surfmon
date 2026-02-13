@@ -94,6 +94,25 @@ class MonitoringReport:
     pty_info: PtyInfo | None = None
 
 
+def is_main_windsurf_process(name: str, exe: str, app_name: str) -> bool:
+    """Check if a process is the main Windsurf/Electron process (not a helper/crashpad).
+
+    This is the single source of truth for main-process detection, used by:
+    - get_windsurf_processes() to filter orphaned crashpad handlers
+    - _check_orphaned_crashpad_handlers() for issue reporting
+    - cli.py _find_orphaned_crashpad_procs() for the cleanup command
+    """
+    return (
+        (
+            name.lower() in {"windsurf", "electron"}
+            or f"{app_name}/Contents/MacOS/Windsurf" in exe
+            or f"{app_name}/Contents/MacOS/Electron" in exe
+        )
+        and "Helper" not in name
+        and "crashpad" not in name.lower()
+    )
+
+
 def get_windsurf_processes() -> list[psutil.Process]:
     """Find all Windsurf-related processes.
 
@@ -123,16 +142,7 @@ def get_windsurf_processes() -> list[psutil.Process]:
             if app_name in exe or app_name in cmdline:
                 windsurf_procs.append(proc)
 
-                # Check if this is the main Windsurf/Electron process (not a helper/crashpad)
-                if (
-                    (
-                        name.lower() in {"windsurf", "electron"}
-                        or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                        or f"{app_name}/Contents/MacOS/Electron" in exe
-                    )
-                    and "Helper" not in name
-                    and "crashpad" not in name.lower()
-                ):
+                if is_main_windsurf_process(name, exe, app_name):
                     main_windsurf_found = True
 
         except psutil.NoSuchProcess, psutil.AccessDenied:
@@ -465,15 +475,7 @@ def _check_orphaned_crashpad_handlers() -> list[str]:
             if app_name not in exe and app_name not in cmdline:
                 continue
 
-            if (
-                (
-                    name.lower() in {"windsurf", "electron"}
-                    or f"{app_name}/Contents/MacOS/Windsurf" in exe
-                    or f"{app_name}/Contents/MacOS/Electron" in exe
-                )
-                and "Helper" not in name
-                and "crashpad" not in name.lower()
-            ):
+            if is_main_windsurf_process(name, exe, app_name):
                 main_windsurf_found = True
 
             if "crashpad" in name.lower():
