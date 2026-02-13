@@ -9,7 +9,15 @@ from rich.panel import Panel
 from rich.table import Table
 
 __all__ = [
+    "CPU_PERCENT_CRITICAL",
+    "CPU_PERCENT_WARNING",
+    "MB_PER_GB",
+    "PTY_COUNT_CRITICAL",
+    "PTY_COUNT_WARNING",
+    "PTY_USAGE_PERCENT_CRITICAL",
     "TABLE_WIDTH",
+    "WINDSURF_MEM_PERCENT_CRITICAL",
+    "WINDSURF_MEM_PERCENT_WARNING",
     "Live",
     "Table",
     "console",
@@ -21,7 +29,7 @@ __all__ = [
     "save_report_markdown",
 ]
 
-from .config import get_target_display_name
+from .config import get_paths, get_target_display_name
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,6 +39,26 @@ if TYPE_CHECKING:
 console = Console()
 
 TABLE_WIDTH = 90
+
+# Display thresholds for color-coding
+MB_PER_GB = 1024
+MEMORY_PERCENT_CRITICAL = 80
+MEMORY_PERCENT_WARNING = 60
+WINDSURF_MEM_PERCENT_CRITICAL = 20
+WINDSURF_MEM_PERCENT_WARNING = 10
+CPU_PERCENT_CRITICAL = 50
+CPU_PERCENT_WARNING = 20
+PTY_COUNT_CRITICAL = 200
+PTY_COUNT_WARNING = 50
+PTY_USAGE_PERCENT_CRITICAL = 80
+PROCESS_MEMORY_HIGH_MB = 1000
+PROCESS_MEMORY_MEDIUM_MB = 500
+LS_MEMORY_HIGH_MB = 1000
+LS_MEMORY_MEDIUM_MB = 200
+LS_CPU_HIGH = 5
+LS_CPU_MEDIUM = 2
+WORKSPACE_ID_MAX_LEN = 20
+WORKSPACE_ID_TRUNCATE_LEN = 18
 
 
 def make_table(title: str | None = None, **kwargs: Any) -> Table:
@@ -85,7 +113,13 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     sys_table.add_row("Total Memory", f"{report.system.total_memory_gb:.1f} GB")
     sys_table.add_row("Available Memory", f"{report.system.available_memory_gb:.1f} GB")
 
-    mem_color = "red" if report.system.memory_percent > 80 else "yellow" if report.system.memory_percent > 60 else "green"
+    mem_color = (
+        "red"
+        if report.system.memory_percent > MEMORY_PERCENT_CRITICAL
+        else "yellow"
+        if report.system.memory_percent > MEMORY_PERCENT_WARNING
+        else "green"
+    )
     sys_table.add_row(
         "Memory Usage",
         f"[{mem_color}]{report.system.memory_percent:.1f}%[/{mem_color}]",
@@ -104,12 +138,18 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     ws_table.add_row("Process Count", str(report.process_count))
 
-    mem_gb = report.total_windsurf_memory_mb / 1024
+    mem_gb = report.total_windsurf_memory_mb / MB_PER_GB
     mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
-    mem_color = "red" if mem_pct > 20 else "yellow" if mem_pct > 10 else "green"
+    mem_color = "red" if mem_pct > WINDSURF_MEM_PERCENT_CRITICAL else "yellow" if mem_pct > WINDSURF_MEM_PERCENT_WARNING else "green"
     ws_table.add_row("Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]")
 
-    cpu_color = "red" if report.total_windsurf_cpu_percent > 50 else "yellow" if report.total_windsurf_cpu_percent > 20 else "green"
+    cpu_color = (
+        "red"
+        if report.total_windsurf_cpu_percent > CPU_PERCENT_CRITICAL
+        else "yellow"
+        if report.total_windsurf_cpu_percent > CPU_PERCENT_WARNING
+        else "green"
+    )
     ws_table.add_row(
         "Total CPU",
         f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]",
@@ -125,7 +165,13 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     if report.pty_info:
         pty = report.pty_info
         usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
-        pty_color = "red" if pty.windsurf_pty_count >= 200 or usage_pct >= 80 else "yellow" if pty.windsurf_pty_count >= 50 else "green"
+        pty_color = (
+            "red"
+            if pty.windsurf_pty_count >= PTY_COUNT_CRITICAL or usage_pct >= PTY_USAGE_PERCENT_CRITICAL
+            else "yellow"
+            if pty.windsurf_pty_count >= PTY_COUNT_WARNING
+            else "green"
+        )
         ws_table.add_row(
             "PTYs Held",
             f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim](system: {pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
@@ -146,7 +192,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
             exists_icon = "✓" if ws.exists else "❌"
             exists_color = "green" if ws.exists else "red"
             workspace_table.add_row(
-                (ws.id[:18] + "..") if len(ws.id) > 20 else ws.id,
+                (ws.id[:WORKSPACE_ID_TRUNCATE_LEN] + "..") if len(ws.id) > WORKSPACE_ID_MAX_LEN else ws.id,
                 ws.path,
                 f"[{exists_color}]{exists_icon}[/{exists_color}]",
                 ws.loaded_at or "Unknown",
@@ -168,7 +214,9 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
         for proc in top_procs:
             mem_str = f"{proc.memory_mb:.0f} MB"
-            mem_style = "red" if proc.memory_mb > 1000 else "yellow" if proc.memory_mb > 500 else "green"
+            mem_style = (
+                "red" if proc.memory_mb > PROCESS_MEMORY_HIGH_MB else "yellow" if proc.memory_mb > PROCESS_MEMORY_MEDIUM_MB else "green"
+            )
             proc_table.add_row(
                 str(proc.pid),
                 proc.name[:40],
@@ -193,8 +241,8 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
             # Just use it directly
             server_type = ls.cmdline
 
-            mem_style = "red" if ls.memory_mb > 1000 else "yellow" if ls.memory_mb > 200 else "green"
-            cpu_style = "red" if ls.cpu_percent > 5 else "yellow" if ls.cpu_percent > 2 else "green"
+            mem_style = "red" if ls.memory_mb > LS_MEMORY_HIGH_MB else "yellow" if ls.memory_mb > LS_MEMORY_MEDIUM_MB else "green"
+            cpu_style = "red" if ls.cpu_percent > LS_CPU_HIGH else "yellow" if ls.cpu_percent > LS_CPU_MEDIUM else "green"
 
             ls_table.add_row(
                 str(ls.pid),
@@ -238,8 +286,6 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
         console.print()
 
         # Config paths - use configured paths for current target
-        from .config import get_paths
-
         paths = get_paths()
         console.print("[cyan]Configuration Paths:[/cyan]")
         console.print(f"  Extensions: {paths.extensions_dir} ({report.extensions_count} installed)")

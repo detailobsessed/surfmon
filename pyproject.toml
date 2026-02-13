@@ -97,11 +97,13 @@ select = [
     "I",    # isort - import sorting
 
     # Code quality
+    "A",    # flake8-builtins - prevent shadowing builtins (id, type, list, etc.)
     "B",    # flake8-bugbear - common bugs and design issues
     "SIM",  # flake8-simplify - simplify code
     "C4",   # flake8-comprehensions - better comprehensions
     "PIE",  # flake8-pie - misc improvements
     "RET",  # flake8-return - return statement issues
+    "RSE",  # flake8-raise - raise best practices
     "RUF",  # Ruff-specific rules
     "FA",   # flake8-future-annotations
     "ISC",  # flake8-implicit-str-concat - catch missing commas
@@ -110,6 +112,22 @@ select = [
     "TC",   # flake8-type-checking - TYPE_CHECKING imports
     "PTH",  # flake8-use-pathlib - prefer pathlib over os.path
     "FURB", # refurb - modernize and simplify code
+    "FLY",  # flynt - prefer f-strings over .format() and %
+
+    # Naming
+    # "N",  # pep8-naming - PEP 8 naming conventions (enable when ready)
+
+    # Datetime
+    "DTZ",  # flake8-datetimez - enforce timezone-aware datetimes
+
+    # Error messages
+    "EM",   # flake8-errmsg - no string literals in exceptions
+
+    # Pylint
+    "PLC",  # pylint conventions
+    "PLE",  # pylint errors
+    "PLR",  # pylint refactor (too-many-args, too-many-branches, etc.)
+    "PLW",  # pylint warnings
 
     # Performance
     "PERF", # Perflint - performance anti-patterns
@@ -130,13 +148,32 @@ select = [
 
     # Print statements (use logging instead)
     "T20",  # flake8-print
-
-    # Encoding
-    "PLW1514",  # unspecified-encoding - require encoding in open()
+]
+ignore = [
+    # TODO(#22): Remove after refactoring oversized functions to meet pylint defaults
+    "PLR0912",  # too-many-branches (12 max)
+    "PLR0914",  # too-many-locals (15 max)
+    "PLR0915",  # too-many-statements (50 max)
+    "PLR1702",  # too-many-nested-blocks (5 max)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S603", "S607", "S701", "T201"]  # Allow assert, subprocess, jinja2, print in tests
+"src/surfmon/cli.py" = [
+    "PLC0415",    # Lazy matplotlib import — heavy library (~1s) only needed for --plot
+]
+"tests/**" = [
+    "S101", "S603", "S607", "S701",  # Allow assert, subprocess, jinja2 in tests
+    "T201",       # Allow print in tests
+    "PLR6301",    # Test methods don't use self (pytest classes)
+    "PLR2004",    # Magic values in assertions are fine
+    "PLC0415",    # Lazy imports in test functions are idiomatic
+    "PLC2701",    # Private name imports for testing internals
+    "ARG002",     # Unused method arguments (fixtures)
+    "DTZ005",     # Naive datetime in tests is fine
+]
+
+[tool.ruff.lint.pylint]
+# All values are pylint defaults — do not inflate to hide violations.
 
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
