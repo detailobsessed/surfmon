@@ -49,6 +49,10 @@ ANALYZE_MEM_CHANGE_GROWTH_GB = 0.2
 MEM_DIFF_SIGNIFICANT_GB = 0.01
 CPU_DIFF_SIGNIFICANT = 0.5
 
+# Default directories for reports (absolute, works when installed as uv tool)
+DEFAULT_REPORTS_DIR = Path.home() / ".surfmon" / "reports"
+DEFAULT_WATCH_DIR = DEFAULT_REPORTS_DIR / "watch"
+
 
 def version_callback(value: bool) -> None:
     """Print version and exit."""
@@ -291,23 +295,36 @@ def check(
         show_verbose = verbose or save or bool(json_path) or bool(markdown_path)
         display_report(report, verbose=show_verbose)
 
-        # Handle --save flag (auto-generate filenames)
+        # Handle --save flag (auto-generate filenames under ~/.surfmon/reports/)
         if save:
+            save_dir = DEFAULT_REPORTS_DIR
+            try:
+                save_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                console.print(f"[red]Error: Cannot create reports directory: {save_dir}[/red]")
+                console.print(f"[red]  {e}[/red]")
+                raise typer.Exit(code=1) from e
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_path = Path(f"surfmon-{timestamp}.json")
-            markdown_path = Path(f"surfmon-{timestamp}.md")
+            json_path = save_dir / f"surfmon-{timestamp}.json"
+            markdown_path = save_dir / f"surfmon-{timestamp}.md"
 
         # Show saved file paths
         if json_path or markdown_path:
             console.print()
             if json_path:
                 json_path = json_path.resolve()  # Convert to absolute path
-                save_report_json(report, json_path)
-                console.print(f"[green]✓ JSON report saved to {json_path}[/green]")
+                try:
+                    save_report_json(report, json_path)
+                    console.print(f"[green]✓ JSON report saved to {json_path}[/green]")
+                except OSError as e:
+                    console.print(f"[red]Error: Cannot save JSON report to {json_path}: {e}[/red]")
             if markdown_path:
                 markdown_path = markdown_path.resolve()  # Convert to absolute path
-                save_report_markdown(report, markdown_path)
-                console.print(f"[green]✓ Markdown report saved to {markdown_path}[/green]")
+                try:
+                    save_report_markdown(report, markdown_path)
+                    console.print(f"[green]✓ Markdown report saved to {markdown_path}[/green]")
+                except OSError as e:
+                    console.print(f"[red]Error: Cannot save Markdown report to {markdown_path}: {e}[/red]")
 
         # Exit with non-zero if critical issues detected
         if report.log_issues:
@@ -325,7 +342,7 @@ def watch(
     output_dir: Annotated[
         Path,
         typer.Option("--output", "-o", help="Output directory for periodic reports"),
-    ] = Path("../reports/watch"),
+    ] = DEFAULT_WATCH_DIR,
     save_interval: Annotated[int, typer.Option("--save-interval", "-s", help="Save full report every N seconds")] = 300,
     max_reports: Annotated[int, typer.Option("--max", "-n", help="Stop after N checks (0 = infinite)")] = 0,
 ) -> None:
@@ -342,7 +359,13 @@ def watch(
     # Create session-specific subdirectory
     session_timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
     session_dir = output_dir / session_timestamp
-    session_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        session_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        console.print(f"[red]Error: Cannot create output directory: {session_dir}[/red]")
+        console.print(f"[red]  {e}[/red]")
+        console.print("[dim]Use --output to specify a writable directory.[/dim]")
+        raise typer.Exit(code=1) from e
 
     target_name = get_target_display_name()
     console.print(f"[cyan]Starting continuous monitoring of {target_name}...[/cyan]")
@@ -379,8 +402,11 @@ def watch(
                 current_time = time.time()
                 if current_time - last_save >= save_interval:
                     timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-                    json_path = session_dir / f"{timestamp}.json"
-                    save_report_json(report, json_path)
+                    report_path = session_dir / f"{timestamp}.json"
+                    try:
+                        save_report_json(report, report_path)
+                    except OSError as e:
+                        console.print(f"\n[yellow]Warning: Could not save report: {e}[/yellow]")
                     last_save = current_time
 
                 prev_report = report
@@ -944,8 +970,11 @@ def _generate_analysis_plots(reports: list[dict], output: Path | None) -> None:
     plt.tight_layout()
 
     if output:
-        plt.savefig(output, dpi=150, bbox_inches="tight")
-        console.print(f"\n[green]✓ Plot saved to {output}[/green]")
+        try:
+            plt.savefig(output, dpi=150, bbox_inches="tight")
+            console.print(f"\n[green]✓ Plot saved to {output}[/green]")
+        except OSError as e:
+            console.print(f"\n[red]Error: Cannot save plot to {output}: {e}[/red]")
     else:
         plt.show()
 
