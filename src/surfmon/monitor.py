@@ -758,7 +758,7 @@ def generate_report() -> MonitoringReport:
         usage_pct = (pty_info.system_pty_used / pty_info.system_pty_limit) * 100 if pty_info.system_pty_limit > 0 else 0
         if pty_info.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
             log_issues.append(
-                f"🔴 CRITICAL: Windsurf is holding {pty_info.windsurf_pty_count} PTYs "
+                f"🔴 CRITICAL: Windsurf processes are holding {pty_info.windsurf_pty_count} PTYs "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
                 f"- Fix: Restart Windsurf to release leaked PTYs"
             )
@@ -766,7 +766,7 @@ def generate_report() -> MonitoringReport:
             log_issues.append(
                 f"⚠️  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}) "
-                f"- Monitor closely, restart Windsurf if it keeps growing"
+                f"- Monitor closely, restart all Windsurf instances if it keeps growing"
             )
 
     return MonitoringReport(
