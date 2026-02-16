@@ -1054,6 +1054,220 @@ class TestSurfmonProcessExclusion:
         assert proc2 not in result
 
 
+class TestOrphanedWorkspaceDetection:
+    """Tests for _check_orphaned_workspace_proc."""
+
+    def test_detects_orphaned_workspace(self, tmp_path, mocker):
+        """Should detect language server indexing a non-existent workspace."""
+        from surfmon.monitor import _check_orphaned_workspace_proc
+
+        proc = Mock()
+        proc.memory_info.return_value = Mock(rss=500 * 1024 * 1024)  # 500 MB
+
+        cmdline = "language_server_macos_arm --workspace_id file_Users_test_nonexistent_project --database_dir /tmp/fake_db_dir"
+
+        result = _check_orphaned_workspace_proc(cmdline, proc)
+
+        assert result is not None
+        assert "CRITICAL" in result
+        assert "non-existent workspace" in result
+
+    def test_returns_none_for_non_language_server(self):
+        """Should return None for non-language-server processes."""
+        from surfmon.monitor import _check_orphaned_workspace_proc
+
+        result = _check_orphaned_workspace_proc("some other process", Mock())
+
+        assert result is None
+
+    def test_returns_none_when_missing_flags(self):
+        """Should return None when workspace_id or database_dir is missing."""
+        from surfmon.monitor import _check_orphaned_workspace_proc
+
+        cmdline = "language_server_macos_arm --workspace_id file_Users_test"
+        result = _check_orphaned_workspace_proc(cmdline, Mock())
+
+        assert result is None
+
+    def test_returns_none_when_workspace_exists(self, mocker):
+        """Should return None when workspace path exists."""
+        from surfmon.monitor import _check_orphaned_workspace_proc
+
+        # Mock Path.exists to return True so it works cross-platform (no /tmp on Windows)
+        mocker.patch.object(Path, "exists", return_value=True)
+        cmdline = "language_server_macos_arm --workspace_id file_tmp --database_dir /tmp/db"
+
+        result = _check_orphaned_workspace_proc(cmdline, Mock())
+
+        assert result is None
+
+    def test_includes_db_size_when_db_exists(self, tmp_path, mocker):
+        """Should include database size in issue when db directory exists."""
+        from surfmon.monitor import _check_orphaned_workspace_proc
+
+        proc = Mock()
+        proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)
+
+        db_dir = tmp_path / "db"
+        db_dir.mkdir()
+        (db_dir / "data.bin").write_bytes(b"x" * 1024)
+
+        cmdline = f"language_server_macos_arm --workspace_id file_Users_test_nonexistent --database_dir {db_dir}"
+
+        result = _check_orphaned_workspace_proc(cmdline, proc)
+
+        assert result is not None
+        assert "CRITICAL" in result
+
+
+class TestWorkspaceParsingEdgeCases:
+    """Tests for _parse_workspace_from_log_line edge cases."""
+
+    def test_returns_none_for_unrelated_line(self):
+        """Should return None for lines without workspace info."""
+        from surfmon.monitor import _parse_workspace_from_log_line
+
+        result = _parse_workspace_from_log_line("some random log line")
+
+        assert result is None
+
+    def test_returns_none_for_incomplete_match(self):
+        """Should return None when id or path can't be extracted."""
+        from surfmon.monitor import _parse_workspace_from_log_line
+
+        line = 'Window will load {"workspaceUri": {"incomplete": true}}'
+        result = _parse_workspace_from_log_line(line)
+
+        assert result is None
+
+    def test_empty_log_dirs(self, tmp_path, monkeypatch):
+        """Should return empty list when log dir exists but has no subdirs."""
+        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base.mkdir(parents=True)
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        result = get_active_workspaces()
+
+        assert result == []
+
+    def test_no_main_log(self, tmp_path, monkeypatch):
+        """Should return empty list when log subdir exists but has no main.log."""
+        log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204T123456"
+        log_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        result = get_active_workspaces()
+
+        assert result == []
+
+
+class TestCrashpadFilterException:
+    """Tests for crashpad filter exception handling."""
+
+    def test_handles_nosuchprocess_during_filter(self, mocker):
+        """Should handle NoSuchProcess during crashpad filtering."""
+        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+
+        # Helper process (not main, not crashpad) but raises during name() check
+        proc1 = Mock()
+        proc1.info = {
+            "pid": 1,
+            "name": "Windsurf Helper",
+            "cmdline": ["/Applications/Windsurf.app/Helper"],
+            "exe": "/Applications/Windsurf.app/Helper",
+        }
+        proc1.name.side_effect = psutil.NoSuchProcess(pid=1)
+
+        mock_proc_iter.return_value = [proc1]
+
+        result = get_windsurf_processes()
+
+        assert len(result) == 0
+
+
+class TestLaunchCountOSError:
+    """Tests for launch count OSError handling."""
+
+    def test_handles_os_error_reading_logs(self, tmp_path, monkeypatch, mocker):
+        """Should return 0 when logs directory can't be read."""
+        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base.mkdir(parents=True)
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        mocker.patch.object(Path, "iterdir", side_effect=OSError("Permission denied"))
+
+        result = count_windsurf_launches_today()
+
+        assert result == 0
+
+
+class TestCPUSamplingExceptions:
+    """Tests for CPU sampling exception handling in generate_report."""
+
+    def test_handles_nosuchprocess_during_cpu_init(self, mocker):
+        """Should handle NoSuchProcess during initial CPU sampling."""
+        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
+        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
+        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
+        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
+        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mocker.patch("surfmon.monitor.time.sleep")
+
+        mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
+        mock_mcp.return_value = []
+        mock_ext_count.return_value = 0
+        mock_issues.return_value = []
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=0, system_pty_limit=511, system_pty_used=0)
+
+        # Process that fails during cpu_percent() init
+        proc = Mock(spec=psutil.Process)
+        proc.pid = 999
+        proc.cpu_percent.side_effect = psutil.NoSuchProcess(pid=999)
+        mock_procs.return_value = [proc]
+
+        # get_process_info will also fail since proc is gone
+        mocker.patch("surfmon.monitor.get_process_info", return_value=None)
+
+        report = generate_report()
+
+        assert report.process_count == 0
+
+    def test_handles_nosuchprocess_during_cpu_final(self, mocker):
+        """Should handle NoSuchProcess during final CPU sampling."""
+        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
+        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
+        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
+        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
+        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
+        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
+        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
+        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mocker.patch("surfmon.monitor.time.sleep")
+
+        mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
+        mock_mcp.return_value = []
+        mock_ext_count.return_value = 0
+        mock_issues.return_value = []
+        mock_pty.return_value = PtyInfo(windsurf_pty_count=0, system_pty_limit=511, system_pty_used=0)
+
+        # Process that succeeds on first cpu_percent() but fails on second
+        proc = Mock(spec=psutil.Process)
+        proc.pid = 999
+        proc.cpu_percent.side_effect = [0.0, psutil.NoSuchProcess(pid=999)]
+        mock_procs.return_value = [proc]
+
+        mocker.patch("surfmon.monitor.get_process_info", return_value=None)
+
+        report = generate_report()
+
+        assert report.process_count == 0
+
+
 class TestLaunchCountEdgeCases:
     """Tests for launch counting edge cases."""
 

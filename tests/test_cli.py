@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -47,8 +48,8 @@ class TestCheckCommand:
 
     def test_check_with_save_flag(self, mock_generate_report, mock_display_report, tmp_path, monkeypatch, mocker):
         """Should save both JSON and Markdown with --save flag and enable verbose."""
-        # Change to temp directory to avoid cluttering repo
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
 
         mock_json = mocker.patch("surfmon.cli.save_report_json")
         mock_md = mocker.patch("surfmon.cli.save_report_markdown")
@@ -60,20 +61,23 @@ class TestCheckCommand:
         assert mock_json.called
         assert mock_md.called
 
-        # Check that paths were auto-generated with timestamp
+        # Check that paths were auto-generated under ~/.surfmon/reports/
         json_path = mock_json.call_args[0][1]
         md_path = mock_md.call_args[0][1]
         assert json_path.name.startswith("surfmon-")
         assert json_path.name.endswith(".json")
         assert md_path.name.startswith("surfmon-")
         assert md_path.name.endswith(".md")
+        assert ".surfmon" in str(json_path)
+        assert "reports" in str(json_path)
 
         # Check that verbose was enabled
         assert mock_display.call_args[1]["verbose"] is True
 
     def test_check_with_save_short_form(self, mock_generate_report, mock_display_report, tmp_path, monkeypatch, mocker):
         """Should save both reports with -s short form."""
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
 
         mock_json = mocker.patch("surfmon.cli.save_report_json")
         mock_md = mocker.patch("surfmon.cli.save_report_markdown")
@@ -83,6 +87,16 @@ class TestCheckCommand:
         assert result.exit_code == 0
         assert mock_json.called
         assert mock_md.called
+
+    def test_check_save_handles_write_error(self, mock_generate_report, mock_display_report, tmp_path, mocker):
+        """Should handle write errors gracefully when saving reports."""
+        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
+        mocker.patch("surfmon.cli.save_report_json", side_effect=OSError("Permission denied"))
+        mocker.patch("surfmon.cli.save_report_markdown")
+
+        result = runner.invoke(app, ["check", "--save"])
+
+        assert "Cannot save JSON report" in result.stdout
 
     def test_check_with_explicit_json_path(
         self,
@@ -277,6 +291,29 @@ class TestCleanupCommand:
         assert result.exit_code == 0
         assert "Successfully killed" in result.stdout
         mock_proc.kill.assert_called_once()
+
+
+class TestCheckSaveDirError:
+    """Tests for check --save directory creation failure."""
+
+    def test_check_save_mkdir_failure(self, mock_generate_report, mock_display_report, mocker):
+        """Should exit with error when reports directory cannot be created."""
+        mocker.patch.object(Path, "mkdir", side_effect=OSError("Permission denied"))
+
+        result = runner.invoke(app, ["check", "--save"])
+
+        assert result.exit_code == 1
+        assert "Cannot create reports directory" in result.stdout
+
+    def test_check_md_write_error(self, mock_generate_report, mock_display_report, tmp_path, mocker):
+        """Should handle markdown write error gracefully."""
+        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
+        mocker.patch("surfmon.cli.save_report_json")
+        mocker.patch("surfmon.cli.save_report_markdown", side_effect=OSError("Disk full"))
+
+        result = runner.invoke(app, ["check", "--save"])
+
+        assert "Cannot save Markdown report" in result.stdout
 
 
 class TestPruneCommand:
@@ -495,6 +532,24 @@ class TestWatchCommand:
         # Should exit gracefully
         assert result.exit_code == 0 or "Interrupted" in result.stdout or "stopped" in result.stdout.lower()
 
+    def test_watch_handles_unwritable_output_dir(
+        self,
+        mock_generate_report,
+        mocker,
+    ):
+        """Should exit with error when output directory cannot be created."""
+        mocker.patch.object(Path, "mkdir", side_effect=OSError("Permission denied"))
+        result = runner.invoke(app, ["watch", "--output", "unwritable_dir", "--max", "1"])
+        assert result.exit_code == 1
+        assert "Cannot create output directory" in result.stdout
+
+    def test_watch_default_output_dir_is_absolute(self):
+        """Default output dir should be under ~/.surfmon, not a relative path."""
+        from surfmon.cli import DEFAULT_WATCH_DIR
+
+        assert DEFAULT_WATCH_DIR.is_absolute(), f"Default output_dir should be absolute, got: {DEFAULT_WATCH_DIR}"
+        assert ".surfmon" in str(DEFAULT_WATCH_DIR)
+
 
 class TestCreateSummaryTable:
     """Tests for create_summary_table function."""
@@ -655,6 +710,31 @@ class TestPruneCommandEdgeCases:
         result = runner.invoke(app, ["prune", str(tmp_path)])
         assert result.exit_code == 0
         assert "No duplicate" in result.stdout
+
+
+class TestPruneNoKeepLatest:
+    """Tests for prune --no-keep-latest option."""
+
+    def test_prune_no_keep_latest(self, tmp_path):
+        """Should keep the oldest report when --no-keep-latest is set."""
+        for i in range(3):
+            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
+            (tmp_path / f"report_2025010{i + 1}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        result = runner.invoke(app, ["prune", str(tmp_path), "--no-keep-latest"], input="y\n")
+        assert result.exit_code == 0
+
+    def test_prune_delete_failure(self, tmp_path, mocker):
+        """Should report delete failures gracefully."""
+        for i in range(3):
+            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
+            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+
+        mocker.patch("surfmon.cli._delete_files", return_value=(0, [("report_0.json", "Permission denied")]))
+
+        result = runner.invoke(app, ["prune", str(tmp_path)], input="y\n")
+        assert result.exit_code == 1
+        assert "Failed to delete" in result.stdout
 
 
 class TestAnalyzeCommandEdgeCases:

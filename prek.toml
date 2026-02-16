@@ -1,5 +1,5 @@
 default_stages = ["pre-commit"]
-minimum_prek_version = "0.3.2"
+minimum_prek_version = "0.3.3"
 # All available: commit-msg, post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-merge-commit, pre-push, pre-rebase, prepare-commit-msg
 default_install_hook_types = ["commit-msg", "post-checkout", "pre-commit", "pre-push"]
 
@@ -50,7 +50,7 @@ hooks = [{ id = "shellcheck", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"
-rev = "v1.7.10"  # prek autoupdate will fill this
+rev = "v1.7.11"  # prek autoupdate will fill this
 hooks = [{ id = "actionlint", priority = 1 }]
 
 [[repos]]
@@ -65,7 +65,7 @@ hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
-rev = "nightly"  # lychee tags nightly as latest; prek autoupdate may switch to it
+rev = "lychee-v0.23.0"  # lychee tags nightly as latest; prek autoupdate may switch to it
 hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1, types_or = ["markdown", "html", "rst", "yaml"] }]
 
 [[repos]]
