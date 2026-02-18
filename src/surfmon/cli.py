@@ -753,14 +753,14 @@ def _display_analysis_summary(reports: list[dict]) -> None:
 
     console.print("[bold cyan]Analysis:[/bold cyan]")
     if mem_change > ANALYZE_MEM_CHANGE_LEAK_GB:
-        console.print(f"  [red]⚠️  POTENTIAL MEMORY LEAK: {mem_change:.2f} GB growth[/red]")
+        console.print(f"  [red]⚠  POTENTIAL MEMORY LEAK: {mem_change:.2f} GB growth[/red]")
     elif mem_change > ANALYZE_MEM_CHANGE_GROWTH_GB:
-        console.print(f"  [yellow]⚠️  Memory growth: {mem_change:.2f} GB[/yellow]")
+        console.print(f"  [yellow]⚠  Memory growth: {mem_change:.2f} GB[/yellow]")
     else:
         console.print(f"  [green]✓ Memory stable (change: {mem_change:+.2f} GB)[/green]")
 
     if proc_change > ANALYZE_PROC_CHANGE_SIGNIFICANT:
-        console.print(f"  [yellow]⚠️  Process count increased by {proc_change}[/yellow]")
+        console.print(f"  [yellow]⚠  Process count increased by {proc_change}[/yellow]")
     elif proc_change < 0:
         console.print(f"  [green]✓ Process count decreased by {abs(proc_change)}[/green]")
 
