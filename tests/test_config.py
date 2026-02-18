@@ -6,6 +6,7 @@ import psutil
 import pytest
 
 from surfmon.config import (
+    TargetNotSetError,
     WindsurfTarget,
     _detect_running_target,
     get_target,
@@ -38,6 +39,19 @@ class TestDetectRunningTarget:
 
         assert result == WindsurfTarget.NEXT
 
+    def test_detects_insiders_when_running(self, mocker):
+        """Should detect Windsurf Insiders from process exe path."""
+        mock_proc = Mock()
+        mock_proc.info = {
+            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
+            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+        }
+        mocker.patch("psutil.process_iter", return_value=[mock_proc])
+
+        result = _detect_running_target()
+
+        assert result == WindsurfTarget.INSIDERS
+
     def test_detects_stable_when_running(self, mocker):
         """Should detect Windsurf Stable from process exe path."""
         mock_proc = Mock()
@@ -64,6 +78,24 @@ class TestDetectRunningTarget:
             "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
         }
         mocker.patch("psutil.process_iter", return_value=[stable_proc, next_proc])
+
+        result = _detect_running_target()
+
+        assert result == WindsurfTarget.NEXT
+
+    def test_prefers_next_when_next_and_insiders_running(self, mocker):
+        """Should prefer NEXT over INSIDERS when multiple are running."""
+        insiders_proc = Mock()
+        insiders_proc.info = {
+            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
+            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+        }
+        next_proc = Mock()
+        next_proc.info = {
+            "exe": "/Applications/Windsurf - Next.app/Contents/MacOS/Electron",
+            "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
+        }
+        mocker.patch("psutil.process_iter", return_value=[insiders_proc, next_proc])
 
         result = _detect_running_target()
 
@@ -117,6 +149,27 @@ class TestDetectRunningTarget:
 
         assert result is None
 
+    def test_ignores_orphaned_crashpad_handler(self, mocker):
+        """Should ignore crashpad handlers so orphaned ones don't influence detection."""
+        crashpad_proc = Mock()
+        crashpad_proc.info = {
+            "exe": "/Applications/Windsurf - Next.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler",
+            "cmdline": [
+                "/Applications/Windsurf - Next.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler",
+                "--no-rate-limit",
+            ],
+        }
+        insiders_proc = Mock()
+        insiders_proc.info = {
+            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
+            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+        }
+        mocker.patch("psutil.process_iter", return_value=[crashpad_proc, insiders_proc])
+
+        result = _detect_running_target()
+
+        assert result == WindsurfTarget.INSIDERS
+
     def test_detects_from_cmdline(self, mocker):
         """Should detect target from cmdline when exe is empty."""
         helper_path = (
@@ -137,52 +190,44 @@ class TestDetectRunningTarget:
 
 
 class TestGetTarget:
-    """Tests for get_target with auto-detection fallback."""
+    """Tests for get_target with explicit target requirement."""
 
     def test_programmatic_override_takes_priority(self, mocker):
         """Programmatic set_target should override everything."""
         mocker.patch("surfmon.config.config", return_value="next")
-        mocker.patch("surfmon.config._detect_running_target", return_value=WindsurfTarget.STABLE)
 
         set_target(WindsurfTarget.STABLE)
         result = get_target()
 
         assert result == WindsurfTarget.STABLE
 
-    def test_env_var_next_overrides_detection(self, mocker):
-        """Explicit SURFMON_TARGET=next should override auto-detection."""
+    def test_env_var_next(self, mocker):
+        """Explicit SURFMON_TARGET=next should work."""
         mocker.patch("surfmon.config.config", return_value="next")
-        mock_detect = mocker.patch("surfmon.config._detect_running_target")
 
         result = get_target()
 
         assert result == WindsurfTarget.NEXT
-        mock_detect.assert_not_called()
 
-    def test_env_var_stable_overrides_detection(self, mocker):
-        """Explicit SURFMON_TARGET=stable should override auto-detection."""
+    def test_env_var_insiders(self, mocker):
+        """Explicit SURFMON_TARGET=insiders should work."""
+        mocker.patch("surfmon.config.config", return_value="insiders")
+
+        result = get_target()
+
+        assert result == WindsurfTarget.INSIDERS
+
+    def test_env_var_stable(self, mocker):
+        """Explicit SURFMON_TARGET=stable should work."""
         mocker.patch("surfmon.config.config", return_value="stable")
-        mock_detect = mocker.patch("surfmon.config._detect_running_target")
 
         result = get_target()
 
         assert result == WindsurfTarget.STABLE
-        mock_detect.assert_not_called()
 
-    def test_auto_detects_when_no_env_var(self, mocker):
-        """Should auto-detect target when SURFMON_TARGET is not set."""
+    def test_raises_when_no_target_configured(self, mocker):
+        """Should raise TargetNotSetError when no target is set."""
         mocker.patch("surfmon.config.config", return_value="")
-        mocker.patch("surfmon.config._detect_running_target", return_value=WindsurfTarget.NEXT)
 
-        result = get_target()
-
-        assert result == WindsurfTarget.NEXT
-
-    def test_falls_back_to_stable_when_nothing_detected(self, mocker):
-        """Should default to STABLE when no env var and no processes detected."""
-        mocker.patch("surfmon.config.config", return_value="")
-        mocker.patch("surfmon.config._detect_running_target", return_value=None)
-
-        result = get_target()
-
-        assert result == WindsurfTarget.STABLE
+        with pytest.raises(TargetNotSetError):
+            get_target()

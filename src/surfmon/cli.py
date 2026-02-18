@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import signal
 import time
 from collections import defaultdict
@@ -14,7 +15,7 @@ import typer
 
 from . import __version__
 from .compare import compare_reports
-from .config import WindsurfTarget, get_paths, get_target_display_name, set_target
+from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target_display_name, set_target
 from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
@@ -88,17 +89,31 @@ def main_callback(
 _state: dict[str, bool] = {"stop_monitoring": False}
 
 
+_TARGET_CHOICES = {"stable": WindsurfTarget.STABLE, "next": WindsurfTarget.NEXT, "insiders": WindsurfTarget.INSIDERS}
+
+
 def target_callback(value: str | None) -> str | None:
     """Set the Windsurf target based on CLI option."""
     if value is not None:
-        if value.lower() == "next":
-            set_target(WindsurfTarget.NEXT)
-        elif value.lower() == "stable":
-            set_target(WindsurfTarget.STABLE)
-        else:
-            msg = f"Invalid target: {value}. Use 'stable' or 'next'."
+        target = _TARGET_CHOICES.get(value.lower())
+        if target is None:
+            msg = f"Invalid target: {value}. Use 'stable', 'next', or 'insiders'."
             raise typer.BadParameter(msg)
+        set_target(target)
     return value
+
+
+def _require_target() -> None:
+    """Abort with a helpful message if no target has been configured."""
+    try:
+        get_paths()  # triggers TargetNotSetError if unset
+    except TargetNotSetError:
+        console.print(
+            "[red]Error: No Windsurf target specified.[/red]\n"
+            "  Use [cyan]--target (-t)[/cyan] with one of: [green]stable[/green], [green]next[/green], [green]insiders[/green]\n"
+            "  Or set [cyan]SURFMON_TARGET[/cyan] in your environment."
+        )
+        raise typer.Exit(code=1) from None
 
 
 # Global option for target selection
@@ -107,7 +122,7 @@ TargetOption = Annotated[
     typer.Option(
         "--target",
         "-t",
-        help="Windsurf target: 'stable' or 'next' (default: from SURFMON_TARGET env or 'stable')",
+        help="Required. Windsurf target: 'stable', 'next', or 'insiders'. Can also be set via SURFMON_TARGET env var.",
         callback=target_callback,
         is_eager=True,  # Process before other options
     ),
@@ -278,6 +293,7 @@ def check(
     This is the main monitoring command that shows current Windsurf resource usage.
     When using --save, verbose output is automatically enabled for more complete information.
     """
+    _require_target()
     try:
         # Validate flag combinations
         if json_path and str(json_path).startswith("--"):
@@ -353,6 +369,8 @@ def watch(
     Saves periodic JSON reports for historical analysis.
     Each watch session creates a new timestamped folder.
     """
+    _require_target()
+
     # Reset stop flag at start of watch (in case of previous Ctrl+C)
     _state["stop_monitoring"] = False
 
@@ -459,6 +477,7 @@ def cleanup(
     remain running after Windsurf has been closed. These processes
     can accumulate over time and waste system resources.
     """
+    _require_target()
     app_name = get_paths().app_name
     main_windsurf_found, orphaned = _find_orphaned_crashpad_procs(app_name)
 
@@ -679,6 +698,7 @@ def _load_reports(directory: Path) -> list[dict]:
                     "windsurf_processes": data["windsurf_processes"],
                     "extensions_count": data["extensions_count"],
                     "mcp_servers_enabled": data["mcp_servers_enabled"],
+                    "pty_info": data.get("pty_info"),
                 })
         except (json.JSONDecodeError, KeyError) as e:
             console.print(f"[yellow]Warning: Could not parse {report_file.name}: {e}[/yellow]")
@@ -848,33 +868,31 @@ def _plot_memory_charts(axes, timestamps: list, reports: list[dict]) -> None:
 
 
 def _plot_row2_charts(axes, timestamps: list, reports: list[dict]) -> None:
-    """Plot Row 2: Process types, swap usage, language servers & extensions."""
+    """Plot Row 2: Process types, PTY usage, language servers & extensions."""
     import matplotlib.dates as mdates
 
     # Process Count by Type
     ax = axes[1, 0]
-    helper_counts, renderer_counts, plugin_counts, main_counts = [], [], [], []
+    proc_types = defaultdict(list)
     for r in reports:
-        procs = r["windsurf_processes"]
-        helper_counts.append(
-            sum(
-                1
-                for p in procs
-                if "Helper" in p["name"] and "Renderer" not in p["name"] and "Plugin" not in p["name"] and "GPU" not in p["name"]
-            )
-        )
-        renderer_counts.append(sum(1 for p in procs if "Renderer" in p["name"]))
-        plugin_counts.append(sum(1 for p in procs if "Plugin" in p["name"]))
-        main_counts.append(sum(1 for p in procs if "Electron" in p["name"] or ("Windsurf" in p["name"] and "Helper" not in p["name"])))
+        type_counts = defaultdict(int)
+        for p in r["windsurf_processes"]:
+            name = simplify_process_name(p["name"])
+            if "Helper" in name:
+                type_counts["Helpers"] += 1
+            elif "crashpad" in name.lower():
+                type_counts["Crashpad"] += 1
+            else:
+                type_counts["Main"] += 1
+        for t in ["Main", "Helpers", "Crashpad"]:
+            proc_types[t].append(type_counts[t])
 
     ax.stackplot(
         timestamps,
-        main_counts,
-        helper_counts,
-        renderer_counts,
-        plugin_counts,
-        labels=["Main", "Helpers", "Renderers", "Plugins"],
-        colors=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"],
+        proc_types["Main"],
+        proc_types["Helpers"],
+        proc_types["Crashpad"],
+        labels=["Main", "Helpers", "Crashpad"],
         alpha=0.7,
     )
     ax.set_ylabel("Process Count", fontsize=10)
@@ -883,18 +901,8 @@ def _plot_row2_charts(axes, timestamps: list, reports: list[dict]) -> None:
     ax.grid(True, alpha=0.3)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
-    # Swap Usage
-    ax = axes[1, 1]
-    swap_used = [r["system"]["swap_used_gb"] for r in reports]
-    swap_total = [r["system"]["swap_total_gb"] for r in reports]
-    ax.plot(timestamps, swap_used, "r-o", linewidth=2, label="Used")
-    ax.axhline(y=swap_total[0], color="gray", linestyle="--", alpha=0.5, label=f"Total: {swap_total[0]:.1f} GB")
-    ax.fill_between(timestamps, 0, swap_used, alpha=0.3, color="red")
-    ax.set_ylabel("Swap (GB)", fontsize=10)
-    ax.set_title("Swap Usage", fontsize=11, fontweight="bold")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    # PTY Usage
+    _plot_pty_chart(axes[1, 1], timestamps, reports)
 
     # Language Servers & Extensions
     ax = axes[1, 2]
@@ -910,6 +918,47 @@ def _plot_row2_charts(axes, timestamps: list, reports: list[dict]) -> None:
     ax.set_title("Language Servers & Extensions", fontsize=11, fontweight="bold")
     lines = line1 + line2
     ax.legend(lines, [line.get_label() for line in lines], loc="upper left", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+
+
+def _plot_pty_chart(ax, timestamps: list, reports: list[dict]) -> None:
+    """Plot PTY usage with Windsurf count and system percentage."""
+    import matplotlib.dates as mdates
+
+    ax2 = ax.twinx()
+
+    pty_infos = [r.get("pty_info") or {} for r in reports]
+    windsurf_pty = [pi.get("windsurf_pty_count", 0) for pi in pty_infos]
+    sys_used = [pi.get("system_pty_used", 0) for pi in pty_infos]
+    sys_limit = [pi.get("system_pty_limit", 0) for pi in pty_infos]
+    sys_pct = [(u / lim * 100) if lim else 0 for u, lim in zip(sys_used, sys_limit, strict=False)]
+
+    ax.plot(timestamps, windsurf_pty, "c-o", linewidth=2, label="Windsurf PTYs")
+    ax2.plot(timestamps, sys_pct, "k--", linewidth=2, label="System PTY %")
+
+    ax.axhline(y=PTY_WARNING_COUNT, color="gold", linestyle=":", alpha=0.8, label=f"Warn: {PTY_WARNING_COUNT}")
+    ax.axhline(y=PTY_CRITICAL_COUNT, color="red", linestyle=":", alpha=0.8, label=f"Crit: {PTY_CRITICAL_COUNT}")
+    ax2.axhline(
+        y=PTY_USAGE_CRITICAL_PERCENT,
+        color="red",
+        linestyle="--",
+        alpha=0.4,
+        label=f"Sys Crit: {PTY_USAGE_CRITICAL_PERCENT}%",
+    )
+
+    limit_val = sys_limit[0] if sys_limit else 0
+    ax.set_ylabel("Windsurf PTYs", fontsize=10)
+    ax2.set_ylabel("System PTY Usage (%)", fontsize=10)
+    ax.set_title(
+        "PTY Usage" + (f" (system limit: {limit_val})" if limit_val else ""),
+        fontsize=11,
+        fontweight="bold",
+    )
+
+    handles1, labels1 = ax.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(handles1 + handles2, labels1 + labels2, loc="upper left", fontsize=7)
     ax.grid(True, alpha=0.3)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
@@ -948,7 +997,21 @@ def _plot_row3_charts(axes, timestamps: list, reports: list[dict]) -> None:
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
 
-def _generate_analysis_plots(reports: list[dict], output: Path | None) -> None:
+def _prompt_for_plot_output_path() -> Path:
+    default_path = Path.home() / "Desktop" / "windsurf-leak-analysis.png"
+    try:
+        raw_path = typer.prompt("Save plot to", default=str(default_path))
+        path = Path(os.path.expandvars(raw_path)).expanduser()
+
+        if path.exists() and not typer.confirm(f"File exists: {path}. Overwrite?", default=False):
+            raise typer.Exit(code=1)
+    except typer.Abort, KeyboardInterrupt:
+        raise typer.Exit(code=1) from None
+    else:
+        return path
+
+
+def _generate_analysis_plots(reports: list[dict], output: Path) -> None:
     """Generate 3x3 matplotlib analysis plots."""
     import matplotlib.pyplot as plt
 
@@ -969,14 +1032,11 @@ def _generate_analysis_plots(reports: list[dict], output: Path | None) -> None:
 
     plt.tight_layout()
 
-    if output:
-        try:
-            plt.savefig(output, dpi=150, bbox_inches="tight")
-            console.print(f"\n[green]✓ Plot saved to {output}[/green]")
-        except OSError as e:
-            console.print(f"\n[red]Error: Cannot save plot to {output}: {e}[/red]")
-    else:
-        plt.show()
+    try:
+        plt.savefig(output, dpi=150, bbox_inches="tight")
+        console.print(f"\n[green]✓ Plot saved to {output}[/green]")
+    except OSError as e:
+        console.print(f"\n[red]Error: Cannot save plot to {output}: {e}[/red]")
 
 
 @app.command()
@@ -1006,7 +1066,9 @@ def analyze(
     _display_analysis_summary(reports)
 
     if plot:
-        _generate_analysis_plots(reports, output)
+        output_path = _prompt_for_plot_output_path() if output is None else Path(os.path.expandvars(str(output))).expanduser()
+
+        _generate_analysis_plots(reports, output_path)
 
 
 def _find_orphaned_crashpad_procs(app_name: str) -> tuple[bool, list[tuple[psutil.Process, float]]]:

@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from surfmon.cli import _parse_timestamp, app
+from surfmon.config import reset_target
 
 runner = CliRunner()
 
@@ -497,7 +498,7 @@ class TestAnalyzeCommand:
 
 
 class TestTargetOption:
-    """Tests for target option."""
+    """Tests for target option (required for live commands)."""
 
     def test_target_stable(self, mock_generate_report, mock_display_report):
         """Should accept stable target."""
@@ -509,11 +510,32 @@ class TestTargetOption:
         result = runner.invoke(app, ["check", "--target", "next"])
         assert result.exit_code == 0
 
+    def test_target_insiders(self, mock_generate_report, mock_display_report):
+        """Should accept insiders target."""
+        result = runner.invoke(app, ["check", "--target", "insiders"])
+        assert result.exit_code == 0
+
     def test_target_invalid(self):
         """Should reject invalid target."""
         result = runner.invoke(app, ["check", "--target", "invalid"])
         assert result.exit_code != 0
         assert "Invalid target" in result.stdout
+
+    def test_check_requires_target(self, mock_generate_report, mock_display_report, mocker):
+        """Should error when no target is set via flag or env var."""
+        reset_target()
+        mocker.patch("surfmon.config.config", return_value="")
+        result = runner.invoke(app, ["check"])
+        assert result.exit_code == 1
+        assert "No Windsurf target specified" in result.stdout
+
+    def test_cleanup_requires_target(self, mocker):
+        """Should error when no target is set for cleanup."""
+        reset_target()
+        mocker.patch("surfmon.config.config", return_value="")
+        result = runner.invoke(app, ["cleanup"])
+        assert result.exit_code == 1
+        assert "No Windsurf target specified" in result.stdout
 
 
 class TestWatchCommand:
