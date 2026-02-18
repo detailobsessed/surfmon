@@ -218,7 +218,7 @@ def compare_reports(old_path: Path, new_path: Path) -> None:
     new_found = set(new["log_issues"]) - set(old["log_issues"])
 
     if mem_improved and proc_reduced and not new_found:
-        console.print("[bold green]🎉 Overall: Performance IMPROVED![/bold green]")
+        console.print("[bold green]✓ Overall: Performance IMPROVED![/bold green]")
     elif len(new_found) > 0 or new["total_windsurf_memory_mb"] > old["total_windsurf_memory_mb"] * 1.2:
         console.print("[bold red]⚠ Overall: Performance DEGRADED[/bold red]")
     else:

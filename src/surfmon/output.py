@@ -12,7 +12,7 @@ __all__ = [
     "CPU_PERCENT_CRITICAL",
     "CPU_PERCENT_WARNING",
     "MB_PER_GB",
-    "TABLE_WIDTH",
+    "TABLE_WIDTH_MAX",
     "WINDSURF_MEM_PERCENT_CRITICAL",
     "WINDSURF_MEM_PERCENT_WARNING",
     "Live",
@@ -36,7 +36,16 @@ if TYPE_CHECKING:
 
 console = Console()
 
-TABLE_WIDTH = 90
+TABLE_WIDTH_MAX = 90
+
+
+def _table_width() -> int:
+    """Return display width: min of terminal width and TABLE_WIDTH_MAX."""
+    try:
+        return min(console.width, TABLE_WIDTH_MAX)
+    except TypeError:
+        return TABLE_WIDTH_MAX
+
 
 # Display thresholds for color-coding
 MB_PER_GB = 1024
@@ -59,7 +68,7 @@ CMDLINE_DISPLAY_MAX_LEN = 100
 
 def make_table(title: str | None = None, **kwargs: Any) -> Table:
     """Create a table with standard width and styling."""
-    return Table(title=title, show_header=True, width=TABLE_WIDTH, **kwargs)
+    return Table(title=title, show_header=True, width=_table_width(), **kwargs)
 
 
 def make_kv_table(title: str) -> Table:
@@ -83,7 +92,7 @@ def make_diff_table(title: str) -> Table:
 def make_panel(content: str, *, title: str | None = None, style: str = "cyan", center: bool = False) -> Panel:
     """Create a panel with standard width and styling."""
     body = Align.center(content) if center else content
-    return Panel(body, title=title, border_style=style, width=TABLE_WIDTH)
+    return Panel(body, title=title, border_style=style, width=_table_width())
 
 
 def _display_system_table(report: MonitoringReport) -> None:
