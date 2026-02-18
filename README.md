@@ -11,7 +11,7 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ichoosetoaccept/759ab8d29e8650758515a72c9d8262d2/raw/coverage.json)](https://github.com/detailobsessed/surfmon/actions?query=workflow%3Aci)
 
-**Surf**ace **Mon**itor for Windsurf IDE — a performance monitoring and diagnostics tool for [Windsurf](https://codeium.com/windsurf) (Stable and Next).
+**Surf**ace **Mon**itor for Windsurf IDE — a performance monitoring and diagnostics tool for [Windsurf](https://codeium.com/windsurf) (Stable, Next, and Insiders).
 
 ## Table of Contents
 
@@ -26,7 +26,7 @@
   - [cleanup — Remove Orphaned Processes](#cleanup--remove-orphaned-processes)
   - [prune — Deduplicate Watch Reports](#prune--deduplicate-watch-reports)
 - [What It Monitors](#what-it-monitors)
-- [Auto-Detection](#auto-detection)
+- [Target Selection](#target-selection)
 - [Exit Codes](#exit-codes)
 - [Common Issues](#common-issues)
 - [Development](#development)
@@ -51,8 +51,8 @@ uv tool install surfmon
 Or run directly without installing:
 
 ```bash
-uvx surfmon check    # Using uvx
-pipx run surfmon check    # Using pipx
+uvx surfmon check -t stable    # Using uvx
+pipx run surfmon check -t stable    # Using pipx
 ```
 
 For development:
@@ -66,17 +66,17 @@ uv sync
 ## Quick Start
 
 ```bash
-# One-shot health check
-surfmon check
+# One-shot health check (--target is required)
+surfmon check -t stable
 
 # Verbose output with all process details
-surfmon check -v
+surfmon check -t stable -v
 
 # Save reports (auto-named with timestamp, enables verbose output)
-surfmon check -s
+surfmon check -t next -s
 
-# Target a specific Windsurf installation
-surfmon check -t next
+# Target Windsurf Insiders
+surfmon check -t insiders
 ```
 
 ![Basic Check](docs/screenshots/check-basic.png)
@@ -96,12 +96,12 @@ surfmon check -t next
 The main command. Shows system resources, Windsurf memory/CPU, active workspaces, top processes, and language servers in consistent fixed-width tables.
 
 ```bash
-surfmon check                        # Basic check
-surfmon check -v                     # Verbose (all processes)
-surfmon check -s                     # Auto-save JSON + Markdown reports (enables verbose)
-surfmon check --json report.json     # Save JSON to specific path
-surfmon check --md report.md         # Save Markdown to specific path
-surfmon check --json r.json --md r.md  # Save both formats with custom names
+surfmon check -t stable                        # Basic check
+surfmon check -t stable -v                     # Verbose (all processes)
+surfmon check -t next -s                       # Auto-save JSON + Markdown reports (enables verbose)
+surfmon check -t stable --json report.json     # Save JSON to specific path
+surfmon check -t stable --md report.md         # Save Markdown to specific path
+surfmon check -t stable --json r.json --md r.md  # Save both formats with custom names
 ```
 
 ### `watch` — Live Monitoring Dashboard
@@ -109,10 +109,10 @@ surfmon check --json r.json --md r.md  # Save both formats with custom names
 Continuously monitors Windsurf with a live-updating terminal dashboard. Saves periodic JSON snapshots for historical analysis.
 
 ```bash
-surfmon watch                          # Default: 5s interval, save every 5min to ../reports/watch
-surfmon watch -i 10 -s 600             # Check every 10s, save every 10min
-surfmon watch -i 10 -n 720             # 720 checks = 2 hours
-surfmon watch -o ~/windsurf-reports    # Custom output directory
+surfmon watch -t stable                    # Default: 5s interval, save every 5min
+surfmon watch -t next -i 10 -s 600         # Check every 10s, save every 10min
+surfmon watch -t insiders -i 10 -n 720     # 720 checks = 2 hours
+surfmon watch -t stable -o ~/reports       # Custom output directory
 ```
 
 ![Watch Dashboard](docs/screenshots/watch.gif)
@@ -138,9 +138,9 @@ surfmon analyze reports/watch/20260204-134518/ --plot --output analysis.png
 ### `compare` — Before/After Diff
 
 ```bash
-surfmon check --json before.json
+surfmon check -t stable --json before.json
 # ... make changes ...
-surfmon check --json after.json
+surfmon check -t stable --json after.json
 surfmon compare before.json after.json
 ```
 
@@ -151,8 +151,8 @@ surfmon compare before.json after.json
 Detects and kills orphaned `chrome_crashpad_handler` processes left behind after Windsurf exits. Windsurf must be closed for this command to work.
 
 ```bash
-surfmon cleanup             # Interactive (asks for confirmation)
-surfmon cleanup --force     # No confirmation
+surfmon cleanup -t stable           # Interactive (asks for confirmation)
+surfmon cleanup -t next --force     # No confirmation
 ```
 
 ### `prune` — Deduplicate Watch Reports
@@ -178,11 +178,26 @@ surfmon prune reports/watch/20260204-134518/
 
 **PTY Usage** — Windsurf PTY allocation vs system limits
 
-**Issues** — Orphaned crash handlers, extension host crashes, update service timeouts (NextDNS), telemetry failures, `logs` directory in extensions folder
+**Issues** — Orphaned crash handlers, extension host crashes, update service timeouts, telemetry failures, `logs` directory in extensions folder
 
-## Auto-Detection
+## Target Selection
 
-Surfmon auto-detects whether Windsurf Stable or Windsurf Next is running and targets the active installation. Override with `-t stable` or `-t next`, or set `SURFMON_TARGET` in your environment.
+Surfmon requires you to specify which Windsurf installation to monitor. Use `--target` (`-t`) with one of `stable`, `next`, or `insiders`:
+
+```bash
+surfmon check -t stable      # Windsurf Stable
+surfmon check -t next        # Windsurf Next
+surfmon check -t insiders    # Windsurf Insiders
+```
+
+Alternatively, set `SURFMON_TARGET` in your environment to avoid passing `-t` every time:
+
+```bash
+export SURFMON_TARGET=insiders
+surfmon check
+```
+
+The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands that operate on saved files (`compare`, `prune`, `analyze`) do not require it.
 
 ## Exit Codes
 
@@ -196,7 +211,7 @@ Surfmon auto-detects whether Windsurf Stable or Windsurf Next is running and tar
 | ----- | ----- | --- |
 | Orphaned crash handlers | Crash reporters not cleaned up on exit | `surfmon cleanup --force` |
 | `logs` directory error | Marimo extension creates logs in wrong place | Move `~/.windsurf/extensions/logs` |
-| Update service timeouts | NextDNS blocking `*.codeium.com` | Whitelist in NextDNS |
+| Update service timeouts | DNS or firewall blocking update checks | Check DNS/firewall settings |
 | High memory usage | Too many language servers or extensions | Disable unused extensions |
 
 ## Development
