@@ -760,7 +760,7 @@ def generate_report() -> MonitoringReport:
             log_issues.append(
                 f"🔴 CRITICAL: Windsurf processes are holding {pty_info.windsurf_pty_count} PTYs "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
-                f"- Fix: Restart Windsurf to release leaked PTYs"
+                f"- Fix: Restart all Windsurf instances to release leaked PTYs"
             )
         elif pty_info.windsurf_pty_count >= PTY_WARNING_COUNT:
             log_issues.append(

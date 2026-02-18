@@ -6,6 +6,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from surfmon.config import WindsurfTarget, reset_target, set_target
+
+
+@pytest.fixture(autouse=True)
+def _default_target():
+    """Set a default target for all tests so code calling get_target() doesn't fail."""
+    set_target(WindsurfTarget.STABLE)
+    yield
+    reset_target()
+
 
 @pytest.fixture
 def mock_monitoring_report():

@@ -6,7 +6,7 @@ Uses python-decouple for settings management. Configuration is read from:
 3. Default values
 
 Settings:
-    SURFMON_TARGET: "stable" or "next" (default: "stable")
+    SURFMON_TARGET: "stable", "next", or "insiders" (required if --target not passed)
 """
 
 from dataclasses import dataclass
@@ -22,6 +22,7 @@ class WindsurfTarget(Enum):
 
     STABLE = "stable"
     NEXT = "next"
+    INSIDERS = "insiders"
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class WindsurfPaths:
     app_name: str  # e.g., "Windsurf.app" or "Windsurf - Next.app"
     app_support_dir: str  # e.g., "Windsurf" or "Windsurf - Next"
     dotfile_dir: str  # e.g., ".windsurf" or ".windsurf-next"
+    codeium_dir: str
 
     @property
     def logs_dir(self) -> Path:
@@ -41,14 +43,6 @@ class WindsurfPaths:
     def extensions_dir(self) -> Path:
         """Path to extensions directory."""
         return Path.home() / self.dotfile_dir / "extensions"
-
-    @property
-    def codeium_dir(self) -> str:
-        """Codeium directory name (windsurf or windsurf-next)."""
-        # Maps to .codeium/windsurf or .codeium/windsurf-next
-        if self.dotfile_dir == ".windsurf":
-            return "windsurf"
-        return "windsurf-next"
 
     @property
     def mcp_config_path(self) -> Path:
@@ -62,11 +56,19 @@ WINDSURF_PATHS = {
         app_name="Windsurf.app",
         app_support_dir="Windsurf",
         dotfile_dir=".windsurf",
+        codeium_dir="windsurf",
     ),
     WindsurfTarget.NEXT: WindsurfPaths(
         app_name="Windsurf - Next.app",
         app_support_dir="Windsurf - Next",
         dotfile_dir=".windsurf-next",
+        codeium_dir="windsurf-next",
+    ),
+    WindsurfTarget.INSIDERS: WindsurfPaths(
+        app_name="Windsurf - Insiders.app",
+        app_support_dir="Windsurf - Insiders",
+        dotfile_dir=".windsurf-insiders",
+        codeium_dir="windsurf-insiders",
     ),
 }
 
@@ -88,6 +90,11 @@ def _detect_running_target() -> WindsurfTarget | None:
             exe = proc.info["exe"] or ""
             cmdline = " ".join(proc.info["cmdline"] or [])
 
+            # Skip orphaned crashpad handlers — they linger after the main
+            # app exits and shouldn't influence target detection.
+            if "crashpad" in exe.lower() or "crashpad" in cmdline.lower():
+                continue
+
             for target, paths in WINDSURF_PATHS.items():
                 if paths.app_name in exe or paths.app_name in cmdline:
                     running.add(target)
@@ -100,7 +107,13 @@ def _detect_running_target() -> WindsurfTarget | None:
     # Prefer NEXT if both are running (it's the active development channel)
     if WindsurfTarget.NEXT in running:
         return WindsurfTarget.NEXT
+    if WindsurfTarget.INSIDERS in running:
+        return WindsurfTarget.INSIDERS
     return WindsurfTarget.STABLE
+
+
+class TargetNotSetError(Exception):
+    """Raised when no Windsurf target has been configured."""
 
 
 def get_target() -> WindsurfTarget:
@@ -109,8 +122,8 @@ def get_target() -> WindsurfTarget:
     Priority:
     1. Programmatically set target (via set_target)
     2. SURFMON_TARGET from env var or .env file
-    3. Auto-detect which Windsurf is running
-    4. Default to STABLE
+
+    Raises TargetNotSetError if no target is explicitly configured.
     """
     if _state["target_override"] is not None:
         return _state["target_override"]
@@ -120,13 +133,10 @@ def get_target() -> WindsurfTarget:
         return WindsurfTarget.NEXT
     if target_str == "stable":
         return WindsurfTarget.STABLE
+    if target_str == "insiders":
+        return WindsurfTarget.INSIDERS
 
-    # No explicit config — auto-detect from running processes
-    detected = _detect_running_target()
-    if detected is not None:
-        return detected
-
-    return WindsurfTarget.STABLE
+    raise TargetNotSetError
 
 
 def set_target(target: WindsurfTarget) -> None:
@@ -149,4 +159,6 @@ def get_target_display_name() -> str:
     target = get_target()
     if target == WindsurfTarget.NEXT:
         return "Windsurf Next"
+    if target == WindsurfTarget.INSIDERS:
+        return "Windsurf Insiders"
     return "Windsurf"
