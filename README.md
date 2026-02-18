@@ -209,7 +209,7 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 
 | Issue | Cause | Fix |
 | ----- | ----- | --- |
-| Orphaned crash handlers | Crash reporters not cleaned up on exit | `surfmon cleanup --force` |
+| Orphaned crash handlers | Crash reporters not cleaned up on exit | `surfmon cleanup -t stable --force` |
 | `logs` directory error | Marimo extension creates logs in wrong place | Move `~/.windsurf/extensions/logs` |
 | Update service timeouts | DNS or firewall blocking update checks | Check DNS/firewall settings |
 | High memory usage | Too many language servers or extensions | Disable unused extensions |

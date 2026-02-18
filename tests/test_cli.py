@@ -599,6 +599,51 @@ class TestCreateSummaryTable:
         assert table is not None
 
 
+class TestFormatElapsed:
+    """Tests for _format_elapsed helper."""
+
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (0, "0:00"),
+            (59, "0:59"),
+            (60, "1:00"),
+            (90, "1:30"),
+            (3599, "59:59"),
+            (3600, "1:00:00"),
+            (3661, "1:01:01"),
+            (86399, "23:59:59"),
+        ],
+    )
+    def test_format_elapsed(self, seconds, expected):
+        """Should format seconds as M:SS or H:MM:SS."""
+        from surfmon.cli import _format_elapsed
+
+        assert _format_elapsed(seconds) == expected
+
+
+class TestCreateSummaryTableSessionStart:
+    """Tests for session_start parameter on create_summary_table."""
+
+    def test_no_elapsed_without_session_start(self, mock_generate_report):
+        """Should not show elapsed time when session_start is None."""
+        from surfmon.cli import create_summary_table
+
+        report = mock_generate_report.return_value
+        table = create_summary_table(report)
+        assert "elapsed" not in (table.title or "")
+
+    def test_shows_elapsed_with_session_start(self, mock_generate_report):
+        """Should show elapsed time when session_start is provided."""
+        import time
+
+        from surfmon.cli import create_summary_table
+
+        report = mock_generate_report.return_value
+        table = create_summary_table(report, session_start=time.time() - 3661)
+        assert "elapsed 1:01:0" in (table.title or "")
+
+
 class TestCreateSummaryTableChanges:
     """Tests for create_summary_table with prev_report showing actual changes."""
 

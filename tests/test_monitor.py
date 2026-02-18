@@ -902,7 +902,7 @@ class TestCheckPtyLeak:
 
     def test_handles_timeout(self, mocker):
         """Should handle subprocess timeout gracefully."""
-        import subprocess  # noqa: S404
+        import subprocess
 
         mock_run = mocker.patch("surfmon.monitor.subprocess.run")
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="lsof", timeout=10)
