@@ -212,9 +212,23 @@ def _add_pty_row(table: Table, report: MonitoringReport, prev_report: Monitoring
     )
 
 
-def create_summary_table(report: MonitoringReport, prev_report: MonitoringReport | None = None) -> Table:
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed seconds as H:MM:SS or M:SS."""
+    total = int(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def create_summary_table(
+    report: MonitoringReport,
+    prev_report: MonitoringReport | None = None,
+    session_start: float | None = None,
+) -> Table:
     """Create a live summary table for watch mode."""
-    table = make_kv_table(f"Windsurf Monitor - {datetime.now(tz=UTC).astimezone().strftime('%H:%M:%S')}")
+    now = datetime.now(tz=UTC).astimezone().strftime("%H:%M:%S")
+    elapsed = f" (elapsed {_format_elapsed(time.time() - session_start)})" if session_start is not None else ""
+    table = make_kv_table(f"Windsurf Monitor - {now}{elapsed}")
     table.add_column("Change", style="yellow", ratio=1)
 
     # Process count
@@ -351,6 +365,20 @@ def check(
         raise typer.Exit(code=130) from None
 
 
+def _print_watch_banner(interval: int, session_dir: Path, save_interval: int, max_reports: int) -> None:
+    """Print the watch session startup banner."""
+    target_name = get_target_display_name()
+    console.print(f"[cyan]Starting continuous monitoring of {target_name}...[/cyan]")
+    console.print(f"  Interval: {interval}s")
+    console.print(f"  Session: {session_dir}")
+    console.print(f"  Save every: {save_interval}s")
+    if max_reports > 0:
+        console.print(f"  Max reports: {max_reports}")
+    console.print()
+    console.print("[dim]Press Ctrl+C to stop[/dim]")
+    console.print()
+
+
 @app.command()
 def watch(
     _target: TargetOption = None,
@@ -385,16 +413,7 @@ def watch(
         console.print("[dim]Use --output to specify a writable directory.[/dim]")
         raise typer.Exit(code=1) from e
 
-    target_name = get_target_display_name()
-    console.print(f"[cyan]Starting continuous monitoring of {target_name}...[/cyan]")
-    console.print(f"  Interval: {interval}s")
-    console.print(f"  Session: {session_dir}")
-    console.print(f"  Save every: {save_interval}s")
-    if max_reports > 0:
-        console.print(f"  Max reports: {max_reports}")
-    console.print()
-    console.print("[dim]Press Ctrl+C to stop[/dim]")
-    console.print()
+    _print_watch_banner(interval, session_dir, save_interval, max_reports)
 
     # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -402,7 +421,8 @@ def watch(
 
     prev_report = None
     report_count = 0
-    last_save = time.time()
+    session_start = time.time()
+    last_save = session_start
 
     try:
         with Live(console=console, refresh_per_second=4) as live:
@@ -414,7 +434,7 @@ def watch(
                 report_count += 1
 
                 # Update live display
-                live.update(create_summary_table(report, prev_report))
+                live.update(create_summary_table(report, prev_report, session_start=session_start))
 
                 # Save report periodically
                 current_time = time.time()

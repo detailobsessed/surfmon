@@ -111,20 +111,22 @@ priority = 1
 [[repos.hooks]]
 id = "pytest-testmon"
 name = "pytest affected tests"
-entry = "uv run pytest --testmon --no-cov"
+entry = "uv run pytest -q --testmon --no-cov"
 language = "system"
 types = ["python"]
 pass_filenames = false
+verbose = true
 stages = ["pre-commit"]
 priority = 1
 
 [[repos.hooks]]
 id = "pytest-cov"
 name = "pytest with coverage"
-entry = "uv run pytest --cov --cov-fail-under=90 --cov-report=term-missing:skip-covered"
+entry = "uv run pytest -q --cov --cov-fail-under=90 --cov-report=term-missing:skip-covered"
 language = "system"
 types = ["python"]
 pass_filenames = false
+verbose = true
 stages = ["pre-push"]
 priority = 1
 

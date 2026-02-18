@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are welcome, and they are greatly appreciated! Every little bit helps, and credit will always be given.
+Contributions are welcome! Every little bit helps, and credit will always be given.
 
 ## Requirements
 
@@ -9,8 +9,6 @@ Contributions are welcome, and they are greatly appreciated! Every little bit he
 - [prek](https://github.com/j178/prek) (pre-commit hook runner) — installed automatically by uv
 - Windsurf IDE installed (needed to run surfmon)
 
-## Environment setup
-
 Fork and clone the repository, then:
 
 ```bash
@@ -18,118 +16,39 @@ cd surfmon
 uv sync
 ```
 
-> NOTE: If it fails for some reason, you'll need to install [uv](https://github.com/astral-sh/uv) manually.
->
-> You can install it with:
->
-> ```bash
-> curl -LsSf https://astral.sh/uv/install.sh | sh
-> ```
->
-> Now you can try running `uv sync` again.
+This installs all dependencies including dev tools. If `uv` is not installed, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-You now have the dependencies installed.
-
-You can run the application with `uv run surfmon [ARGS...]`.
-
-Run `poe` to see all the available tasks.
+Run the CLI with `uv run surfmon [ARGS...]`.
 
 ## Tasks
 
-The project uses [poe the poet](https://github.com/nat-n/poethepoet) as a task runner. Tasks are defined in `pyproject.toml` under the `[tool.poe.tasks]` section. Run `poe` to list all available tasks.
+This project uses [poethepoet](https://github.com/nat-n/poethepoet) as a task runner. Run `poe` to list all available tasks. Key tasks:
 
-Key tasks:
-
-- `poe lint` — run ruff linter
-- `poe format` — auto-format with ruff
-- `poe typecheck` — run ty type checker
-- `poe check` — run lint + typecheck in parallel
-- `poe test` — run tests (excludes slow tests)
-- `poe test-all` — run all tests including slow
+- `poe check` — lint + type check (parallel)
 - `poe fix` — auto-fix lint issues and format
+- `poe test` — run tests (excluding slow)
+- `poe test-all` — run all tests including slow
+
 - `poe docs` — serve documentation locally
 
 ## Development
 
-As usual:
+1. Create a branch: `git switch -c feature-or-bugfix-name`
+2. Make your changes
+3. Commit — git hooks automatically run formatting, linting, and tests
 
-1. create a new branch: `git switch -c feature-or-bugfix-name`
-1. edit the code and/or the documentation
+Don't worry about the changelog — it is generated automatically from commit messages.
 
-**Before committing:**
+## Commit messages
 
-1. run `poe format` to auto-format the code
-1. run `poe check` to run all quality checks (fix any warnings)
-1. run `poe test` to run the tests (fix any issues)
-1. if you updated the documentation or the project dependencies:
-    1. run `poe docs`
-    1. go to <http://localhost:8000> and check that everything looks good
-1. follow our [commit message convention](#commit-message-convention)
-
-If you are unsure about how to fix or ignore a warning, just let the continuous integration fail, and we will help you during review.
-
-Don't bother updating the changelog, we will take care of this.
-
-## Commit message convention
-
-Commit messages must follow our convention based on the [Angular style](https://gist.github.com/stephenparish/9941e89d80e2bc58a153#format-of-the-commit-message) or the [Karma convention](https://karma-runner.github.io/4.0/dev/git-commit-msg.html):
+This project uses [Conventional Commits](https://www.conventionalcommits.org/). A git hook enforces the format, so you'll get immediate feedback if the message doesn't match:
 
 ```
 <type>[(scope)]: Subject
-
-[Body]
 ```
 
-**Subject and body must be valid Markdown.** Subject must have proper casing (uppercase for first letter if it makes sense), but no dot at the end, and no punctuation in general.
+Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`, `perf`.
 
-Scope and body are optional. Type can be:
+## Pull requests
 
-- `build`: About packaging, building wheels, etc.
-- `chore`: About packaging or repo/files management.
-- `ci`: About Continuous Integration.
-- `deps`: Dependencies update.
-- `docs`: About documentation.
-- `feat`: New feature.
-- `fix`: Bug fix.
-- `perf`: About performance.
-- `refactor`: Changes that are not features or bug fixes.
-- `style`: A change in code style/format.
-- `test`: About tests.
-
-If you write a body, please add trailers at the end (for example issues and PR references, or co-authors), without relying on GitHub's flavored Markdown:
-
-```
-Body.
-
-Issue #10: https://github.com/detailobsessed/surfmon/issues/10
-Related to PR detailobsessed/surfmon#15: https://github.com/detailobsessed/surfmon/pull/15
-```
-
-These "trailers" must appear at the end of the body, without any blank lines between them. The trailer title can contain any character except colons `:`. We expect a full URI for each trailer, not just GitHub autolinks (for example, full GitHub URLs for commits and issues, not the hash or the #issue-number).
-
-We do not enforce a line length on commit messages summary and body, but please avoid very long summaries, and very long lines in the body, unless they are part of code blocks that must not be wrapped.
-
-## Pull requests guidelines
-
-Link to any related issue in the Pull Request message.
-
-During the review, we recommend using fixups:
-
-```bash
-# SHA is the SHA of the commit you want to fix
-git commit --fixup=SHA
-```
-
-Once all the changes are approved, you can squash your commits:
-
-```bash
-git rebase -i --autosquash main
-```
-
-And force-push:
-
-```bash
-git push -f
-```
-
-If this seems all too complicated, you can push or force-push each new commit, and we will squash them ourselves if needed, before merging.
+Link to any related issue in the PR description. Keep commits focused — one logical change per commit. We squash-merge PRs, so don't worry about a clean commit history within the PR.

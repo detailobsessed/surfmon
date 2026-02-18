@@ -25,7 +25,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "typer>=0.21",
+    "typer>=0.23",
     "psutil>=7.2",
     "rich>=14.3",
     "python-decouple>=3.8",
@@ -87,67 +87,71 @@ preview = true
 
 [tool.ruff.lint]
 select = [
-    # Core (ruff defaults)
+    # Core — universal baseline (ruff defaults + pycodestyle warnings)
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
     "F",    # Pyflakes
 
-    # Modern Python
-    "UP",   # pyupgrade - use modern Python syntax
-    "I",    # isort - import sorting
+    # Modern Python — enforce current idioms
+    "UP",   # pyupgrade — use modern syntax (match, type unions, etc.)
+    "I",    # isort — deterministic import ordering
+    "FA",   # flake8-future-annotations — `from __future__ import annotations`
 
-    # Code quality
-    "A",    # flake8-builtins - prevent shadowing builtins (id, type, list, etc.)
-    "B",    # flake8-bugbear - common bugs and design issues
-    "SIM",  # flake8-simplify - simplify code
-    "C4",   # flake8-comprehensions - better comprehensions
-    "PIE",  # flake8-pie - misc improvements
-    "RET",  # flake8-return - return statement issues
-    "RSE",  # flake8-raise - raise best practices
+    # Code quality — catch bugs and enforce clean patterns
+    "A",    # flake8-builtins — prevent shadowing builtins (id, type, list)
+    "B",    # flake8-bugbear — common bugs and design issues
+    "SIM",  # flake8-simplify — simplifiable constructs
+    "C4",   # flake8-comprehensions — better comprehensions
+    "PIE",  # flake8-pie — misc quality improvements
+    "RET",  # flake8-return — consistent return statements
+    "RSE",  # flake8-raise — raise best practices
+    "ISC",  # flake8-implicit-str-concat — catch missing commas in collections
     "RUF",  # Ruff-specific rules
-    "FA",   # flake8-future-annotations
-    "ISC",  # flake8-implicit-str-concat - catch missing commas
-    "ICN",  # flake8-import-conventions
-    "TID",  # flake8-tidy-imports - absolute imports
-    "TC",   # flake8-type-checking - TYPE_CHECKING imports
-    "PTH",  # flake8-use-pathlib - prefer pathlib over os.path
-    "FURB", # refurb - modernize and simplify code
-    "FLY",  # flynt - prefer f-strings over .format() and %
+    "FURB", # refurb — modernise and simplify code
+    "FLY",  # flynt — prefer f-strings over .format() and %
+    "PGH",  # pygrep-hooks — catch bare `# type: ignore`, eval(), etc.
 
-    # Naming
-    # "N",  # pep8-naming - PEP 8 naming conventions (enable when ready)
+    # Import hygiene
+    "ICN",  # flake8-import-conventions — enforce standard aliases (np, pd)
+    "TID",  # flake8-tidy-imports — ban relative imports, enforce absolute
+    "TC",   # flake8-type-checking — move imports behind TYPE_CHECKING
 
-    # Datetime
-    "DTZ",  # flake8-datetimez - enforce timezone-aware datetimes
+    # Naming — currently disabled; enable once existing code conforms
+    # "N",  # pep8-naming — PEP 8 naming conventions
+
+    # Correctness
+    "DTZ",  # flake8-datetimez — enforce timezone-aware datetimes
+    "PTH",  # flake8-use-pathlib — prefer pathlib over os.path
 
     # Error messages
-    "EM",   # flake8-errmsg - no string literals in exceptions
+    "EM",   # flake8-errmsg — variables in exception constructors (better tracebacks)
 
-    # Pylint
+    # Pylint — uses default thresholds; do not inflate to hide violations
     "PLC",  # pylint conventions
     "PLE",  # pylint errors
     "PLR",  # pylint refactor (too-many-args, too-many-branches, etc.)
     "PLW",  # pylint warnings
 
     # Performance
-    "PERF", # Perflint - performance anti-patterns
+    "PERF", # Perflint — performance anti-patterns
 
     # Security
-    "S",    # flake8-bandit - security issues
+    "S",    # flake8-bandit — security issues
 
     # Testing
-    "PT",   # flake8-pytest-style
+    "PT",   # flake8-pytest-style — consistent pytest idioms
 
     # Error handling
-    "TRY",  # tryceratops - exception handling
-    "LOG",  # flake8-logging - logging best practices
+    "TRY",  # tryceratops — exception handling best practices
+    "LOG",  # flake8-logging — logging best practices
 
-    # Unused code
+    # Housekeeping
     "ARG",  # flake8-unused-arguments
-    "ERA",  # eradicate - commented-out code
-
-    # Print statements (use logging instead)
-    "T20",  # flake8-print
+    "ERA",  # eradicate — commented-out code
+    "T20",  # flake8-print — use logging instead of print()
+]
+ignore = [
+    "TRY003",  # Overly strict — forces custom exception classes for every error message
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -161,7 +165,7 @@ select = [
     "T201",       # Hooks may print diagnostics
 ]
 "tests/**" = [
-    "S101", "S603", "S607", "S701",  # Allow assert, subprocess, jinja2 in tests
+    "S101", "S404", "S603", "S607",  # Allow assert and subprocess in tests
     "T201",       # Allow print in tests
     "PLR6301",    # Test methods don't use self (pytest classes)
     "PLR2004",    # Magic values in assertions are fine
@@ -204,7 +208,7 @@ source = ["src/"]
 
 [tool.coverage.report]
 precision = 2
-omit = ["src/*/__init__.py", "tests/__init__.py"]
+omit = ["src/*/__init__.py"]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING", "if __name__ == .__main__.:"]
 
 [tool.coverage.json]
@@ -245,7 +249,7 @@ prek = "prek run --all-files"
 
 # Template utilities
 check-template = "bash scripts/check-template-update.sh"
-update-template = { shell = "copier update --trust . --skip-answered && uv sync --upgrade && prek autoupdate && echo '  ✓ Dependencies upgraded and hook versions updated'" }
+update-template = { shell = "copier update --trust . --skip-answered --defaults && uv sync --upgrade && prek autoupdate && echo '  ✓ Dependencies upgraded and hook versions updated'" }
 
 # Git utilities
 tags = "sh -c 'git fetch --tags && git tag --sort=-version:refname'"

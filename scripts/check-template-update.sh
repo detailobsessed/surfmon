@@ -47,9 +47,13 @@ touch "$cache_file"
 
 if [[ "$local_version" != "$latest" ]]; then
   cyan='\033[0;36m'; yellow='\033[1;33m'; dim='\033[2m'; bold='\033[1m'; reset='\033[0m'
-  echo ""
-  echo -e "  ${cyan}ℹ️  Template update available:${reset} ${dim}${local_version}${reset} ${bold}→${reset} ${yellow}${latest}${reset}"
-  echo -e "  ${dim}Run:${reset} copier update --trust . --skip-answered"
-  echo -e "  ${dim}Or:${reset}  poe update-template"
-  echo ""
+  # Write to /dev/tty to bypass output capture by hook runners (prek, gt).
+  # Falls back to stdout for non-interactive contexts (CI, scripts, tests).
+  out="/dev/stdout"
+  if (echo -n > /dev/tty) 2>/dev/null; then out="/dev/tty"; fi
+  echo "" > "$out"
+  echo -e "  ${cyan}ℹ️  Template update available:${reset} ${dim}${local_version}${reset} ${bold}→${reset} ${yellow}${latest}${reset}" > "$out"
+  echo -e "  ${dim}Run:${reset} copier update --trust . --skip-answered" > "$out"
+  echo -e "  ${dim}Or:${reset}  poe update-template" > "$out"
+  echo "" > "$out"
 fi
