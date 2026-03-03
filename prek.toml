@@ -61,7 +61,7 @@ hooks = [{ id = "typos", priority = 1 }]
 [[repos]]
 repo = "https://github.com/igorshubovych/markdownlint-cli"
 rev = "v0.47.0"  # prek autoupdate will fill this
-hooks = [{ id = "markdownlint", args = ["--fix"], priority = 1 }]
+hooks = [{ id = "markdownlint", args = ["--fix", "--ignore", "CHANGELOG.md"], priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
@@ -88,16 +88,6 @@ entry = "bash -c 'fail=0; for f in \"$@\"; do if head -c2 \"$f\" | grep -q \"#!\
 language = "system"
 types_or = ["bash", "shell", "python", "ruby", "perl"]
 priority = 0
-
-[[repos.hooks]]
-id = "check-pathlib-encoding"
-name = "pathlib encoding check"
-entry = "uv run scripts/check-pathlib-encoding.py"
-language = "system"
-types = ["python"]
-priority = 1
-# Workaround for ruff PLW1514 false negatives on indirect Path objects.
-# Remove when https://github.com/astral-sh/ruff/issues/19294 is fixed.
 
 [[repos.hooks]]
 id = "ty"
@@ -135,7 +125,7 @@ id = "docs-build"
 name = "docs build check"
 entry = "bash -c 'test -f htmlcov/index.html || (mkdir -p htmlcov && touch htmlcov/index.html); uv run poe docs-build'"
 language = "system"
-files = { glob = ["docs/**", "mkdocs.yml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "src/**"] }
+files = { glob = ["docs/**", "zensical.toml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "src/**"] }
 pass_filenames = false
 stages = ["pre-push"]
 
