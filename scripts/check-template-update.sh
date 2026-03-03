@@ -53,7 +53,6 @@ if [[ "$local_version" != "$latest" ]]; then
   if (echo -n > /dev/tty) 2>/dev/null; then out="/dev/tty"; fi
   echo "" > "$out"
   echo -e "  ${cyan}ℹ️  Template update available:${reset} ${dim}${local_version}${reset} ${bold}→${reset} ${yellow}${latest}${reset}" > "$out"
-  echo -e "  ${dim}Run:${reset} copier update --trust . --skip-answered" > "$out"
-  echo -e "  ${dim}Or:${reset}  poe update-template" > "$out"
+  echo -e "  ${dim}Run:${reset} poe update-template" > "$out"
   echo "" > "$out"
 fi

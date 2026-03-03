@@ -141,7 +141,7 @@ def simplify_process_name(name: str) -> str:
     into "Windsurf Helper GPU" for cleaner display.
     """
     if "Helper" in name and "(" in name:
-        return name.split("Helper", maxsplit=1)[0] + "Helper " + name.split("(")[1].split(")")[0]
+        return name.split("Helper", maxsplit=1)[0] + "Helper " + name.split("(")[1].split(")", maxsplit=1)[0]
     return name
 
 

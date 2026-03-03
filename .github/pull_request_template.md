@@ -7,7 +7,7 @@
 - [ ] Tests added/updated
 - [ ] Documentation updated (if applicable)
 - [ ] `poe check` passes
-- [ ] Commit messages follow [conventional commits](../CONTRIBUTING.md#commit-message-convention)
+- [ ] Commit messages follow [conventional commits](../CONTRIBUTING.md#commit-messages)
 
 ## Related Issues
 
