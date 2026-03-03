@@ -23,6 +23,7 @@ EXTENSION_ERROR_LINES_THRESHOLD = 10
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 SECONDS_PER_DAY = 86400
+LSOF_MIN_FIELDS = 8
 PTY_CRITICAL_COUNT = 200
 PTY_WARNING_COUNT = 50
 PTY_USAGE_CRITICAL_PERCENT = 80
@@ -67,12 +68,40 @@ class WorkspaceInfo:
 
 
 @dataclass
+class PtyFdEntry:
+    """Single lsof line parsed for a PTY file descriptor."""
+
+    command: str
+    pid: int
+    fd: str  # e.g., "33u"
+    device: str  # e.g., "15,0" (major,minor)
+    size_off: str  # e.g., "0t0" or "0t2077"
+
+
+@dataclass
+class PtyProcessDetail:
+    """Per-PID PTY ownership detail."""
+
+    pid: int
+    name: str
+    pty_count: int
+    fds: list[str]  # e.g., ["33u", "34u", "37u"]
+
+
+@dataclass
 class PtyInfo:
     """PTY usage information for Windsurf."""
 
     windsurf_pty_count: int
     system_pty_limit: int
     system_pty_used: int
+    # Forensic detail (added for PTY leak diagnosis)
+    per_process: list[PtyProcessDetail] | None = None
+    fd_entries: list[PtyFdEntry] | None = None
+    non_windsurf_holders: list[PtyProcessDetail] | None = None
+    windsurf_version: str = ""
+    windsurf_uptime_seconds: float = 0.0
+    raw_lsof: str = ""
 
 
 @dataclass
@@ -368,21 +397,8 @@ def check_orphaned_workspaces() -> list[str]:
     return issues
 
 
-def check_pty_leak() -> PtyInfo:
-    """Check for PTY (pseudo-terminal) leak by Windsurf.
-
-    Windsurf (and other Electron-based IDEs) can leak PTYs by not closing
-    them when terminal sessions end. This can exhaust the system PTY limit
-    (macOS default: 511), preventing new terminals from being opened anywhere.
-
-    Returns:
-        PtyInfo with Windsurf PTY count, system limit, and total system usage.
-    """
-    windsurf_pty_count = 0
-    system_pty_used = 0
-    system_pty_limit = 511  # macOS default
-
-    # Get system PTY limit
+def _get_system_pty_limit() -> int:
+    """Get system PTY limit from sysctl. Returns 511 (macOS default) on failure."""
     try:
         result = subprocess.run(
             ["sysctl", "-n", "kern.tty.ptmx_max"],  # noqa: S607
@@ -392,9 +408,84 @@ def check_pty_leak() -> PtyInfo:
             check=False,
         )
         if result.returncode == 0:
-            system_pty_limit = int(result.stdout.strip())
+            return int(result.stdout.strip())
     except subprocess.TimeoutExpired, ValueError, OSError:
         pass
+    return 511
+
+
+def _parse_lsof_line(line: str) -> PtyFdEntry | None:
+    """Parse a single lsof output line into a PtyFdEntry.
+
+    lsof format: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+    """
+    parts = line.split()
+    if len(parts) < LSOF_MIN_FIELDS:
+        return None
+    return PtyFdEntry(
+        command=parts[0],
+        pid=int(parts[1]),
+        fd=parts[3],
+        device=parts[5],
+        size_off=parts[6],
+    )
+
+
+def _group_entries_by_pid(
+    entries: list[PtyFdEntry],
+) -> list[PtyProcessDetail]:
+    """Group PtyFdEntry list into per-PID summaries."""
+    pid_map: dict[int, list[PtyFdEntry]] = {}
+    for entry in entries:
+        pid_map.setdefault(entry.pid, []).append(entry)
+    return [
+        PtyProcessDetail(
+            pid=pid,
+            name=fds[0].command,
+            pty_count=len(fds),
+            fds=[e.fd for e in fds],
+        )
+        for pid, fds in sorted(pid_map.items(), key=lambda kv: len(kv[1]), reverse=True)
+    ]
+
+
+def _extract_windsurf_version(processes: list[ProcessInfo]) -> str:
+    """Extract Windsurf version from the main Electron process cmdline."""
+    for proc in processes:
+        match = re.search(r"--windsurf_version\s+(\S+)", proc.cmdline)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _get_windsurf_uptime(processes: list[ProcessInfo]) -> float:
+    """Get uptime of the longest-running Windsurf process in seconds."""
+    if not processes:
+        return 0.0
+    return max(p.runtime_seconds for p in processes)
+
+
+def check_pty_leak(windsurf_processes: list[ProcessInfo] | None = None) -> PtyInfo:
+    """Check for PTY (pseudo-terminal) leak by Windsurf.
+
+    Windsurf (and other Electron-based IDEs) can leak PTYs by not closing
+    them when terminal sessions end. This can exhaust the system PTY limit
+    (macOS default: 511), preventing new terminals from being opened anywhere.
+
+    Args:
+        windsurf_processes: Pre-collected Windsurf ProcessInfo list for version/uptime
+            extraction. Pass None to skip version/uptime (backwards-compatible).
+
+    Returns:
+        PtyInfo with Windsurf PTY count, system limit, total system usage,
+        and forensic detail (per-process breakdown, FD entries, raw lsof).
+    """
+    system_pty_limit = _get_system_pty_limit()
+    windsurf_pty_count = 0
+    system_pty_used = 0
+    windsurf_entries: list[PtyFdEntry] = []
+    non_windsurf_entries: list[PtyFdEntry] = []
+    raw_lsof = ""
 
     # Count PTYs using lsof
     app_name = get_paths().app_name
@@ -407,28 +498,43 @@ def check_pty_leak() -> PtyInfo:
             check=False,
         )
         if result.returncode == 0:
+            raw_lsof = result.stdout
             lines = result.stdout.strip().split("\n")
-            # Skip header line
             data_lines = lines[1:] if len(lines) > 1 else []
             system_pty_used = len(data_lines)
 
-            # Count lines matching Windsurf process name
             # The app_name contains ".app" but lsof COMMAND column shows just the binary name
-            # For "Windsurf.app" -> "Windsurf", for "Windsurf - Next.app" -> "Windsurf"
-            windsurf_cmd = app_name.split(".")[0].strip()  # "Windsurf" or "Windsurf - Next"
+            windsurf_cmd_prefix = app_name.split(".")[0].strip().split()[0]
+
             for line in data_lines:
-                # lsof output: COMMAND PID USER FD TYPE DEVICE ...
-                # COMMAND field is first, may be truncated
-                parts = line.split()
-                if parts and windsurf_cmd.split()[0] in parts[0]:
+                entry = _parse_lsof_line(line)
+                if entry is None:
+                    continue
+                if windsurf_cmd_prefix in entry.command:
+                    windsurf_entries.append(entry)
                     windsurf_pty_count += 1
+                else:
+                    non_windsurf_entries.append(entry)
     except subprocess.TimeoutExpired, OSError:
         pass
+
+    # Extract version and uptime from process list if available
+    version = ""
+    uptime = 0.0
+    if windsurf_processes:
+        version = _extract_windsurf_version(windsurf_processes)
+        uptime = _get_windsurf_uptime(windsurf_processes)
 
     return PtyInfo(
         windsurf_pty_count=windsurf_pty_count,
         system_pty_limit=system_pty_limit,
         system_pty_used=system_pty_used,
+        per_process=_group_entries_by_pid(windsurf_entries),
+        fd_entries=windsurf_entries,
+        non_windsurf_holders=_group_entries_by_pid(non_windsurf_entries),
+        windsurf_version=version,
+        windsurf_uptime_seconds=uptime,
+        raw_lsof=raw_lsof,
     )
 
 
@@ -748,8 +854,8 @@ def generate_report() -> MonitoringReport:
     total_memory = sum(p.memory_mb for p in proc_infos)
     total_cpu = sum(p.cpu_percent for p in proc_infos)
 
-    # Check PTY usage
-    pty_info = check_pty_leak()
+    # Check PTY usage (pass process info for version/uptime extraction)
+    pty_info = check_pty_leak(windsurf_processes=proc_infos)
 
     # Build log issues, including PTY leak detection
     log_issues = check_log_issues()
