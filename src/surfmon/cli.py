@@ -6,6 +6,7 @@ import os
 import signal
 import time
 from collections import defaultdict
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -21,7 +22,11 @@ from .monitor import (
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
     MonitoringReport,
+    PtyInfo,
+    check_pty_leak,
     generate_report,
+    get_process_info,
+    get_windsurf_processes,
     is_main_windsurf_process,
     save_report_json,
 )
@@ -544,6 +549,234 @@ def cleanup(
         for pid, error in failed:
             console.print(f"  PID {pid}: {error}")
         raise typer.Exit(code=1)
+
+
+def _format_uptime(seconds: float) -> str:
+    """Format uptime seconds as a human-readable string."""
+    if seconds <= 0:
+        return "unknown"
+    total = int(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+def _display_pty_snapshot(pty: PtyInfo) -> None:
+    """Display a comprehensive PTY forensic snapshot to the console."""
+    # Summary table
+    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+    pty_color = (
+        "red"
+        if pty.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT
+        else "yellow"
+        if pty.windsurf_pty_count >= PTY_WARNING_COUNT
+        else "green"
+    )
+
+    summary = make_kv_table("PTY Forensic Snapshot")
+    summary.add_row("Windsurf PTYs", f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}]")
+    summary.add_row("System PTYs", f"{pty.system_pty_used} / {pty.system_pty_limit} ({usage_pct:.1f}%)")
+    if pty.windsurf_version:
+        summary.add_row("Windsurf Version", pty.windsurf_version)
+    if pty.windsurf_uptime_seconds > 0:
+        summary.add_row("Windsurf Uptime", _format_uptime(pty.windsurf_uptime_seconds))
+    console.print(summary)
+    console.print()
+
+    # Per-PID breakdown table
+    if pty.per_process:
+        pid_table = make_table("Windsurf Per-PID PTY Ownership")
+        pid_table.add_column("PID", style="dim")
+        pid_table.add_column("Process", style="cyan", ratio=2)
+        pid_table.add_column("PTYs", justify="right", style="yellow")
+        pid_table.add_column("FD Range", style="dim", ratio=2)
+
+        for detail in pty.per_process:
+            fds_sorted = sorted(detail.fds, key=lambda f: int(f.rstrip("urw")))
+            fd_range = f"{fds_sorted[0]}..{fds_sorted[-1]}" if len(fds_sorted) > 1 else fds_sorted[0]
+            pid_table.add_row(str(detail.pid), detail.name, str(detail.pty_count), fd_range)
+
+        console.print(pid_table)
+        console.print()
+
+    # Non-Windsurf PTY holders for context
+    if pty.non_windsurf_holders:
+        other_table = make_table("Other PTY Holders (for context)")
+        other_table.add_column("PID", style="dim")
+        other_table.add_column("Process", style="cyan", ratio=2)
+        other_table.add_column("PTYs", justify="right", style="green")
+
+        for detail in pty.non_windsurf_holders:
+            other_table.add_row(str(detail.pid), detail.name, str(detail.pty_count))
+
+        console.print(other_table)
+        console.print()
+
+    # FD detail table (Windsurf only)
+    if pty.fd_entries:
+        fd_table = make_table("Windsurf FD Detail")
+        fd_table.add_column("PID", style="dim")
+        fd_table.add_column("FD", style="yellow")
+        fd_table.add_column("Device", style="dim")
+        fd_table.add_column("Offset", style="cyan")
+        fd_table.add_column("Status", style="dim")
+
+        for entry in sorted(pty.fd_entries, key=lambda e: (e.pid, int(e.fd.rstrip("urw")))):
+            # Zero offset may indicate a leaked PTY (opened but no shell activity)
+            is_zero = entry.size_off in {"0t0", "0"}
+            status = "[dim]idle[/dim]" if is_zero else "[green]active[/green]"
+            fd_table.add_row(str(entry.pid), entry.fd, entry.device, entry.size_off, status)
+
+        active_count = sum(1 for e in pty.fd_entries if e.size_off not in {"0t0", "0"})
+        idle_count = len(pty.fd_entries) - active_count
+        console.print(fd_table)
+        console.print(f"  [dim]{active_count} active, {idle_count} idle (zero offset)[/dim]")
+        console.print()
+
+
+def _save_pty_snapshot_json(pty: PtyInfo, path: Path) -> None:
+    """Save PTY snapshot as JSON."""
+    data = {
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "pty_info": asdict(pty),
+    }
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def _save_pty_snapshot_markdown(pty: PtyInfo, path: Path) -> None:
+    """Save PTY snapshot as Markdown forensic report."""
+    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+    lines = [
+        "# PTY Forensic Snapshot",
+        "",
+        f"**Timestamp:** {datetime.now(tz=UTC).isoformat()}",
+        f"**Windsurf Version:** {pty.windsurf_version or 'unknown'}",
+        f"**Windsurf Uptime:** {_format_uptime(pty.windsurf_uptime_seconds)}",
+        "",
+        "## Summary",
+        "",
+        f"- **Windsurf PTYs:** {pty.windsurf_pty_count}",
+        f"- **System PTYs:** {pty.system_pty_used} / {pty.system_pty_limit} ({usage_pct:.1f}%)",
+        "",
+    ]
+
+    if pty.per_process:
+        lines.extend([
+            "## Per-PID Breakdown",
+            "",
+            "| PID | Process | PTYs | FD Range |",
+            "|-----|---------|------|----------|",
+        ])
+        for detail in pty.per_process:
+            fds_sorted = sorted(detail.fds, key=lambda f: int(f.rstrip("urw")))
+            fd_range = f"{fds_sorted[0]}..{fds_sorted[-1]}" if len(fds_sorted) > 1 else fds_sorted[0]
+            lines.append(f"| {detail.pid} | {detail.name} | {detail.pty_count} | {fd_range} |")
+        lines.append("")
+
+    if pty.non_windsurf_holders:
+        lines.extend([
+            "## Other PTY Holders",
+            "",
+            "| PID | Process | PTYs |",
+            "|-----|---------|------|",
+        ])
+        lines.extend(f"| {detail.pid} | {detail.name} | {detail.pty_count} |" for detail in pty.non_windsurf_holders)
+        lines.append("")
+
+    if pty.fd_entries:
+        active_count = sum(1 for e in pty.fd_entries if e.size_off not in {"0t0", "0"})
+        idle_count = len(pty.fd_entries) - active_count
+        lines.extend([
+            "## FD Detail (Windsurf)",
+            "",
+            f"**Active:** {active_count} | **Idle (zero offset):** {idle_count}",
+            "",
+            "| PID | FD | Device | Offset | Status |",
+            "|-----|----|--------|--------|--------|",
+        ])
+        for entry in sorted(pty.fd_entries, key=lambda e: (e.pid, int(e.fd.rstrip("urw")))):
+            is_zero = entry.size_off in {"0t0", "0"}
+            status = "idle" if is_zero else "active"
+            lines.append(f"| {entry.pid} | {entry.fd} | {entry.device} | {entry.size_off} | {status} |")
+        lines.append("")
+
+    if pty.raw_lsof:
+        lines.extend([
+            "## Raw lsof Output",
+            "",
+            "```",
+            pty.raw_lsof.strip(),
+            "```",
+            "",
+        ])
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+@app.command(name="pty-snapshot")
+def pty_snapshot(
+    _target: TargetOption = None,
+    save: Annotated[
+        bool,
+        typer.Option(
+            "--save",
+            "-s",
+            help="Save both JSON and Markdown reports (auto-named)",
+        ),
+    ] = False,
+    json_path: Annotated[Path | None, typer.Option("--json", help="Save snapshot as JSON")] = None,
+    markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
+) -> None:
+    """Capture a comprehensive PTY forensic snapshot.
+
+    Gathers detailed PTY ownership data for diagnosing Windsurf PTY leaks.
+    Shows per-PID breakdown, FD-level detail, and Windsurf version/uptime.
+    Use --save to generate files suitable for attaching to bug reports.
+    """
+    _require_target()
+    try:
+        target_name = get_target_display_name()
+        with console.status(f"[cyan]Capturing PTY snapshot for {target_name}...[/cyan]", spinner="dots"):
+            # Gather Windsurf processes for version/uptime
+            procs = get_windsurf_processes()
+            proc_infos = [pi for p in procs if (pi := get_process_info(p))]
+            pty = check_pty_leak(windsurf_processes=proc_infos)
+
+        _display_pty_snapshot(pty)
+
+        # Handle --save flag
+        if save:
+            save_dir = DEFAULT_REPORTS_DIR
+            save_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+            json_path = save_dir / f"pty-snapshot-{timestamp}.json"
+            markdown_path = save_dir / f"pty-snapshot-{timestamp}.md"
+
+        if json_path or markdown_path:
+            console.print()
+            if json_path:
+                json_path = json_path.resolve()
+                try:
+                    _save_pty_snapshot_json(pty, json_path)
+                    console.print(f"[green]✓ JSON snapshot saved to {json_path}[/green]")
+                except OSError as e:
+                    console.print(f"[red]Error: Cannot save JSON: {e}[/red]")
+            if markdown_path:
+                markdown_path = markdown_path.resolve()
+                try:
+                    _save_pty_snapshot_markdown(pty, markdown_path)
+                    console.print(f"[green]✓ Markdown snapshot saved to {markdown_path}[/green]")
+                except OSError as e:
+                    console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+        raise typer.Exit(code=130) from None
 
 
 def _hash_report_files(json_files: list[Path]) -> dict[str, list[Path]]:

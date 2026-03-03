@@ -25,6 +25,7 @@
   - [compare — Before/After Diff](#compare--beforeafter-diff)
   - [cleanup — Remove Orphaned Processes](#cleanup--remove-orphaned-processes)
   - [prune — Deduplicate Watch Reports](#prune--deduplicate-watch-reports)
+  - [pty-snapshot — PTY Forensic Capture](#pty-snapshot--pty-forensic-capture)
 - [What It Monitors](#what-it-monitors)
 - [Target Selection](#target-selection)
 - [Exit Codes](#exit-codes)
@@ -164,6 +165,17 @@ surfmon prune reports/watch/20260204-134518/ --dry-run
 surfmon prune reports/watch/20260204-134518/
 ```
 
+### `pty-snapshot` — PTY Forensic Capture
+
+Captures a detailed PTY ownership snapshot for diagnosing Windsurf's PTY leak. Shows per-PID breakdown, FD-level detail (active vs idle), Windsurf version, and uptime. Use `--save` to generate JSON + Markdown files suitable for attaching to bug reports.
+
+```bash
+surfmon pty-snapshot -t next                   # Display snapshot
+surfmon pty-snapshot -t stable --save          # Auto-save JSON + Markdown
+surfmon pty-snapshot -t next --json snap.json  # Save JSON to specific path
+surfmon pty-snapshot -t next --md snap.md      # Save Markdown to specific path
+```
+
 ## What It Monitors
 
 **System** — Total/available memory, memory %, swap, CPU cores
@@ -176,7 +188,7 @@ surfmon prune reports/watch/20260204-134518/
 
 **Workspaces** — Active workspace paths and load times
 
-**PTY Usage** — Windsurf PTY allocation vs system limits
+**PTY Usage** — Windsurf PTY allocation vs system limits, per-PID breakdown, FD-level active/idle classification, raw `lsof` capture for forensic analysis
 
 **Issues** — Orphaned crash handlers, extension host crashes, update service timeouts, telemetry failures, `logs` directory in extensions folder
 

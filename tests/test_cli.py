@@ -904,3 +904,111 @@ class TestSignalHandler:
         mocker.patch("surfmon.cli.console")
         signal_handler(2, None)
         assert surfmon.cli._state["stop_monitoring"] is True
+
+
+class TestPtySnapshotCommand:
+    """Tests for the pty-snapshot command."""
+
+    @pytest.fixture
+    def _mock_pty_data(self, mocker):
+        """Mock PTY data collection for pty-snapshot tests."""
+        from surfmon.monitor import PtyFdEntry, PtyInfo, PtyProcessDetail
+
+        mock_pty = PtyInfo(
+            windsurf_pty_count=5,
+            system_pty_limit=511,
+            system_pty_used=10,
+            per_process=[
+                PtyProcessDetail(pid=1000, name="Windsurf", pty_count=3, fds=["33u", "34u", "35u"]),
+                PtyProcessDetail(pid=2000, name="Windsurf", pty_count=2, fds=["10u", "11u"]),
+            ],
+            fd_entries=[
+                PtyFdEntry(command="Windsurf", pid=1000, fd="33u", device="15,0", size_off="0t0"),
+                PtyFdEntry(command="Windsurf", pid=1000, fd="34u", device="15,1", size_off="0t100"),
+                PtyFdEntry(command="Windsurf", pid=1000, fd="35u", device="15,2", size_off="0t0"),
+                PtyFdEntry(command="Windsurf", pid=2000, fd="10u", device="15,3", size_off="0t500"),
+                PtyFdEntry(command="Windsurf", pid=2000, fd="11u", device="15,4", size_off="0t0"),
+            ],
+            non_windsurf_holders=[
+                PtyProcessDetail(pid=3000, name="Terminal", pty_count=5, fds=["5u", "6u", "7u", "8u", "9u"]),
+            ],
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=7200.0,
+            raw_lsof="COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nWindsurf 1000 ismar 33u CHR 15,0 0t0 605 /dev/ptmx\n",
+        )
+        mocker.patch("surfmon.cli.get_windsurf_processes", return_value=[])
+        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        return mock_pty
+
+    @pytest.mark.usefixtures("_mock_pty_data")
+    def test_pty_snapshot_basic(self):
+        """Should run pty-snapshot and display output."""
+        result = runner.invoke(app, ["pty-snapshot"])
+        assert result.exit_code == 0
+        assert "PTY Forensic Snapshot" in result.output
+
+    @pytest.mark.usefixtures("_mock_pty_data")
+    def test_pty_snapshot_save_json(self, tmp_path):
+        """Should save JSON snapshot to specified path."""
+        json_path = tmp_path / "snapshot.json"
+        result = runner.invoke(app, ["pty-snapshot", "--json", str(json_path)])
+        assert result.exit_code == 0
+        assert json_path.exists()
+
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        assert "pty_info" in data
+        assert data["pty_info"]["windsurf_pty_count"] == 5
+
+    @pytest.mark.usefixtures("_mock_pty_data")
+    def test_pty_snapshot_save_markdown(self, tmp_path):
+        """Should save Markdown snapshot to specified path."""
+        md_path = tmp_path / "snapshot.md"
+        result = runner.invoke(app, ["pty-snapshot", "--md", str(md_path)])
+        assert result.exit_code == 0
+        assert md_path.exists()
+
+        content = md_path.read_text(encoding="utf-8")
+        assert "# PTY Forensic Snapshot" in content
+        assert "Windsurf PTYs" in content
+        assert "Per-PID Breakdown" in content
+        assert "2.5.0" in content
+
+    @pytest.mark.usefixtures("_mock_pty_data")
+    def test_pty_snapshot_save_flag(self, tmp_path, monkeypatch):
+        """Should auto-save both JSON and Markdown with --save."""
+        monkeypatch.setattr("surfmon.cli.DEFAULT_REPORTS_DIR", tmp_path)
+        result = runner.invoke(app, ["pty-snapshot", "--save"])
+        assert result.exit_code == 0
+
+        json_files = list(tmp_path.glob("pty-snapshot-*.json"))
+        md_files = list(tmp_path.glob("pty-snapshot-*.md"))
+        assert len(json_files) == 1
+        assert len(md_files) == 1
+
+
+class TestFormatUptime:
+    """Tests for _format_uptime helper."""
+
+    def test_format_hours(self):
+        """Should format hours, minutes, seconds."""
+        from surfmon.cli import _format_uptime
+
+        assert _format_uptime(3661.0) == "1h 1m 1s"
+
+    def test_format_minutes(self):
+        """Should format minutes and seconds."""
+        from surfmon.cli import _format_uptime
+
+        assert _format_uptime(125.0) == "2m 5s"
+
+    def test_format_seconds(self):
+        """Should format seconds only."""
+        from surfmon.cli import _format_uptime
+
+        assert _format_uptime(42.0) == "42s"
+
+    def test_format_zero(self):
+        """Should return unknown for zero."""
+        from surfmon.cli import _format_uptime
+
+        assert _format_uptime(0.0) == "unknown"

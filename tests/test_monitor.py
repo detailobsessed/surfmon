@@ -10,8 +10,14 @@ import pytest
 from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
     ProcessInfo,
+    PtyFdEntry,
     PtyInfo,
     SystemInfo,
+    _extract_windsurf_version,
+    _get_system_pty_limit,
+    _get_windsurf_uptime,
+    _group_entries_by_pid,
+    _parse_lsof_line,
     check_log_issues,
     check_pty_leak,
     count_extensions,
@@ -684,6 +690,27 @@ class TestSaveReportJson:
         assert data["timestamp"] == "2026-01-01"
         assert data["process_count"] == 5
 
+    def test_excludes_raw_lsof_from_json(self, tmp_path, mocker):
+        """Should strip raw_lsof from pty_info to keep report files small."""
+        report = Mock()
+        mocker.patch(
+            "surfmon.monitor.asdict",
+            return_value={
+                "timestamp": "2026-01-01",
+                "pty_info": {
+                    "windsurf_pty_count": 5,
+                    "raw_lsof": "COMMAND PID USER FD ...\nWindsurf 123 ...",
+                },
+            },
+        )
+
+        output_path = tmp_path / "report.json"
+        save_report_json(report, output_path)
+
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        assert "raw_lsof" not in data["pty_info"]
+        assert data["pty_info"]["windsurf_pty_count"] == 5
+
 
 class TestLanguageServerEnhancement:
     """Additional tests for language server cmdline enhancement."""
@@ -1307,3 +1334,312 @@ class TestLaunchCountEdgeCases:
         result = count_windsurf_launches_today()
 
         assert result == 1
+
+
+class TestParseLsofLine:
+    """Tests for _parse_lsof_line."""
+
+    def test_parses_valid_line(self):
+        """Should parse a standard lsof output line into PtyFdEntry."""
+        line = "Windsurf  75486 ismar   33u   CHR   15,0      0t0  605 /dev/ptmx"
+        result = _parse_lsof_line(line)
+
+        assert result is not None
+        assert result.command == "Windsurf"
+        assert result.pid == 75486
+        assert result.fd == "33u"
+        assert result.device == "15,0"
+        assert result.size_off == "0t0"
+
+    def test_parses_active_line_with_offset(self):
+        """Should parse a line with non-zero offset."""
+        line = "preview   50510 ismar   55u   CHR   15,5 0t222204  605 /dev/ptmx"
+        result = _parse_lsof_line(line)
+
+        assert result is not None
+        assert result.command == "preview"
+        assert result.pid == 50510
+        assert result.size_off == "0t222204"
+
+    def test_returns_none_for_short_line(self):
+        """Should return None if line has fewer than LSOF_MIN_FIELDS fields."""
+        result = _parse_lsof_line("too few fields")
+        assert result is None
+
+    def test_returns_none_for_empty_line(self):
+        """Should return None for empty string."""
+        result = _parse_lsof_line("")
+        assert result is None
+
+    def test_returns_none_for_non_integer_pid(self):
+        """Should return None if PID field is not a valid integer."""
+        line = "WARNING  notapid ismar   33u   CHR   15,0      0t0  605 /dev/ptmx"
+        result = _parse_lsof_line(line)
+        assert result is None
+
+
+class TestGroupEntriesByPid:
+    """Tests for _group_entries_by_pid."""
+
+    def test_groups_entries_correctly(self):
+        """Should group entries by PID and count them."""
+        entries = [
+            PtyFdEntry(command="Windsurf", pid=100, fd="33u", device="15,0", size_off="0t0"),
+            PtyFdEntry(command="Windsurf", pid=100, fd="34u", device="15,1", size_off="0t0"),
+            PtyFdEntry(command="Windsurf", pid=100, fd="35u", device="15,2", size_off="0t100"),
+            PtyFdEntry(command="Windsurf", pid=200, fd="10u", device="15,3", size_off="0t0"),
+        ]
+        result = _group_entries_by_pid(entries)
+
+        assert len(result) == 2
+        # Sorted by count descending
+        assert result[0].pid == 100
+        assert result[0].pty_count == 3
+        assert result[0].fds == ["33u", "34u", "35u"]
+        assert result[1].pid == 200
+        assert result[1].pty_count == 1
+
+    def test_returns_empty_for_no_entries(self):
+        """Should return empty list for no entries."""
+        result = _group_entries_by_pid([])
+        assert result == []
+
+    def test_single_entry(self):
+        """Should handle a single entry."""
+        entries = [PtyFdEntry(command="App", pid=42, fd="5u", device="15,0", size_off="0t0")]
+        result = _group_entries_by_pid(entries)
+
+        assert len(result) == 1
+        assert result[0].pid == 42
+        assert result[0].name == "App"
+        assert result[0].pty_count == 1
+
+
+class TestExtractWindsurfVersion:
+    """Tests for _extract_windsurf_version."""
+
+    def test_extracts_version(self):
+        """Should extract version from --windsurf_version flag."""
+        procs = [
+            ProcessInfo(
+                pid=1,
+                name="Windsurf",
+                cpu_percent=0.0,
+                memory_mb=100.0,
+                memory_percent=1.0,
+                num_threads=10,
+                runtime_seconds=3600.0,
+                cmdline="/Applications/Windsurf.app/Contents/MacOS/Windsurf --windsurf_version 1.99.2",
+            ),
+        ]
+        assert _extract_windsurf_version(procs) == "1.99.2"
+
+    def test_returns_empty_when_no_version(self):
+        """Should return empty string when no version flag found."""
+        procs = [
+            ProcessInfo(
+                pid=1,
+                name="Windsurf",
+                cpu_percent=0.0,
+                memory_mb=100.0,
+                memory_percent=1.0,
+                num_threads=10,
+                runtime_seconds=3600.0,
+                cmdline="/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+            ),
+        ]
+        assert not _extract_windsurf_version(procs)
+
+    def test_returns_empty_for_empty_list(self):
+        """Should return empty string for empty process list."""
+        assert not _extract_windsurf_version([])
+
+
+class TestGetWindsurfUptime:
+    """Tests for _get_windsurf_uptime."""
+
+    def test_returns_max_uptime(self):
+        """Should return the longest runtime from the process list."""
+        procs = [
+            ProcessInfo(
+                pid=1,
+                name="A",
+                cpu_percent=0.0,
+                memory_mb=0.0,
+                memory_percent=0.0,
+                num_threads=1,
+                runtime_seconds=100.0,
+                cmdline="",
+            ),
+            ProcessInfo(
+                pid=2,
+                name="B",
+                cpu_percent=0.0,
+                memory_mb=0.0,
+                memory_percent=0.0,
+                num_threads=1,
+                runtime_seconds=7200.0,
+                cmdline="",
+            ),
+        ]
+        assert _get_windsurf_uptime(procs) == 7200.0
+
+    def test_returns_zero_for_empty_list(self):
+        """Should return 0.0 for empty process list."""
+        assert _get_windsurf_uptime([]) == 0.0
+
+
+class TestGetSystemPtyLimit:
+    """Tests for _get_system_pty_limit."""
+
+    def test_returns_limit_from_sysctl(self, mocker):
+        """Should return the parsed sysctl value."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        result_mock = Mock()
+        result_mock.returncode = 0
+        result_mock.stdout = "1024\n"
+        mock_run.return_value = result_mock
+
+        assert _get_system_pty_limit() == 1024
+
+    def test_returns_default_on_failure(self, mocker):
+        """Should return 511 when sysctl fails."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        result_mock = Mock()
+        result_mock.returncode = 1
+        result_mock.stdout = ""
+        mock_run.return_value = result_mock
+
+        assert _get_system_pty_limit() == 511
+
+
+class TestCheckPtyLeakForensic:
+    """Tests for check_pty_leak forensic data collection."""
+
+    def test_populates_per_process_detail(self, mocker):
+        """Should populate per_process with per-PID breakdown."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_lines = [
+            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            "Windsurf  1000 ismar   33u   CHR   15,0      0t0  605 /dev/ptmx",
+            "Windsurf  1000 ismar   34u   CHR   15,1 0t100000  605 /dev/ptmx",
+            "Windsurf  2000 ismar   10u   CHR   15,2      0t0  605 /dev/ptmx",
+            "Terminal  3000 ismar   5u    CHR   15,3 0t500000  605 /dev/ptmx",
+        ]
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "\n".join(lsof_lines)
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert result.windsurf_pty_count == 3
+        assert result.system_pty_used == 4
+
+        # Per-process detail
+        assert result.per_process is not None
+        assert len(result.per_process) == 2
+        assert result.per_process[0].pid == 1000
+        assert result.per_process[0].pty_count == 2
+        assert result.per_process[1].pid == 2000
+        assert result.per_process[1].pty_count == 1
+
+        # FD entries
+        assert result.fd_entries is not None
+        assert len(result.fd_entries) == 3
+
+        # Non-Windsurf holders
+        assert result.non_windsurf_holders is not None
+        assert len(result.non_windsurf_holders) == 1
+        assert result.non_windsurf_holders[0].pid == 3000
+        assert result.non_windsurf_holders[0].name == "Terminal"
+
+        # Raw lsof preserved
+        assert result.raw_lsof
+        assert "Windsurf" in result.raw_lsof
+
+    def test_extracts_version_and_uptime(self, mocker):
+        """Should extract version and uptime when process list is provided."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n"
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        procs = [
+            ProcessInfo(
+                pid=1,
+                name="Windsurf",
+                cpu_percent=0.0,
+                memory_mb=100.0,
+                memory_percent=1.0,
+                num_threads=10,
+                runtime_seconds=7200.0,
+                cmdline="/path/Windsurf --windsurf_version 2.5.0",
+            ),
+        ]
+        result = check_pty_leak(windsurf_processes=procs)
+
+        assert result.windsurf_version == "2.5.0"
+        assert result.windsurf_uptime_seconds == 7200.0
+
+    def test_backwards_compatible_without_processes(self, mocker):
+        """Should work without process list (backwards-compatible)."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n"
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert not result.windsurf_version
+        assert result.windsurf_uptime_seconds == 0.0
+        assert result.per_process == []
+        assert result.fd_entries == []
+
+    def test_fd_detail_captures_offset(self, mocker):
+        """Should capture offset values for active/idle FD classification."""
+        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+
+        sysctl_result = Mock()
+        sysctl_result.returncode = 0
+        sysctl_result.stdout = "511\n"
+
+        lsof_lines = [
+            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            "Windsurf  1000 ismar   33u   CHR   15,0      0t0  605 /dev/ptmx",
+            "Windsurf  1000 ismar   34u   CHR   15,1 0t999999  605 /dev/ptmx",
+        ]
+        lsof_result = Mock()
+        lsof_result.returncode = 0
+        lsof_result.stdout = "\n".join(lsof_lines)
+
+        mock_run.side_effect = [sysctl_result, lsof_result]
+
+        result = check_pty_leak()
+
+        assert result.fd_entries is not None
+        assert len(result.fd_entries) == 2
+        idle_fds = [e for e in result.fd_entries if e.size_off == "0t0"]
+        active_fds = [e for e in result.fd_entries if e.size_off != "0t0"]
+        assert len(idle_fds) == 1
+        assert len(active_fds) == 1

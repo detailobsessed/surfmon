@@ -333,6 +333,47 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
         _display_verbose_info(report)
 
 
+def _format_pty_markdown(pty: Any) -> list[str]:
+    """Format PTY info as Markdown lines for inclusion in reports."""
+    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+    lines = [
+        "## PTY Usage",
+        "",
+        f"- **Windsurf PTYs:** {pty.windsurf_pty_count}",
+        f"- **System PTYs Used:** {pty.system_pty_used} / {pty.system_pty_limit} ({usage_pct:.1f}%)",
+    ]
+    if pty.windsurf_version:
+        lines.append(f"- **Windsurf Version:** {pty.windsurf_version}")
+    if pty.windsurf_uptime_seconds > 0:
+        h = int(pty.windsurf_uptime_seconds) // 3600
+        m = (int(pty.windsurf_uptime_seconds) % 3600) // 60
+        lines.append(f"- **Windsurf Uptime:** {h}h {m}m")
+    lines.append("")
+
+    if pty.per_process:
+        lines.extend([
+            "### Per-PID PTY Breakdown",
+            "",
+            "| PID | Process | PTYs | FD Range |",
+            "|-----|---------|------|----------|",
+        ])
+        for detail in pty.per_process:
+            fds_sorted = sorted(detail.fds, key=lambda f: int(f.rstrip("urw")))
+            fd_range = f"{fds_sorted[0]}..{fds_sorted[-1]}" if len(fds_sorted) > 1 else fds_sorted[0]
+            lines.append(f"| {detail.pid} | {detail.name} | {detail.pty_count} | {fd_range} |")
+        lines.append("")
+
+    if pty.fd_entries:
+        active = sum(1 for e in pty.fd_entries if e.size_off not in {"0t0", "0"})
+        idle = len(pty.fd_entries) - active
+        lines.extend([
+            f"**FD Status:** {active} active, {idle} idle (zero offset)",
+            "",
+        ])
+
+    return lines
+
+
 def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
     """Save report as Markdown."""
     lines = [
@@ -398,14 +439,7 @@ def save_report_markdown(report: MonitoringReport, output_path: Path) -> None:
         lines.append("")
 
     if report.pty_info:
-        pty = report.pty_info
-        lines.extend([
-            "## PTY Usage",
-            "",
-            f"- **Windsurf PTYs:** {pty.windsurf_pty_count}",
-            f"- **System PTYs Used:** {pty.system_pty_used} / {pty.system_pty_limit}",
-            "",
-        ])
+        lines.extend(_format_pty_markdown(report.pty_info))
 
     if report.log_issues:
         lines.extend([
