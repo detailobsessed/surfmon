@@ -690,6 +690,27 @@ class TestSaveReportJson:
         assert data["timestamp"] == "2026-01-01"
         assert data["process_count"] == 5
 
+    def test_excludes_raw_lsof_from_json(self, tmp_path, mocker):
+        """Should strip raw_lsof from pty_info to keep report files small."""
+        report = Mock()
+        mocker.patch(
+            "surfmon.monitor.asdict",
+            return_value={
+                "timestamp": "2026-01-01",
+                "pty_info": {
+                    "windsurf_pty_count": 5,
+                    "raw_lsof": "COMMAND PID USER FD ...\nWindsurf 123 ...",
+                },
+            },
+        )
+
+        output_path = tmp_path / "report.json"
+        save_report_json(report, output_path)
+
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        assert "raw_lsof" not in data["pty_info"]
+        assert data["pty_info"]["windsurf_pty_count"] == 5
+
 
 class TestLanguageServerEnhancement:
     """Additional tests for language server cmdline enhancement."""
@@ -1348,6 +1369,12 @@ class TestParseLsofLine:
     def test_returns_none_for_empty_line(self):
         """Should return None for empty string."""
         result = _parse_lsof_line("")
+        assert result is None
+
+    def test_returns_none_for_non_integer_pid(self):
+        """Should return None if PID field is not a valid integer."""
+        line = "WARNING  notapid ismar   33u   CHR   15,0      0t0  605 /dev/ptmx"
+        result = _parse_lsof_line(line)
         assert result is None
 
 

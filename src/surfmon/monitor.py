@@ -422,9 +422,13 @@ def _parse_lsof_line(line: str) -> PtyFdEntry | None:
     parts = line.split()
     if len(parts) < LSOF_MIN_FIELDS:
         return None
+    try:
+        pid = int(parts[1])
+    except ValueError:
+        return None
     return PtyFdEntry(
         command=parts[0],
-        pid=int(parts[1]),
+        pid=pid,
         fd=parts[3],
         device=parts[5],
         size_off=parts[6],
@@ -894,6 +898,13 @@ def generate_report() -> MonitoringReport:
 
 
 def save_report_json(report: MonitoringReport, output_path: Path) -> None:
-    """Save report as JSON."""
+    """Save report as JSON.
+
+    Excludes raw_lsof from regular reports to keep file sizes small.
+    The pty-snapshot command serializes PtyInfo directly for full forensic detail.
+    """
+    data = asdict(report)
+    if data.get("pty_info"):
+        data["pty_info"].pop("raw_lsof", None)
     with output_path.open("w", encoding="utf-8") as f:
-        json.dump(asdict(report), f, indent=2)
+        json.dump(data, f, indent=2)
