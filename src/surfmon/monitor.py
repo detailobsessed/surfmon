@@ -150,6 +150,8 @@ class MonitoringReport:
     log_issues: list[str]
     active_workspaces: list[WorkspaceInfo]
     windsurf_launches_today: int
+    windsurf_version: str = ""
+    windsurf_uptime_seconds: float = 0.0
     pty_info: PtyInfo | None = None
 
 
@@ -1106,6 +1108,8 @@ def generate_report() -> MonitoringReport:
         log_issues=log_issues,
         active_workspaces=get_active_workspaces(),
         windsurf_launches_today=count_windsurf_launches_today(),
+        windsurf_version=_extract_windsurf_version(proc_infos),
+        windsurf_uptime_seconds=_get_windsurf_uptime(proc_infos),
         pty_info=pty_info,
     )
 
