@@ -1311,28 +1311,28 @@ class TestSaveSnapshotFiles:
 
 
 class TestFormatUptime:
-    """Tests for _format_uptime helper."""
+    """Tests for format_uptime helper."""
 
     def test_format_hours(self):
         """Should format hours, minutes, seconds."""
-        from surfmon.cli import _format_uptime
+        from surfmon.monitor import format_uptime
 
-        assert _format_uptime(3661.0) == "1h 1m 1s"
+        assert format_uptime(3661.0) == "1h 1m 1s"
 
     def test_format_minutes(self):
         """Should format minutes and seconds."""
-        from surfmon.cli import _format_uptime
+        from surfmon.monitor import format_uptime
 
-        assert _format_uptime(125.0) == "2m 5s"
+        assert format_uptime(125.0) == "2m 5s"
 
     def test_format_seconds(self):
         """Should format seconds only."""
-        from surfmon.cli import _format_uptime
+        from surfmon.monitor import format_uptime
 
-        assert _format_uptime(42.0) == "42s"
+        assert format_uptime(42.0) == "42s"
 
     def test_format_zero(self):
         """Should return unknown for zero."""
-        from surfmon.cli import _format_uptime
+        from surfmon.monitor import format_uptime
 
-        assert _format_uptime(0.0) == "unknown"
+        assert format_uptime(0.0) == "unknown"

@@ -8,6 +8,8 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
+from surfmon.monitor import format_uptime
+
 __all__ = [
     "CPU_PERCENT_CRITICAL",
     "CPU_PERCENT_WARNING",
@@ -345,9 +347,7 @@ def _format_pty_markdown(pty: Any) -> list[str]:
     if pty.windsurf_version:
         lines.append(f"- **Windsurf Version:** {pty.windsurf_version}")
     if pty.windsurf_uptime_seconds > 0:
-        h = int(pty.windsurf_uptime_seconds) // 3600
-        m = (int(pty.windsurf_uptime_seconds) % 3600) // 60
-        lines.append(f"- **Windsurf Uptime:** {h}h {m}m")
+        lines.append(f"- **Windsurf Uptime:** {format_uptime(pty.windsurf_uptime_seconds)}")
     lines.append("")
 
     if pty.per_process:

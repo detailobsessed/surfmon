@@ -674,6 +674,23 @@ def check_pty_leak(windsurf_processes: list[ProcessInfo] | None = None) -> PtyIn
     )
 
 
+def format_uptime(seconds: float) -> str:
+    """Format uptime seconds as a human-readable string.
+
+    Shared by CLI display, PTY snapshot, LS snapshot, and Markdown reports.
+    """
+    if seconds <= 0:
+        return "unknown"
+    total = int(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
 def _format_age_str(days: float) -> str:
     """Format age in days to human-readable string."""
     if days >= 1:
