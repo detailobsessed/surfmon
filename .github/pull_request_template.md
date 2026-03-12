@@ -1,14 +1,4 @@
-## Description
+Closes ISM-XXX
 
-<!-- Brief description of what this PR does -->
-
-## Checklist
-
-- [ ] Tests added/updated
-- [ ] Documentation updated (if applicable)
-- [ ] `poe check` passes
-- [ ] Commit messages follow [conventional commits](../CONTRIBUTING.md#commit-messages)
-
-## Related Issues
-
-<!-- Link related issues: Fixes #123, Related to #456 -->
+<!-- Replace ISM-XXX with the Linear issue this PR closes (auto-transitions to Done on merge).
+     Use "Ref ISM-XXX" to link without closing. Delete the line for chore PRs with no issue. -->
