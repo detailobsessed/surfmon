@@ -52,13 +52,37 @@ class TestDisplayReport:
         assert mock_console.print.called
 
     def test_display_report_not_running(self, mock_report, mocker):
-        """Should show not running status when process_count is 0."""
+        """Should split into Runtime and Configuration tables when not running."""
+        from rich.table import Table
+
         mock_report.process_count = 0
         mock_console = mocker.patch("surfmon.output.console")
         display_report(mock_report)
-        # Check that "Not Running" appears in output
-        calls = str(mock_console.print.call_args_list)
-        assert "Not Running" in calls or mock_console.print.called
+        table_titles = [
+            arg.args[0].title
+            for arg in mock_console.print.call_args_list
+            if arg.args and isinstance(arg.args[0], Table) and hasattr(arg.args[0], "title")
+        ]
+        assert "Windsurf Runtime" in table_titles
+        assert "Windsurf Configuration" in table_titles
+
+    def test_display_report_not_running_no_config(self, mock_report, mocker):
+        """Should skip Configuration table when nothing is configured."""
+        from rich.table import Table
+
+        mock_report.process_count = 0
+        mock_report.extensions_count = 0
+        mock_report.mcp_servers_enabled = []
+        mock_report.active_workspaces = []
+        mock_console = mocker.patch("surfmon.output.console")
+        display_report(mock_report)
+        table_titles = [
+            arg.args[0].title
+            for arg in mock_console.print.call_args_list
+            if arg.args and isinstance(arg.args[0], Table) and hasattr(arg.args[0], "title")
+        ]
+        assert "Windsurf Runtime" in table_titles
+        assert "Windsurf Configuration" not in table_titles
 
     def test_display_report_with_issues(self, mock_report, mocker):
         """Should display issues when present."""
