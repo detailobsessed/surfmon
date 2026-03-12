@@ -246,7 +246,7 @@ prek = "prek run --all-files"
 
 
 # Template utilities
-check-template = "bash scripts/check-template-update.sh"
+check-template = { shell = "copier check-update || true" }
 update-template = { shell = "copier update --trust . --skip-answered --defaults && uv sync --upgrade && prek autoupdate && echo '  ✓ Dependencies upgraded and hook versions updated'" }
 
 # Git utilities
