@@ -14,10 +14,13 @@ from surfmon.monitor import (
     PtyInfo,
     SystemInfo,
     _extract_windsurf_version,
+    _extract_workspace_from_cmdline,
     _get_system_pty_limit,
     _get_windsurf_uptime,
     _group_entries_by_pid,
+    _is_orphaned_workspace,
     _parse_lsof_line,
+    _resolve_workspace_path,
     check_log_issues,
     check_pty_leak,
     count_extensions,
@@ -1672,31 +1675,96 @@ class TestDetectLanguage:
         assert _detect_language(cmdline) == expected
 
 
+def _patch_fs(monkeypatch, dirs, files=()):
+    """Patch Path.is_dir and Path.exists for deterministic resolver tests."""
+    dir_set = {str(Path(d)) for d in dirs}
+    file_set = {str(Path(f)) for f in files}
+
+    monkeypatch.setattr(Path, "is_dir", lambda self: str(self) in dir_set)
+    monkeypatch.setattr(Path, "exists", lambda self: str(self) in dir_set or str(self) in file_set)
+
+
+class TestResolveWorkspacePath:
+    """Tests for Codeium workspace_id resolution (ISM-333)."""
+
+    def test_simple_path_no_hyphens(self, monkeypatch):
+        """All-slash decode works when path has no hyphens or dots."""
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/myproject"])
+        assert _resolve_workspace_path("file_Users_dev_repos_myproject") == Path("/Users/dev/repos/myproject")
+
+    def test_hyphenated_directory(self, monkeypatch):
+        """Hyphens in directory names are correctly resolved."""
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier-uv-bleeding"])
+        assert _resolve_workspace_path("file_Users_dev_repos_copier_uv_bleeding") == Path("/Users/dev/repos/copier-uv-bleeding")
+
+    def test_dotted_file(self, monkeypatch):
+        """Dots in filenames are correctly resolved."""
+        _patch_fs(
+            monkeypatch,
+            ["/", "/Users", "/Users/dev", "/Users/dev/repos"],
+            files=["/Users/dev/repos/project.code-workspace"],
+        )
+        assert _resolve_workspace_path("file_Users_dev_repos_project_code_workspace") == Path("/Users/dev/repos/project.code-workspace")
+
+    def test_ambiguous_with_real_subdir(self, monkeypatch):
+        """Correct resolution when a prefix also exists as a directory."""
+        _patch_fs(
+            monkeypatch,
+            ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier", "/Users/dev/repos/copier-uv-bleeding"],
+        )
+        assert _resolve_workspace_path("file_Users_dev_repos_copier_uv_bleeding") == Path("/Users/dev/repos/copier-uv-bleeding")
+
+    def test_truly_orphaned_returns_none(self, monkeypatch):
+        """Returns None for workspace_ids that don't resolve to any real path."""
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos"])
+        assert _resolve_workspace_path("file_Users_dev_repos_nonexistent_path") is None
+
+    def test_mixed_dot_and_hyphen(self, monkeypatch):
+        """Handles names with both dots and hyphens."""
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/my-app.v2"])
+        assert _resolve_workspace_path("file_Users_dev_repos_my_app_v2") == Path("/Users/dev/repos/my-app.v2")
+
+    def test_code_workspace_with_real_parent_dir(self, monkeypatch):
+        """surfmon.code-workspace resolves even though surfmon/ is a real dir."""
+        _patch_fs(
+            monkeypatch,
+            ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/surfmon"],
+            files=["/Users/dev/repos/surfmon.code-workspace"],
+        )
+        assert _resolve_workspace_path("file_Users_dev_repos_surfmon_code_workspace") == Path("/Users/dev/repos/surfmon.code-workspace")
+
+
 class TestExtractWorkspaceFromCmdline:
     """Tests for _extract_workspace_from_cmdline helper."""
 
-    def test_extracts_workspace_id(self):
+    def test_extracts_workspace_id(self, monkeypatch):
         """Should extract workspace path from --workspace_id."""
-        from surfmon.monitor import _extract_workspace_from_cmdline
-
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/ismar", "/Users/ismar/repos", "/Users/ismar/repos/surfmon"])
         cmdline = "language_server_macos_arm --workspace_id file_Users_ismar_repos_surfmon"
         result = _extract_workspace_from_cmdline(cmdline)
         assert result == "ismar/repos/surfmon"
 
     def test_extracts_jdt_data_dir(self):
         """Should extract project name from -data flag."""
-        from surfmon.monitor import _extract_workspace_from_cmdline
-
         cmdline = "jdtls -data /home/user/.cache/jdt/myproject"
         result = _extract_workspace_from_cmdline(cmdline)
         assert result == "myproject"
 
     def test_returns_empty_for_unknown(self):
         """Should return empty string when no workspace can be extracted."""
-        from surfmon.monitor import _extract_workspace_from_cmdline
+        assert not _extract_workspace_from_cmdline("gopls serve")
 
-        result = _extract_workspace_from_cmdline("gopls serve")
-        assert not result
+    def test_resolved_hyphenated_path(self, monkeypatch):
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier-uv-bleeding"])
+        cmdline = "ls --workspace_id file_Users_dev_repos_copier_uv_bleeding --x"
+        result = _extract_workspace_from_cmdline(cmdline)
+        assert "copier-uv-bleeding" in result
+
+    def test_fallback_for_unresolvable(self, monkeypatch):
+        _patch_fs(monkeypatch, ["/"])
+        cmdline = "ls --workspace_id file_no_such_fake_workspace --x"
+        result = _extract_workspace_from_cmdline(cmdline)
+        assert result == "such/fake/workspace"
 
 
 class TestIsOrphanedWorkspace:
@@ -1704,25 +1772,24 @@ class TestIsOrphanedWorkspace:
 
     def test_not_orphaned_without_workspace_id(self):
         """Should return False when no workspace_id flag present."""
-        from surfmon.monitor import _is_orphaned_workspace
-
         assert _is_orphaned_workspace("gopls serve") is False
 
-    def test_not_orphaned_for_existing_workspace(self, mocker):
+    def test_not_orphaned_for_existing_workspace(self, monkeypatch):
         """Should return False for existing workspace path."""
-        from surfmon.monitor import _is_orphaned_workspace
-
-        # Mock Path.exists to avoid platform-specific path issues (e.g. /tmp doesn't exist on Windows)
-        mocker.patch("surfmon.monitor.Path.exists", return_value=True)
-        cmdline = "language_server --workspace_id file_tmp"
+        _patch_fs(monkeypatch, ["/", "/opt"])
+        cmdline = "language_server --workspace_id file_opt"
         assert _is_orphaned_workspace(cmdline) is False
 
-    def test_orphaned_for_nonexistent_workspace(self):
+    def test_orphaned_for_nonexistent_workspace(self, monkeypatch):
         """Should return True for non-existent workspace path."""
-        from surfmon.monitor import _is_orphaned_workspace
-
+        _patch_fs(monkeypatch, ["/"])
         cmdline = "language_server --workspace_id file_Users_nobody_nonexistent_project_xyz"
         assert _is_orphaned_workspace(cmdline) is True
+
+    def test_not_orphaned_with_hyphenated_path(self, monkeypatch):
+        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/my-project"])
+        cmdline = "language_server --workspace_id file_Users_dev_repos_my_project --other"
+        assert _is_orphaned_workspace(cmdline) is False
 
 
 class TestCaptureLsSnapshot:

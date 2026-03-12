@@ -276,9 +276,7 @@ def _enhance_language_server_cmdline(p: ProcessInfo) -> str | None:
     # Extract workspace ID for Codeium language server
     workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
     if workspace_match:
-        workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
-        parts = workspace.split("/")
-        workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
+        workspace_short = _extract_workspace_from_cmdline(cmdline)
         enhanced = f"{p.name} [workspace: {workspace_short}]"
 
     # Extract language for JDT LS
@@ -351,11 +349,65 @@ def _detect_language(cmdline: str) -> str:
     return "Unknown"
 
 
+def _resolve_workspace_path(workspace_id: str) -> Path | None:
+    """Resolve a Codeium workspace_id to an existing filesystem path.
+
+    Codeium encodes ``/``, ``-``, and ``.`` as ``_`` in its ``--workspace_id``
+    argument.  A naïve ``replace("_", "/")`` produces false paths for any
+    directory whose name contains hyphens or dots (e.g. ``copier-uv-bleeding``
+    becomes ``copier/uv/bleeding``).
+
+    This function walks the filesystem, trying ``/``, ``-``, and ``.`` for each
+    encoded underscore until it finds a path that actually exists.  Returns
+    ``None`` when no valid decoding is found (truly orphaned workspace).
+    """
+    raw = workspace_id.removeprefix("file_")
+    segments = raw.split("_")
+
+    # Fast path: simple all-slashes decode
+    simple = Path("/" + "/".join(segments))
+    if simple.exists():
+        return simple
+
+    return _try_joiners(Path("/"), segments)
+
+
+def _try_joiners(base: Path, segments: list[str]) -> Path | None:
+    """Try ``/``, ``-``, and ``.`` for each underscore between *segments*."""
+    if len(segments) == 1:
+        candidate = base / segments[0]
+        return candidate if candidate.exists() else None
+
+    first, rest = segments[0], segments[1:]
+
+    # Option 1: underscore was / (new path component)
+    child = base / first
+    if child.is_dir():
+        result = _try_joiners(child, rest)
+        if result is not None:
+            return result
+
+    # Option 2/3: underscore was - or . (merge with next segment)
+    for joiner in ("-", "."):
+        merged = [first + joiner + rest[0], *rest[1:]]
+        result = _try_joiners(base, merged)
+        if result is not None:
+            return result
+
+    return None
+
+
 def _extract_workspace_from_cmdline(cmdline: str) -> str:
     """Extract workspace path from a language server command line."""
     workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
     if workspace_match:
-        workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
+        workspace_id = workspace_match.group(1)
+        resolved = _resolve_workspace_path(workspace_id)
+        if resolved is not None:
+            parts = resolved.parts
+            return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else str(resolved)
+        # Fallback: naïve decode for display
+        workspace = workspace_id.removeprefix("file_").replace("_", "/")
         parts = workspace.split("/")
         return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
 
@@ -372,9 +424,7 @@ def _is_orphaned_workspace(cmdline: str) -> bool:
     if not workspace_match:
         return False
 
-    workspace_id = workspace_match.group(1)
-    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
-    return not Path("/" + workspace_path).exists()
+    return _resolve_workspace_path(workspace_match.group(1)) is None
 
 
 def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, windsurf_uptime: float) -> LsSnapshot:
@@ -481,9 +531,13 @@ def _check_orphaned_workspace_proc(cmdline: str, proc: psutil.Process) -> str | 
     database_dir = database_match.group(1)
 
     # Convert workspace_id to actual path
-    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
-    workspace_path_obj = Path("/" + workspace_path)
+    resolved = _resolve_workspace_path(workspace_id)
+    if resolved is not None and resolved.exists():
+        return None
 
+    # Fallback: naïve decode for display/check
+    workspace_path = workspace_id.removeprefix("file_").replace("_", "/")
+    workspace_path_obj = Path("/" + workspace_path)
     if workspace_path_obj.exists():
         return None
 
@@ -498,7 +552,10 @@ def _check_orphaned_workspace_proc(cmdline: str, proc: psutil.Process) -> str | 
     with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
         mem_mb = proc.memory_info().rss / 1024 / 1024
 
-    workspace_short = "/".join(workspace_path.split("/")[-3:]) if "/" in workspace_path else workspace_path
+    if resolved is not None:
+        workspace_short = "/".join(resolved.parts[-3:])
+    else:
+        workspace_short = "/".join(workspace_path.split("/")[-3:]) if "/" in workspace_path else workspace_path
     return (
         f"✖  CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
         f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
