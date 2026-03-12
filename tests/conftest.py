@@ -17,6 +17,12 @@ def _default_target():
     reset_target()
 
 
+@pytest.fixture(autouse=True)
+def _mock_db_writes(monkeypatch):
+    """Prevent CLI commands from opening real DB connections during tests."""
+    monkeypatch.setattr("surfmon.cli._store_to_db", lambda *_args, **_kwargs: None)
+
+
 @pytest.fixture
 def mock_monitoring_report():
     """Create a mock MonitoringReport with realistic data."""

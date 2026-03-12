@@ -30,6 +30,7 @@ dependencies = [
     "rich>=14.3",
     "python-decouple>=3.8",
     "matplotlib>=3.10",
+    "sqlite-utils>=3.38",
 ]
 
 [project.urls]
