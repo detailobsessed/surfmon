@@ -1411,6 +1411,55 @@ class TestHistoryCommand:
         result = runner.invoke(app, ["history"])
         assert result.exit_code == 0
 
+    def test_history_json_with_data(self, mocker):
+        """Should output JSON array when --json is passed."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_history_dicts",
+            return_value=[
+                {
+                    "id": "abc-123",
+                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "command": "check",
+                    "windsurf_version": "1.95.0",
+                    "windsurf_target": "stable",
+                    "windsurf_uptime_s": 3600.0,
+                    "surfmon_version": "0.6.0",
+                    "process_count": 5,
+                    "total_memory_mb": 2048.0,
+                    "ls_count": 2,
+                    "ls_memory_mb": 500.0,
+                    "orphaned_count": 0,
+                    "pty_count": 25,
+                    "issue_count": 0,
+                },
+            ],
+        )
+        result = runner.invoke(app, ["history", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["id"] == "abc-123"
+        assert data[0]["ls_memory_mb"] == 500.0
+
+    def test_history_json_empty(self, mocker):
+        """Should output empty JSON array when no data."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        result = runner.invoke(app, ["history", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+    def test_history_json_error(self, mocker):
+        """Should output JSON error object when ValueError is raised in --json mode."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("Invalid duration format: 'xyz'"))
+        result = runner.invoke(app, ["history", "--json", "--since", "xyz"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "error" in data
+        assert "Invalid duration format" in data["error"]
+
 
 class TestTrendCommand:
     """Tests for the trend command."""
@@ -1469,6 +1518,40 @@ class TestTrendCommand:
         )
         result = runner.invoke(app, ["trend", "memory"])
         assert result.exit_code == 0
+
+    def test_trend_json_with_data(self, mocker):
+        """Should output JSON array when --json is passed."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_trend",
+            return_value=[
+                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
+                {"timestamp": "2025-01-01T11:00:00", "value": 1800.0},
+            ],
+        )
+        result = runner.invoke(app, ["trend", "memory", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 2
+        assert data[0]["value"] == 1500.0
+
+    def test_trend_json_empty(self, mocker):
+        """Should output empty JSON array when no data."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        result = runner.invoke(app, ["trend", "memory", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+    def test_trend_json_error(self, mocker):
+        """Should output JSON error object when ValueError is raised in --json mode."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric: 'bogus'"))
+        result = runner.invoke(app, ["trend", "bogus", "--json"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "error" in data
+        assert "Unknown metric" in data["error"]
 
 
 class TestTrendHelpers:

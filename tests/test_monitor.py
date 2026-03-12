@@ -650,21 +650,19 @@ class TestCountWindsurfLaunchesToday:
 
     def test_counts_todays_launches(self, tmp_path, monkeypatch):
         """Should count only log directories from today."""
-        from datetime import datetime
+        from datetime import UTC, datetime, timedelta
 
         log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
-        # Create log directories for today
-        today_str = datetime.now().strftime("%Y%m%d")
+        # Create log directories for today (UTC, matching production code)
+        today_str = datetime.now(tz=UTC).strftime("%Y%m%d")
         (log_base / f"{today_str}T120000").mkdir()
         (log_base / f"{today_str}T130000").mkdir()
         (log_base / f"{today_str}T140000").mkdir()
 
         # Create a log directory from yesterday
-        from datetime import timedelta
-
-        yesterday = datetime.now() - timedelta(days=1)
+        yesterday = datetime.now(tz=UTC) - timedelta(days=1)
         yesterday_str = yesterday.strftime("%Y%m%d")
         (log_base / f"{yesterday_str}T120000").mkdir()
 
@@ -1303,12 +1301,12 @@ class TestLaunchCountEdgeCases:
 
     def test_skips_non_directory_entries(self, tmp_path, monkeypatch):
         """Should skip non-directory entries in logs folder."""
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
-        today_str = datetime.now().strftime("%Y%m%d")
+        today_str = datetime.now(tz=UTC).strftime("%Y%m%d")
         (log_base / f"{today_str}T120000").mkdir()
         # Create a file (not directory) - should be skipped
         (log_base / f"{today_str}T130000.log").touch()
@@ -1321,12 +1319,12 @@ class TestLaunchCountEdgeCases:
 
     def test_skips_malformed_directory_names(self, tmp_path, monkeypatch):
         """Should skip directories with malformed names."""
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
-        today_str = datetime.now().strftime("%Y%m%d")
+        today_str = datetime.now(tz=UTC).strftime("%Y%m%d")
         (log_base / f"{today_str}T120000").mkdir()
         # Create directories with malformed names
         (log_base / "invalid-name").mkdir()
