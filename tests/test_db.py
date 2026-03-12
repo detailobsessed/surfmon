@@ -5,9 +5,14 @@ from datetime import UTC, datetime
 import pytest
 
 from surfmon.db import (
+    _MIGRATIONS,
     HISTORY_COLUMNS,
+    SCHEMA_VERSION,
     _classify_issue_severity,
+    _ensure_schema,
+    _get_schema_version,
     _parse_since,
+    _set_schema_version,
     get_db,
     query_history,
     query_history_dicts,
@@ -140,6 +145,102 @@ class TestEnsureSchema:
 
         _ensure_schema(db)
         assert set(db.table_names()) == tables_before
+
+
+class TestSchemaMigration:
+    def test_fresh_db_gets_current_version(self, db):
+        assert _get_schema_version(db) == SCHEMA_VERSION
+
+    def test_meta_table_exists(self, db):
+        assert "_meta" in db.table_names()
+
+    def test_idempotent_rerun_keeps_version(self, db):
+        _ensure_schema(db)
+        assert _get_schema_version(db) == SCHEMA_VERSION
+
+    def test_migration_runs_on_old_db(self, db):
+        # Simulate a v1 DB that needs upgrading to v2
+        _set_schema_version(db, 1)
+        migration_ran = []
+
+        def fake_migrate_v2(_database):
+            migration_ran.append(2)
+
+        _MIGRATIONS.append(fake_migrate_v2)
+        try:
+            import surfmon.db as db_mod
+
+            original_version = db_mod.SCHEMA_VERSION
+            db_mod.SCHEMA_VERSION = 2
+            _ensure_schema(db)
+            assert _get_schema_version(db) == 2
+            assert migration_ran == [2]
+        finally:
+            db_mod.SCHEMA_VERSION = original_version
+            _MIGRATIONS.pop()
+
+    def test_skips_already_applied_migrations(self, db):
+        # DB is already at SCHEMA_VERSION — no migrations should run
+        migration_ran = []
+
+        def fake_migrate(_database):
+            migration_ran.append(True)
+
+        _MIGRATIONS.append(fake_migrate)
+        try:
+            _ensure_schema(db)
+            assert migration_ran == []
+        finally:
+            _MIGRATIONS.pop()
+
+    def test_multiple_migrations_run_in_order(self, db):
+        _set_schema_version(db, 1)
+        order = []
+
+        def migrate_v2(_database):
+            order.append(2)
+
+        def migrate_v3(_database):
+            order.append(3)
+
+        _MIGRATIONS.extend([migrate_v2, migrate_v3])
+        try:
+            import surfmon.db as db_mod
+
+            original_version = db_mod.SCHEMA_VERSION
+            db_mod.SCHEMA_VERSION = 3
+            _ensure_schema(db)
+            assert _get_schema_version(db) == 3
+            assert order == [2, 3]
+        finally:
+            db_mod.SCHEMA_VERSION = original_version
+            _MIGRATIONS.clear()
+
+    def test_partial_failure_preserves_successful_migrations(self, db):
+        _set_schema_version(db, 1)
+        ran = []
+
+        def migrate_v2(_database):
+            ran.append(2)
+
+        def migrate_v3(_database):
+            msg = "v3 boom"
+            raise RuntimeError(msg)
+
+        _MIGRATIONS.extend([migrate_v2, migrate_v3])
+        try:
+            import surfmon.db as db_mod
+
+            original_version = db_mod.SCHEMA_VERSION
+            db_mod.SCHEMA_VERSION = 3
+            with pytest.raises(RuntimeError, match="v3 boom"):
+                _ensure_schema(db)
+            # v2 succeeded and was recorded; v3 failed
+            assert _get_schema_version(db) == 2
+            assert ran == [2]
+        finally:
+            db_mod.SCHEMA_VERSION = original_version
+            _MIGRATIONS.clear()
 
 
 class TestStoreCheck:

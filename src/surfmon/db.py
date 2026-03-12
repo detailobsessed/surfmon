@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 DB_DIR = Path.home() / ".surfmon"
 DB_PATH = DB_DIR / "surfmon.db"
 
+# Bump this when adding migrations. Each migration upgrades from (version - 1) to version.
+SCHEMA_VERSION: int = 1
+
 # Duration shorthand parser: "24h", "7d", "30m"
 _DURATION_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
 
@@ -46,8 +49,28 @@ def get_db(db_path: Path | None = None) -> Database:
     return db
 
 
+def _get_schema_version(db: Database) -> int:
+    """Read the current schema version from the _meta table, or 0 if missing."""
+    if "_meta" not in db.table_names():
+        return 0
+    row = db.execute("SELECT value FROM _meta WHERE key = 'schema_version'").fetchone()
+    return int(row[0]) if row else 0
+
+
+def _set_schema_version(db: Database, version: int) -> None:
+    """Write the schema version to the _meta table."""
+    if "_meta" not in db.table_names():
+        Table(db, "_meta").create({"key": str, "value": str}, pk="key")
+    Table(db, "_meta").upsert({"key": "schema_version", "value": str(version)}, pk="key")
+
+
+# Migrations: list of callables, each upgrading from (index + 1) to (index + 2).
+# Each callable receives the Database and performs the schema change.
+_MIGRATIONS: list = []
+
+
 def _ensure_schema(db: Database) -> None:
-    """Create tables if they don't exist (idempotent)."""
+    """Create tables if they don't exist, then run pending migrations."""
     if "sessions" not in db.table_names():
         Table(db, "sessions").create(
             {
@@ -151,6 +174,15 @@ def _ensure_schema(db: Database) -> None:
             pk="id",
             foreign_keys=[("session_id", "sessions", "id")],
         )
+
+    # Run pending migrations, bumping version after each so partial
+    # failures don't re-execute already-succeeded migrations.
+    current = _get_schema_version(db)
+    for target_version in range(current + 1, SCHEMA_VERSION + 1):
+        migration_index = target_version - 2  # version 2 → index 0
+        if 0 <= migration_index < len(_MIGRATIONS):
+            _MIGRATIONS[migration_index](db)
+        _set_schema_version(db, target_version)
 
 
 def _new_session_id() -> str:
