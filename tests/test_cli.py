@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from typer.testing import CliRunner
 
-from surfmon.cli import _parse_timestamp, app
+from surfmon.cli import _get_target_str, _parse_timestamp, _store_to_db, app
 from surfmon.config import reset_target
 
 runner = CliRunner()
@@ -1336,3 +1336,185 @@ class TestFormatUptime:
         from surfmon.monitor import format_uptime
 
         assert format_uptime(0.0) == "unknown"
+
+
+class TestHistoryCommand:
+    """Tests for the history command."""
+
+    def test_history_empty(self, mocker):
+        """Should handle empty database gracefully."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        result = runner.invoke(app, ["history"])
+        assert result.exit_code == 0
+        assert "No sessions found" in result.output
+
+    def test_history_with_data(self, mocker):
+        """Should display sessions table."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_history_dicts",
+            return_value=[
+                {
+                    "id": "abc-123",
+                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "command": "check",
+                    "windsurf_version": "1.95.0",
+                    "windsurf_target": "stable",
+                    "windsurf_uptime_s": 3600.0,
+                    "surfmon_version": "0.6.0",
+                    "process_count": 5,
+                    "total_memory_mb": 2048.0,
+                    "ls_count": 2,
+                    "ls_memory_mb": 500.0,
+                    "orphaned_count": 0,
+                    "pty_count": 25,
+                    "issue_count": 0,
+                },
+            ],
+        )
+        result = runner.invoke(app, ["history"])
+        assert result.exit_code == 0
+        assert "Recent Sessions" in result.output
+
+    def test_history_with_command_filter(self, mocker):
+        """Should pass command filter to query."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mock_query = mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        runner.invoke(app, ["history", "--command", "check"])
+        mock_query.assert_called_once_with(mock_db.return_value, command="check", limit=20, since=None)
+
+    def test_history_with_issues(self, mocker):
+        """Should show issue count with styling."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_history_dicts",
+            return_value=[
+                {
+                    "id": "abc-123",
+                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "command": "check",
+                    "windsurf_version": "1.95.0",
+                    "windsurf_target": "stable",
+                    "windsurf_uptime_s": 3600.0,
+                    "surfmon_version": "0.6.0",
+                    "process_count": 5,
+                    "total_memory_mb": 0,
+                    "ls_count": 0,
+                    "ls_memory_mb": 0,
+                    "orphaned_count": 1,
+                    "pty_count": None,
+                    "issue_count": 3,
+                },
+            ],
+        )
+        result = runner.invoke(app, ["history"])
+        assert result.exit_code == 0
+
+
+class TestTrendCommand:
+    """Tests for the trend command."""
+
+    def test_trend_empty(self, mocker):
+        """Should handle empty data gracefully."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        result = runner.invoke(app, ["trend", "memory"])
+        assert result.exit_code == 0
+        assert "No data found" in result.output
+
+    def test_trend_with_data(self, mocker):
+        """Should display trend table and summary."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_trend",
+            return_value=[
+                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
+                {"timestamp": "2025-01-01T11:00:00", "value": 1800.0},
+                {"timestamp": "2025-01-01T12:00:00", "value": 1600.0},
+            ],
+        )
+        result = runner.invoke(app, ["trend", "memory"])
+        assert result.exit_code == 0
+        assert "Trend: memory" in result.output
+        assert "Summary" in result.output
+
+    def test_trend_invalid_metric(self, mocker):
+        """Should show error for invalid metric."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric 'invalid'"))
+        result = runner.invoke(app, ["trend", "invalid"])
+        assert result.exit_code == 1
+
+    def test_trend_processes_metric(self, mocker):
+        """Should format integer values for process count."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_trend",
+            return_value=[
+                {"timestamp": "2025-01-01T10:00:00", "value": 5},
+            ],
+        )
+        result = runner.invoke(app, ["trend", "processes"])
+        assert result.exit_code == 0
+
+    def test_trend_single_datapoint(self, mocker):
+        """Should not show change with only one data point."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch(
+            "surfmon.cli.query_trend",
+            return_value=[
+                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
+            ],
+        )
+        result = runner.invoke(app, ["trend", "memory"])
+        assert result.exit_code == 0
+
+
+class TestTrendHelpers:
+    """Tests for trend helper functions."""
+
+    def test_trend_unit(self):
+        from surfmon.cli import _trend_unit
+
+        assert _trend_unit("memory") == "MB"
+        assert not _trend_unit("processes")
+        assert not _trend_unit("pty")
+        assert _trend_unit("ls-memory") == "MB"
+        assert not _trend_unit("ls-count")
+
+    def test_format_trend_value_memory(self):
+        from surfmon.cli import _format_trend_value
+
+        assert _format_trend_value("memory", 1500.5) == "1500.5 MB"
+        assert _format_trend_value("ls-memory", 200.0) == "200.0 MB"
+
+    def test_format_trend_value_count(self):
+        from surfmon.cli import _format_trend_value
+
+        assert _format_trend_value("processes", 5.0) == "5"
+        assert _format_trend_value("pty", 25.0) == "25"
+
+
+class TestStoreToDbHelper:
+    """Tests for the _store_to_db helper."""
+
+    def test_store_to_db_success(self, mocker):
+        """Should call store function with db and target."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mock_fn = MagicMock()
+
+        _store_to_db(mock_fn, "arg1")
+        mock_fn.assert_called_once_with(mock_db.return_value, "arg1", target="stable")
+
+    def test_store_to_db_failure(self, mocker):
+        """Should not raise on DB errors."""
+        mocker.patch("surfmon.cli.get_db", side_effect=OSError("disk full"))
+        _store_to_db(MagicMock(), "arg1")
+
+    def test_get_target_str_no_target(self, mocker):
+        """Should return empty string when no target set."""
+        reset_target()
+        mocker.patch.dict("os.environ", {}, clear=True)
+        mocker.patch("surfmon.cli.get_target", side_effect=__import__("surfmon.config", fromlist=["TargetNotSetError"]).TargetNotSetError())
+        assert not _get_target_str()

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import signal
+import sys
 import time
 from collections import defaultdict
 from dataclasses import asdict
@@ -16,7 +17,8 @@ import typer
 
 from . import __version__
 from .compare import compare_reports
-from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target_display_name, set_target
+from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, get_target_display_name, set_target
+from .db import get_db, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
 from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
@@ -147,6 +149,23 @@ TargetOption = Annotated[
         is_eager=True,  # Process before other options
     ),
 ]
+
+
+def _get_target_str() -> str:
+    """Get the current target as a string for DB storage."""
+    try:
+        return get_target().value
+    except TargetNotSetError:
+        return ""
+
+
+def _store_to_db(store_fn, *args, **kwargs) -> None:
+    """Best-effort DB write — log warning on failure, never crash."""
+    try:
+        db = get_db()
+        store_fn(db, *args, target=_get_target_str(), **kwargs)
+    except Exception as exc:
+        print(f"DB write skipped: {exc}", file=sys.stderr)
 
 
 def simplify_process_name(name: str) -> str:
@@ -339,6 +358,8 @@ def check(
         with console.status(f"[cyan]Gathering {target_name} information...[/cyan]", spinner="dots"):
             report = generate_report()
 
+        _store_to_db(store_check, report)
+
         # --json: output JSON to stdout and skip rich display
         if json_output:
             _print_json(asdict(report))
@@ -436,6 +457,7 @@ def watch(
 
                 report = generate_report()
                 report_count += 1
+                _store_to_db(store_check, report)
 
                 # Update live display
                 live.update(create_summary_table(report, prev_report, session_start=session_start))
@@ -485,6 +507,175 @@ def compare(
     except Exception as e:
         console.print(f"[red]Error comparing reports: {e}[/red]")
         raise typer.Exit(code=1) from e
+
+
+@app.command()
+def history(
+    command_filter: Annotated[
+        str | None,
+        typer.Option("--command", "-c", help="Filter by command type: check, ls-snapshot, pty-snapshot"),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Number of recent sessions to show")] = 20,
+    since: Annotated[str | None, typer.Option("--since", "-s", help="Show sessions since duration (e.g. 24h, 7d, 2w)")] = None,
+) -> None:
+    """Show recent monitoring sessions from the historical database.
+
+    Displays a table of past surfmon invocations with key metrics like
+    memory usage, process counts, and issue counts.
+    """
+    db = get_db()
+    try:
+        rows = query_history_dicts(db, command=command_filter, limit=limit, since=since)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if not rows:
+        console.print("[yellow]No sessions found in the database.[/yellow]")
+        console.print("[dim]Run 'surfmon check', 'surfmon ls-snapshot', or 'surfmon pty-snapshot' to populate it.[/dim]")
+        raise typer.Exit(code=0)
+
+    table = make_table(f"Recent Sessions ({len(rows)})")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Command", style="cyan")
+    table.add_column("Version", style="dim")
+    table.add_column("Memory", justify="right", style="yellow")
+    table.add_column("Procs", justify="right")
+    table.add_column("LS", justify="right")
+    table.add_column("LS Mem", justify="right", style="yellow")
+    table.add_column("Orphans", justify="right")
+    table.add_column("PTY", justify="right")
+    table.add_column("Issues", justify="right")
+
+    for row in rows:
+        mem_gb = row["total_memory_mb"] / MB_PER_GB if row["total_memory_mb"] else 0
+        ls_mem_gb = row["ls_memory_mb"] / MB_PER_GB if row["ls_memory_mb"] else 0
+        orphan_style = "red" if row["orphaned_count"] and row["orphaned_count"] > 0 else ""
+        issue_style = "red" if row["issue_count"] and row["issue_count"] > 0 else "green"
+
+        ts = row["timestamp"][:19] if row["timestamp"] else ""
+        table.add_row(
+            ts,
+            row["command"] or "",
+            row["windsurf_version"] or "",
+            f"{mem_gb:.2f} GB" if mem_gb else "—",
+            str(row["process_count"] or "—"),
+            str(row["ls_count"] or "—"),
+            f"{ls_mem_gb:.2f} GB" if ls_mem_gb else "—",
+            f"[{orphan_style}]{row['orphaned_count'] or 0}[/{orphan_style}]" if orphan_style else str(row["orphaned_count"] or "—"),
+            str(row["pty_count"] if row["pty_count"] is not None else "—"),
+            f"[{issue_style}]{row['issue_count']}[/{issue_style}]",
+        )
+
+    console.print(table)
+
+
+@app.command()
+def trend(
+    metric: Annotated[str, typer.Argument(help="Metric to trend: memory, processes, pty, ls-memory, ls-count")],
+    since: Annotated[str | None, typer.Option("--since", "-s", help="Show data since duration (e.g. 24h, 7d, 2w)")] = None,
+    plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate a matplotlib chart")] = False,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plot to file")] = None,
+) -> None:
+    """Show time-series trends for a metric from the historical database.
+
+    Supported metrics: memory, processes, pty, ls-memory, ls-count.
+    Use --plot to generate a visual chart.
+    """
+    db = get_db()
+    try:
+        data = query_trend(db, metric=metric, since=since)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if not data:
+        console.print(f"[yellow]No data found for metric '{metric}'.[/yellow]")
+        console.print("[dim]Run 'surfmon check' or other commands to populate the database.[/dim]")
+        raise typer.Exit(code=0)
+
+    # Table display
+    table = make_table(f"Trend: {metric} ({len(data)} data points)")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Value", justify="right", style="cyan")
+
+    unit = _trend_unit(metric)
+    for point in data:
+        ts = point["timestamp"][:19] if point["timestamp"] else ""
+        table.add_row(ts, _format_trend_value(metric, point["value"]))
+
+    console.print(table)
+
+    if data:
+        values = [p["value"] for p in data]
+        _display_trend_summary(values, unit)
+
+    if plot:
+        _generate_trend_plot(metric, data, unit, output)
+
+
+def _trend_unit(metric: str) -> str:
+    """Return the display unit for a trend metric."""
+    units = {"memory": "MB", "processes": "", "pty": "", "ls-memory": "MB", "ls-count": ""}
+    return units.get(metric, "")
+
+
+def _format_trend_value(metric: str, value: float) -> str:
+    """Format a trend value for display."""
+    if metric in {"memory", "ls-memory"}:
+        return f"{value:.1f} MB"
+    return str(int(value))
+
+
+MIN_TREND_POINTS_FOR_CHANGE = 2
+
+
+def _display_trend_summary(values: list[float], unit: str) -> None:
+    """Display min/max/avg summary for trend data."""
+    summary = make_kv_table("Summary")
+    suffix = f" {unit}" if unit else ""
+    summary.add_row("Min", f"{min(values):.1f}{suffix}")
+    summary.add_row("Max", f"{max(values):.1f}{suffix}")
+    summary.add_row("Avg", f"{sum(values) / len(values):.1f}{suffix}")
+    if len(values) >= MIN_TREND_POINTS_FOR_CHANGE:
+        change = values[-1] - values[0]
+        change_color = "red" if change > 0 else "green"
+        summary.add_row("Change", f"[{change_color}]{change:+.1f}{suffix}[/{change_color}]")
+    console.print(summary)
+
+
+def _generate_trend_plot(metric: str, data: list[dict], unit: str, output: Path | None) -> None:
+    """Generate a matplotlib trend chart."""
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+
+    raw_timestamps = [datetime.fromisoformat(p["timestamp"]) for p in data]
+    x_values = mdates.date2num(raw_timestamps)
+    values = [p["value"] for p in data]
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(x_values, values, "b-o", linewidth=2, markersize=4)
+    ax.fill_between(x_values, 0, values, alpha=0.2)
+    ax.set_title(f"surfmon trend: {metric}", fontsize=14, fontweight="bold")
+    ax.set_ylabel(f"{metric}{' (' + unit + ')' if unit else ''}", fontsize=11)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+    fig.autofmt_xdate()
+    plt.tight_layout()
+
+    if output is None:
+        output = Path.home() / "Desktop" / f"surfmon-trend-{metric}.png"
+        try:
+            raw = typer.prompt("Save plot to", default=str(output))
+            output = Path(os.path.expandvars(raw)).expanduser()
+        except typer.Abort, KeyboardInterrupt:
+            raise typer.Exit(code=1) from None
+
+    try:
+        plt.savefig(output, dpi=150, bbox_inches="tight")
+        console.print(f"\n[green]✓ Plot saved to {output}[/green]")
+    except OSError as e:
+        console.print(f"\n[red]Error: Cannot save plot to {output}: {e}[/red]")
 
 
 @app.command()
@@ -732,6 +923,8 @@ def pty_snapshot(
             proc_infos = collect_process_infos()
             pty = check_pty_leak(windsurf_processes=proc_infos)
 
+        _store_to_db(store_pty_snapshot, pty)
+
         # --json: output JSON to stdout and skip rich display
         if json_output:
             data = {"timestamp": datetime.now(tz=UTC).isoformat(), "pty_info": asdict(pty)}
@@ -927,6 +1120,8 @@ def ls_snapshot(
             version = _extract_windsurf_version(proc_infos)
             uptime = _get_windsurf_uptime(proc_infos)
             snapshot = capture_ls_snapshot(proc_infos, version, uptime)
+
+        _store_to_db(store_ls_snapshot, snapshot)
 
         if json_output:
             _print_json(asdict(snapshot))

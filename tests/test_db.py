@@ -1,0 +1,374 @@
+"""Tests for surfmon.db — SQLite historical database."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from surfmon.db import (
+    HISTORY_COLUMNS,
+    _classify_issue_severity,
+    _parse_since,
+    get_db,
+    query_history,
+    query_history_dicts,
+    query_trend,
+    store_check,
+    store_ls_snapshot,
+    store_pty_snapshot,
+)
+from surfmon.monitor import (
+    LsSnapshot,
+    LsSnapshotEntry,
+    MonitoringReport,
+    ProcessInfo,
+    PtyInfo,
+    PtyProcessDetail,
+    SystemInfo,
+)
+
+
+@pytest.fixture
+def db(tmp_path):
+    """Create an in-memory-like DB in tmp_path for test isolation."""
+    database = get_db(tmp_path / "test.db")
+    yield database
+    if database.conn:
+        database.conn.close()
+
+
+def _make_system_info():
+    return SystemInfo(
+        total_memory_gb=96.0,
+        available_memory_gb=48.0,
+        memory_percent=50.0,
+        cpu_count=10,
+        swap_total_gb=8.0,
+        swap_used_gb=1.0,
+    )
+
+
+def _make_process(pid=1234, name="language_server_macos_arm", memory_mb=500.0):
+    return ProcessInfo(
+        pid=pid,
+        name=name,
+        cpu_percent=5.0,
+        memory_mb=memory_mb,
+        memory_percent=1.5,
+        num_threads=20,
+        runtime_seconds=3600.0,
+        cmdline=f"/app/{name} --workspace_id file_Users_ismar_repos_surfmon",
+    )
+
+
+def _make_report(timestamp=None, processes=None, pty_info=None, issues=None):
+    return MonitoringReport(
+        timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
+        system=_make_system_info(),
+        windsurf_processes=processes or [_make_process()],
+        total_windsurf_memory_mb=2048.0,
+        total_windsurf_cpu_percent=15.0,
+        process_count=5,
+        language_servers=[],
+        mcp_servers_enabled=["server1"],
+        extensions_count=20,
+        log_issues=issues or [],
+        active_workspaces=[],
+        windsurf_launches_today=3,
+        pty_info=pty_info,
+    )
+
+
+def _make_ls_snapshot(timestamp=None, entries=None, issues=None):
+    return LsSnapshot(
+        timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
+        windsurf_version="1.9577.1024",
+        windsurf_uptime_seconds=7200.0,
+        total_ls_count=2,
+        total_ls_memory_mb=800.0,
+        orphaned_count=0,
+        entries=entries
+        or [
+            LsSnapshotEntry(
+                pid=5678,
+                name="language_server_macos_arm",
+                language="python",
+                memory_mb=400.0,
+                memory_percent=1.2,
+                cpu_percent=3.0,
+                num_threads=15,
+                runtime_seconds=3600.0,
+                workspace="repos/surfmon",
+                orphaned=False,
+            ),
+        ],
+        issues=issues or [],
+    )
+
+
+def _make_pty_info():
+    return PtyInfo(
+        windsurf_pty_count=25,
+        system_pty_limit=2048,
+        system_pty_used=150,
+        per_process=[
+            PtyProcessDetail(pid=1234, name="Windsurf", pty_count=20, fds=["33u", "34u"]),
+        ],
+        windsurf_version="1.9577.1024",
+        windsurf_uptime_seconds=7200.0,
+    )
+
+
+class TestEnsureSchema:
+    def test_creates_all_tables(self, db):
+        expected = {"sessions", "system_snapshots", "processes", "ls_entries", "pty_snapshots", "pty_per_process", "issues"}
+        assert expected.issubset(set(db.table_names()))
+
+    def test_idempotent(self, db):
+        tables_before = set(db.table_names())
+        # Re-open same DB — schema should not fail
+        from surfmon.db import _ensure_schema
+
+        _ensure_schema(db)
+        assert set(db.table_names()) == tables_before
+
+
+class TestStoreCheck:
+    def test_basic_roundtrip(self, db):
+        report = _make_report()
+        session_id = store_check(db, report, target="next")
+
+        assert session_id
+        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        assert session["command"] == "check"
+        assert session["windsurf_target"] == "next"
+
+    def test_stores_processes(self, db):
+        procs = [_make_process(pid=i, memory_mb=100.0 * i) for i in range(1, 4)]
+        report = _make_report(processes=procs)
+        session_id = store_check(db, report)
+
+        rows = list(db["processes"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 3
+
+    def test_stores_system_snapshot(self, db):
+        report = _make_report()
+        session_id = store_check(db, report)
+
+        rows = list(db["system_snapshots"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["total_memory_gb"] == 96.0
+
+    def test_stores_pty_info(self, db):
+        pty = _make_pty_info()
+        report = _make_report(pty_info=pty)
+        session_id = store_check(db, report)
+
+        rows = list(db["pty_snapshots"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["windsurf_pty_count"] == 25
+
+    def test_stores_issues(self, db):
+        report = _make_report(issues=["⚠ Memory leak detected", "Critical failure"])
+        session_id = store_check(db, report)
+
+        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 2
+
+    def test_no_pty_info(self, db):
+        report = _make_report(pty_info=None)
+        session_id = store_check(db, report)
+
+        rows = list(db["pty_snapshots"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 0
+
+
+class TestStoreLsSnapshot:
+    def test_basic_roundtrip(self, db):
+        snapshot = _make_ls_snapshot()
+        session_id = store_ls_snapshot(db, snapshot, target="stable")
+
+        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        assert session["command"] == "ls-snapshot"
+        assert session["windsurf_version"] == "1.9577.1024"
+
+    def test_stores_entries(self, db):
+        snapshot = _make_ls_snapshot()
+        session_id = store_ls_snapshot(db, snapshot)
+
+        rows = list(db["ls_entries"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["language"] == "python"
+        assert rows[0]["orphaned"] == 0
+
+    def test_stores_orphaned_entries(self, db):
+        entry = LsSnapshotEntry(
+            pid=9999,
+            name="ls",
+            language="typescript",
+            memory_mb=200.0,
+            memory_percent=0.5,
+            cpu_percent=1.0,
+            num_threads=10,
+            runtime_seconds=600.0,
+            workspace="",
+            orphaned=True,
+        )
+        snapshot = _make_ls_snapshot(entries=[entry])
+        session_id = store_ls_snapshot(db, snapshot)
+
+        rows = list(db["ls_entries"].rows_where("session_id = ?", [session_id]))
+        assert rows[0]["orphaned"] == 1
+
+    def test_stores_issues(self, db):
+        snapshot = _make_ls_snapshot(issues=["⚠ High memory usage"])
+        session_id = store_ls_snapshot(db, snapshot)
+
+        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["severity"] == "warning"
+
+
+class TestStorePtySnapshot:
+    def test_basic_roundtrip(self, db):
+        pty = _make_pty_info()
+        session_id = store_pty_snapshot(db, pty, target="insiders")
+
+        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        assert session["command"] == "pty-snapshot"
+        assert session["windsurf_target"] == "insiders"
+
+    def test_stores_pty_per_process(self, db):
+        pty = _make_pty_info()
+        session_id = store_pty_snapshot(db, pty)
+
+        rows = list(db["pty_per_process"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["pty_count"] == 20
+
+
+class TestQueryHistory:
+    def test_empty_db(self, db):
+        assert query_history(db) == []
+
+    def test_returns_recent_sessions(self, db):
+        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
+        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+
+        rows = query_history(db)
+        assert len(rows) == 2
+        # Most recent first
+        assert rows[0][1] == "2025-01-01T11:00:00+00:00"
+
+    def test_filter_by_command(self, db):
+        store_check(db, _make_report())
+        store_ls_snapshot(db, _make_ls_snapshot())
+
+        rows = query_history(db, command="ls-snapshot")
+        assert len(rows) == 1
+
+    def test_limit(self, db):
+        for i in range(5):
+            store_check(db, _make_report(timestamp=f"2025-01-01T{10 + i}:00:00+00:00"))
+
+        rows = query_history(db, limit=3)
+        assert len(rows) == 3
+
+    def test_since_filter(self, db):
+        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
+
+        rows = query_history(db, since="1h")
+        assert len(rows) == 1
+
+
+class TestQueryHistoryDicts:
+    def test_returns_dicts(self, db):
+        store_check(db, _make_report())
+        rows = query_history_dicts(db)
+        assert len(rows) == 1
+        assert set(rows[0].keys()) == set(HISTORY_COLUMNS)
+
+
+class TestQueryTrend:
+    def test_empty_db(self, db):
+        assert query_trend(db, metric="memory") == []
+
+    def test_memory_trend(self, db):
+        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
+        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+
+        data = query_trend(db, metric="memory")
+        assert len(data) == 2
+        assert "timestamp" in data[0]
+        assert "value" in data[0]
+
+    def test_process_count_trend(self, db):
+        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
+        data = query_trend(db, metric="processes")
+        assert len(data) == 1
+
+    def test_pty_trend(self, db):
+        pty = _make_pty_info()
+        store_pty_snapshot(db, pty)
+
+        data = query_trend(db, metric="pty")
+        assert len(data) == 1
+        assert data[0]["value"] == 25
+
+    def test_ls_memory_trend(self, db):
+        store_ls_snapshot(db, _make_ls_snapshot())
+        data = query_trend(db, metric="ls-memory")
+        assert len(data) == 1
+
+    def test_ls_count_trend(self, db):
+        store_ls_snapshot(db, _make_ls_snapshot())
+        data = query_trend(db, metric="ls-count")
+        assert len(data) == 1
+        assert data[0]["value"] == 1
+
+    def test_invalid_metric(self, db):
+        with pytest.raises(ValueError, match="Unknown metric"):
+            query_trend(db, metric="invalid")
+
+    def test_since_filter(self, db):
+        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
+
+        data = query_trend(db, metric="memory", since="1h")
+        assert len(data) == 1
+
+
+class TestParseSince:
+    def test_hours(self):
+        result = _parse_since("24h")
+        assert (datetime.now(tz=UTC) - result).total_seconds() == pytest.approx(86400, abs=5)
+
+    def test_days(self):
+        result = _parse_since("7d")
+        assert (datetime.now(tz=UTC) - result).total_seconds() == pytest.approx(604800, abs=5)
+
+    def test_minutes(self):
+        result = _parse_since("30m")
+        assert (datetime.now(tz=UTC) - result).total_seconds() == pytest.approx(1800, abs=5)
+
+    def test_weeks(self):
+        result = _parse_since("2w")
+        assert (datetime.now(tz=UTC) - result).total_seconds() == pytest.approx(1209600, abs=5)
+
+    def test_invalid_unit(self):
+        with pytest.raises(ValueError, match="Invalid duration unit"):
+            _parse_since("5x")
+
+
+class TestClassifyIssueSeverity:
+    def test_critical(self):
+        assert _classify_issue_severity("Critical failure occurred") == "critical"
+        assert _classify_issue_severity("✖ Process crashed") == "critical"
+
+    def test_warning(self):
+        assert _classify_issue_severity("⚠ Memory leak detected") == "warning"
+        assert _classify_issue_severity("Warning: high memory") == "warning"
+        assert _classify_issue_severity("Potential memory leak") == "warning"
+
+    def test_info(self):
+        assert _classify_issue_severity("Extensions loaded") == "info"
