@@ -29,6 +29,7 @@ from .monitor import (
     capture_ls_snapshot,
     check_pty_leak,
     collect_process_infos,
+    format_uptime,
     generate_report,
     is_main_windsurf_process,
     save_report_json,
@@ -549,20 +550,6 @@ def cleanup(
         raise typer.Exit(code=1)
 
 
-def _format_uptime(seconds: float) -> str:
-    """Format uptime seconds as a human-readable string."""
-    if seconds <= 0:
-        return "unknown"
-    total = int(seconds)
-    h, remainder = divmod(total, 3600)
-    m, s = divmod(remainder, 60)
-    if h > 0:
-        return f"{h}h {m}m {s}s"
-    if m > 0:
-        return f"{m}m {s}s"
-    return f"{s}s"
-
-
 def _display_pty_snapshot(pty: PtyInfo) -> None:
     """Display a comprehensive PTY forensic snapshot to the console."""
     # Summary table
@@ -581,7 +568,7 @@ def _display_pty_snapshot(pty: PtyInfo) -> None:
     if pty.windsurf_version:
         summary.add_row("Windsurf Version", pty.windsurf_version)
     if pty.windsurf_uptime_seconds > 0:
-        summary.add_row("Windsurf Uptime", _format_uptime(pty.windsurf_uptime_seconds))
+        summary.add_row("Windsurf Uptime", format_uptime(pty.windsurf_uptime_seconds))
     console.print(summary)
     console.print()
 
@@ -654,7 +641,7 @@ def _save_pty_snapshot_markdown(pty: PtyInfo, path: Path) -> None:
         "",
         f"**Timestamp:** {datetime.now(tz=UTC).isoformat()}",
         f"**Windsurf Version:** {pty.windsurf_version or 'unknown'}",
-        f"**Windsurf Uptime:** {_format_uptime(pty.windsurf_uptime_seconds)}",
+        f"**Windsurf Uptime:** {format_uptime(pty.windsurf_uptime_seconds)}",
         "",
         "## Summary",
         "",
@@ -785,7 +772,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     if snapshot.windsurf_version:
         summary.add_row("Windsurf Version", snapshot.windsurf_version)
     if snapshot.windsurf_uptime_seconds > 0:
-        summary.add_row("Windsurf Uptime", _format_uptime(snapshot.windsurf_uptime_seconds))
+        summary.add_row("Windsurf Uptime", format_uptime(snapshot.windsurf_uptime_seconds))
     console.print(summary)
     console.print()
 
@@ -802,7 +789,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
         detail.add_column("Status")
 
         for entry in snapshot.entries:
-            runtime = _format_uptime(entry.runtime_seconds)
+            runtime = format_uptime(entry.runtime_seconds)
             status = "[red]ORPHANED[/red]" if entry.orphaned else "[green]ok[/green]"
             if entry.memory_mb > LS_PROC_MEM_CRITICAL_MB:
                 mem_style = "red"
@@ -845,7 +832,7 @@ def _save_ls_snapshot_markdown(snapshot: LsSnapshot, path: Path) -> None:
         "",
         f"**Timestamp:** {snapshot.timestamp}",
         f"**Windsurf Version:** {snapshot.windsurf_version or 'unknown'}",
-        f"**Windsurf Uptime:** {_format_uptime(snapshot.windsurf_uptime_seconds)}",
+        f"**Windsurf Uptime:** {format_uptime(snapshot.windsurf_uptime_seconds)}",
         "",
         "## Summary",
         "",
@@ -863,7 +850,7 @@ def _save_ls_snapshot_markdown(snapshot: LsSnapshot, path: Path) -> None:
             "|-----|----------|--------|-------|---------|---------|-----------|--------|",
         ])
         for entry in snapshot.entries:
-            runtime = _format_uptime(entry.runtime_seconds)
+            runtime = format_uptime(entry.runtime_seconds)
             status = "ORPHANED" if entry.orphaned else "ok"
             lines.append(
                 f"| {entry.pid} | {entry.language} | {entry.memory_mb:.1f} MB "
