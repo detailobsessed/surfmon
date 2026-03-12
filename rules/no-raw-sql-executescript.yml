@@ -1,0 +1,7 @@
+id: no-raw-sql-executescript
+language: python
+severity: warning
+rule:
+  pattern: $DB.executescript($$$ARGS)
+message: Use sqlite-utils API instead of raw db.executescript()
+note: surfmon uses sqlite-utils for all database operations — avoid raw SQL

@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 
 import pytest
+from sqlite_utils import Database
+from sqlite_utils.db import Table
 
 from surfmon.db import (
-    _MIGRATIONS,
     HISTORY_COLUMNS,
     SCHEMA_VERSION,
     _classify_issue_severity,
@@ -158,7 +159,48 @@ class TestSchemaMigration:
         _ensure_schema(db)
         assert _get_schema_version(db) == SCHEMA_VERSION
 
-    def test_migration_runs_on_old_db(self, db):
+    def test_legacy_db_without_meta_runs_migrations(self, monkeypatch, tmp_path):
+        """Legacy DB (pre-migration-framework) has tables but no _meta — should migrate from v1."""
+        legacy_db = Database(tmp_path / "legacy.db")
+        # Create tables manually to simulate a pre-migration DB
+        Table(legacy_db, "sessions").create(
+            {
+                "id": str,
+                "timestamp": str,
+                "command": str,
+                "windsurf_version": str,
+                "windsurf_target": str,
+                "windsurf_uptime_s": float,
+                "surfmon_version": str,
+            },
+            pk="id",
+        )
+        assert "sessions" in legacy_db.table_names()
+        assert "_meta" not in legacy_db.table_names()
+
+        migration_ran = []
+
+        def fake_migrate_v2(_database):
+            migration_ran.append(2)
+
+        import surfmon.db as db_mod
+
+        monkeypatch.setattr(db_mod, "SCHEMA_VERSION", 2)
+        monkeypatch.setattr(db_mod, "_MIGRATIONS", [fake_migrate_v2])
+        _ensure_schema(legacy_db)
+        assert "_meta" in legacy_db.table_names()
+        assert _get_schema_version(legacy_db) == 2
+        assert migration_ran == [2]
+
+        # Second call should be a no-op (no longer detected as legacy)
+        migration_ran.clear()
+        _ensure_schema(legacy_db)
+        assert _get_schema_version(legacy_db) == 2
+        assert migration_ran == []
+        if legacy_db.conn:
+            legacy_db.conn.close()
+
+    def test_migration_runs_on_old_db(self, db, monkeypatch):
         # Simulate a v1 DB that needs upgrading to v2
         _set_schema_version(db, 1)
         migration_ran = []
@@ -166,34 +208,28 @@ class TestSchemaMigration:
         def fake_migrate_v2(_database):
             migration_ran.append(2)
 
-        _MIGRATIONS.append(fake_migrate_v2)
-        try:
-            import surfmon.db as db_mod
+        import surfmon.db as db_mod
 
-            original_version = db_mod.SCHEMA_VERSION
-            db_mod.SCHEMA_VERSION = 2
-            _ensure_schema(db)
-            assert _get_schema_version(db) == 2
-            assert migration_ran == [2]
-        finally:
-            db_mod.SCHEMA_VERSION = original_version
-            _MIGRATIONS.pop()
+        monkeypatch.setattr(db_mod, "SCHEMA_VERSION", 2)
+        monkeypatch.setattr(db_mod, "_MIGRATIONS", [fake_migrate_v2])
+        _ensure_schema(db)
+        assert _get_schema_version(db) == 2
+        assert migration_ran == [2]
 
-    def test_skips_already_applied_migrations(self, db):
+    def test_skips_already_applied_migrations(self, db, monkeypatch):
         # DB is already at SCHEMA_VERSION — no migrations should run
         migration_ran = []
 
         def fake_migrate(_database):
             migration_ran.append(True)
 
-        _MIGRATIONS.append(fake_migrate)
-        try:
-            _ensure_schema(db)
-            assert migration_ran == []
-        finally:
-            _MIGRATIONS.pop()
+        import surfmon.db as db_mod
 
-    def test_multiple_migrations_run_in_order(self, db):
+        monkeypatch.setattr(db_mod, "_MIGRATIONS", [fake_migrate])
+        _ensure_schema(db)
+        assert migration_ran == []
+
+    def test_multiple_migrations_run_in_order(self, db, monkeypatch):
         _set_schema_version(db, 1)
         order = []
 
@@ -203,20 +239,15 @@ class TestSchemaMigration:
         def migrate_v3(_database):
             order.append(3)
 
-        _MIGRATIONS.extend([migrate_v2, migrate_v3])
-        try:
-            import surfmon.db as db_mod
+        import surfmon.db as db_mod
 
-            original_version = db_mod.SCHEMA_VERSION
-            db_mod.SCHEMA_VERSION = 3
-            _ensure_schema(db)
-            assert _get_schema_version(db) == 3
-            assert order == [2, 3]
-        finally:
-            db_mod.SCHEMA_VERSION = original_version
-            _MIGRATIONS.clear()
+        monkeypatch.setattr(db_mod, "SCHEMA_VERSION", 3)
+        monkeypatch.setattr(db_mod, "_MIGRATIONS", [migrate_v2, migrate_v3])
+        _ensure_schema(db)
+        assert _get_schema_version(db) == 3
+        assert order == [2, 3]
 
-    def test_partial_failure_preserves_successful_migrations(self, db):
+    def test_partial_failure_preserves_successful_migrations(self, db, monkeypatch):
         _set_schema_version(db, 1)
         ran = []
 
@@ -227,20 +258,15 @@ class TestSchemaMigration:
             msg = "v3 boom"
             raise RuntimeError(msg)
 
-        _MIGRATIONS.extend([migrate_v2, migrate_v3])
-        try:
-            import surfmon.db as db_mod
+        import surfmon.db as db_mod
 
-            original_version = db_mod.SCHEMA_VERSION
-            db_mod.SCHEMA_VERSION = 3
-            with pytest.raises(RuntimeError, match="v3 boom"):
-                _ensure_schema(db)
-            # v2 succeeded and was recorded; v3 failed
-            assert _get_schema_version(db) == 2
-            assert ran == [2]
-        finally:
-            db_mod.SCHEMA_VERSION = original_version
-            _MIGRATIONS.clear()
+        monkeypatch.setattr(db_mod, "SCHEMA_VERSION", 3)
+        monkeypatch.setattr(db_mod, "_MIGRATIONS", [migrate_v2, migrate_v3])
+        with pytest.raises(RuntimeError, match="v3 boom"):
+            _ensure_schema(db)
+        # v2 succeeded and was recorded; v3 failed
+        assert _get_schema_version(db) == 2
+        assert ran == [2]
 
 
 class TestStoreCheck:

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlite_utils import Database
-from sqlite_utils.db import Table
+from sqlite_utils.db import NotFoundError, Table
 
 from . import __version__
 
@@ -53,8 +53,11 @@ def _get_schema_version(db: Database) -> int:
     """Read the current schema version from the _meta table, or 0 if missing."""
     if "_meta" not in db.table_names():
         return 0
-    row = db.execute("SELECT value FROM _meta WHERE key = 'schema_version'").fetchone()
-    return int(row[0]) if row else 0
+    try:
+        row = Table(db, "_meta").get("schema_version")
+    except NotFoundError:
+        return 0
+    return int(row["value"])
 
 
 def _set_schema_version(db: Database, version: int) -> None:
@@ -71,6 +74,10 @@ _MIGRATIONS: list = []
 
 def _ensure_schema(db: Database) -> None:
     """Create tables if they don't exist, then run pending migrations."""
+    # Capture state before CREATE TABLE blocks modify it.
+    # Legacy DBs (pre-migration-framework) have tables but no _meta table.
+    is_legacy = "sessions" in db.table_names() and "_meta" not in db.table_names()
+
     if "sessions" not in db.table_names():
         Table(db, "sessions").create(
             {
@@ -175,13 +182,26 @@ def _ensure_schema(db: Database) -> None:
             foreign_keys=[("session_id", "sessions", "id")],
         )
 
-    # Run pending migrations, bumping version after each so partial
-    # failures don't re-execute already-succeeded migrations.
+    # Fresh DB: CREATE TABLE blocks above always reflect the latest schema,
+    # so just stamp the version and skip migrations entirely.
     current = _get_schema_version(db)
+    if current == 0:
+        if is_legacy:
+            # Legacy DB created before migration framework — treat as v1.
+            current = 1
+            _set_schema_version(db, current)
+        else:
+            _set_schema_version(db, SCHEMA_VERSION)
+            return
+
+    # Existing DB: run pending migrations, bumping version after each so
+    # partial failures don't re-execute already-succeeded migrations.
     for target_version in range(current + 1, SCHEMA_VERSION + 1):
         migration_index = target_version - 2  # version 2 → index 0
-        if 0 <= migration_index < len(_MIGRATIONS):
-            _MIGRATIONS[migration_index](db)
+        if migration_index >= len(_MIGRATIONS):
+            msg = f"Missing migration for schema version {target_version} (expected _MIGRATIONS[{migration_index}])"
+            raise RuntimeError(msg)
+        _MIGRATIONS[migration_index](db)
         _set_schema_version(db, target_version)
 
 

@@ -59,7 +59,9 @@ ci = [
     "poethepoet>=0.41",
     "pytest-mock>=3.15.1",
 ]
-dev = []
+dev = [
+    "ast-grep-cli>=0.41.1",
+]
 local = [
     "prek>=0.3.1",
     "pytest-testmon>=2.2",

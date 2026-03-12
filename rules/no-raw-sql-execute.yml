@@ -1,0 +1,7 @@
+id: no-raw-sql-execute
+language: python
+severity: warning
+rule:
+  pattern: $DB.execute($$$ARGS)
+message: Use sqlite-utils API instead of raw db.execute()
+note: Prefer Table/View API for simple CRUD. Database.execute() is acceptable for complex JOINs/subqueries that cannot be expressed via the table API.

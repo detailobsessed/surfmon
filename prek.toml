@@ -90,6 +90,15 @@ types_or = ["bash", "shell", "python", "ruby", "perl"]
 priority = 0
 
 [[repos.hooks]]
+id = "ast-grep"
+name = "ast-grep structural lint"
+entry = "uv run ast-grep scan"
+language = "system"
+types = ["python"]
+pass_filenames = false
+priority = 1
+
+[[repos.hooks]]
 id = "ty"
 name = "ty type checker"
 entry = "uv run ty check"
