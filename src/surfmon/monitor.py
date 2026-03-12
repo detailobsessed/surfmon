@@ -105,6 +105,36 @@ class PtyInfo:
 
 
 @dataclass
+class LsSnapshotEntry:
+    """Forensic detail for a single language server process."""
+
+    pid: int
+    name: str
+    language: str
+    memory_mb: float
+    memory_percent: float
+    cpu_percent: float
+    num_threads: int
+    runtime_seconds: float
+    workspace: str
+    orphaned: bool
+
+
+@dataclass
+class LsSnapshot:
+    """Language server forensic snapshot."""
+
+    timestamp: str
+    windsurf_version: str
+    windsurf_uptime_seconds: float
+    total_ls_count: int
+    total_ls_memory_mb: float
+    orphaned_count: int
+    entries: list[LsSnapshotEntry]
+    issues: list[str]
+
+
+@dataclass
 class MonitoringReport:
     """Complete monitoring report."""
 
@@ -299,6 +329,108 @@ def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:
             result.append(p)
 
     return result
+
+
+_LS_LANGUAGE_KEYWORDS: list[tuple[list[str], str]] = [
+    (["jdtls", "eclipse.jdt"], "Java"),
+    (["gopls"], "Go"),
+    (["pyright", "pylance", "basedpyright"], "Python"),
+    (["rust-analyzer"], "Rust"),
+    (["yaml-language-server"], "YAML"),
+    (["json-language-server"], "JSON"),
+    (["language_server_macos_arm", "language_server"], "Codeium"),
+]
+
+
+def _detect_language(cmdline: str) -> str:
+    """Detect the programming language a language server handles from its cmdline."""
+    lower = cmdline.lower()
+    for keywords, language in _LS_LANGUAGE_KEYWORDS:
+        if any(kw in lower for kw in keywords):
+            return language
+    return "Unknown"
+
+
+def _extract_workspace_from_cmdline(cmdline: str) -> str:
+    """Extract workspace path from a language server command line."""
+    workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
+    if workspace_match:
+        workspace = workspace_match.group(1).replace("file_", "").replace("_", "/")
+        parts = workspace.split("/")
+        return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
+
+    data_match = re.search(r"-data\s+(\S+)", cmdline)
+    if data_match:
+        return data_match.group(1).split("/")[-1]
+
+    return ""
+
+
+def _is_orphaned_workspace(cmdline: str) -> bool:
+    """Check if a language server is indexing a non-existent workspace."""
+    workspace_match = re.search(r"--workspace_id\s+(\S+)", cmdline)
+    if not workspace_match:
+        return False
+
+    workspace_id = workspace_match.group(1)
+    workspace_path = workspace_id.replace("file_", "").replace("_", "/")
+    return not Path("/" + workspace_path).exists()
+
+
+def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, windsurf_uptime: float) -> LsSnapshot:
+    """Capture a forensic snapshot of all language server processes.
+
+    Returns structured data about every language server: memory, CPU,
+    workspace mapping, and whether it's orphaned (indexing deleted workspace).
+    """
+    lang_servers = find_language_servers(proc_infos)
+
+    entries = []
+    issues = []
+    total_memory = 0.0
+    orphaned_count = 0
+
+    for ls in lang_servers:
+        # Use original cmdline for detection (before enhancement)
+        original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
+        language = _detect_language(original_proc.cmdline)
+        workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
+        orphaned = _is_orphaned_workspace(original_proc.cmdline)
+
+        entry = LsSnapshotEntry(
+            pid=ls.pid,
+            name=ls.name,
+            language=language,
+            memory_mb=ls.memory_mb,
+            memory_percent=ls.memory_percent,
+            cpu_percent=ls.cpu_percent,
+            num_threads=ls.num_threads,
+            runtime_seconds=ls.runtime_seconds,
+            workspace=workspace,
+            orphaned=orphaned,
+        )
+        entries.append(entry)
+        total_memory += ls.memory_mb
+
+        if orphaned:
+            orphaned_count += 1
+            issues.append(
+                f"CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+            )
+
+    # Sort by memory descending for easy triage
+    entries.sort(key=lambda e: e.memory_mb, reverse=True)
+
+    return LsSnapshot(
+        timestamp=datetime.now(tz=UTC).isoformat(),
+        windsurf_version=windsurf_version,
+        windsurf_uptime_seconds=windsurf_uptime,
+        total_ls_count=len(entries),
+        total_ls_memory_mb=total_memory,
+        orphaned_count=orphaned_count,
+        entries=entries,
+        issues=issues,
+    )
 
 
 def get_mcp_config() -> list[str]:

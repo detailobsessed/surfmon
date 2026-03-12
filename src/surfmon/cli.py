@@ -21,8 +21,12 @@ from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
+    LsSnapshot,
     MonitoringReport,
     PtyInfo,
+    _extract_windsurf_version,
+    _get_windsurf_uptime,
+    capture_ls_snapshot,
     check_pty_leak,
     generate_report,
     get_process_info,
@@ -46,6 +50,12 @@ from .output import (
     save_report_markdown,
 )
 
+# Language server snapshot thresholds
+LS_TOTAL_MEM_CRITICAL_MB = 1024
+LS_TOTAL_MEM_WARNING_MB = 512
+LS_PROC_MEM_CRITICAL_MB = 500
+LS_PROC_MEM_WARNING_MB = 200
+
 # Analyze command thresholds
 ANALYZE_MEM_GB_HIGH = 6
 ANALYZE_MEM_GB_MEDIUM = 4
@@ -58,6 +68,11 @@ CPU_DIFF_SIGNIFICANT = 0.5
 # Default directories for reports (absolute, works when installed as uv tool)
 DEFAULT_REPORTS_DIR = Path.home() / ".surfmon" / "reports"
 DEFAULT_WATCH_DIR = DEFAULT_REPORTS_DIR / "watch"
+
+
+def _print_json(data: dict) -> None:
+    """Print data as JSON to stdout for agent/pipe consumption."""
+    print(json.dumps(data, indent=2, default=str))
 
 
 def version_callback(value: bool) -> None:
@@ -303,7 +318,8 @@ def check(
             help="Save both JSON and Markdown reports (auto-named, displays verbose output)",
         ),
     ] = False,
-    json_path: Annotated[Path | None, typer.Option("--json", help="Save report as JSON")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output report as JSON to stdout (for agent/pipe consumption)")] = False,
+    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save report as JSON to a specific file")] = None,
     markdown_path: Annotated[Path | None, typer.Option("--md", help="Save report as Markdown")] = None,
 ) -> None:
     """
@@ -315,9 +331,6 @@ def check(
     _require_target()
     try:
         # Validate flag combinations
-        if json_path and str(json_path).startswith("--"):
-            console.print("[red]Error: --json requires a file path. Use --save to auto-generate both reports.[/red]")
-            raise typer.Exit(code=1)
         if markdown_path and str(markdown_path).startswith("--"):
             console.print("[red]Error: --md requires a file path. Use --save to auto-generate both reports.[/red]")
             raise typer.Exit(code=1)
@@ -326,8 +339,15 @@ def check(
         with console.status(f"[cyan]Gathering {target_name} information...[/cyan]", spinner="dots"):
             report = generate_report()
 
+        # --json: output JSON to stdout and skip rich display
+        if json_output:
+            _print_json(asdict(report))
+            if report.log_issues:
+                raise typer.Exit(code=1)
+            return
+
         # Auto-enable verbose when saving reports (more info is better)
-        show_verbose = verbose or save or bool(json_path) or bool(markdown_path)
+        show_verbose = verbose or save or bool(json_file) or bool(markdown_path)
         display_report(report, verbose=show_verbose)
 
         # Handle --save flag (auto-generate filenames under ~/.surfmon/reports/)
@@ -340,21 +360,21 @@ def check(
                 console.print(f"[red]  {e}[/red]")
                 raise typer.Exit(code=1) from e
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_path = save_dir / f"surfmon-{timestamp}.json"
+            json_file = save_dir / f"surfmon-{timestamp}.json"
             markdown_path = save_dir / f"surfmon-{timestamp}.md"
 
         # Show saved file paths
-        if json_path or markdown_path:
+        if json_file or markdown_path:
             console.print()
-            if json_path:
-                json_path = json_path.resolve()  # Convert to absolute path
+            if json_file:
+                json_file = json_file.resolve()
                 try:
-                    save_report_json(report, json_path)
-                    console.print(f"[green]✓ JSON report saved to {json_path}[/green]")
+                    save_report_json(report, json_file)
+                    console.print(f"[green]✓ JSON report saved to {json_file}[/green]")
                 except OSError as e:
-                    console.print(f"[red]Error: Cannot save JSON report to {json_path}: {e}[/red]")
+                    console.print(f"[red]Error: Cannot save JSON report to {json_file}: {e}[/red]")
             if markdown_path:
-                markdown_path = markdown_path.resolve()  # Convert to absolute path
+                markdown_path = markdown_path.resolve()
                 try:
                     save_report_markdown(report, markdown_path)
                     console.print(f"[green]✓ Markdown report saved to {markdown_path}[/green]")
@@ -729,7 +749,8 @@ def pty_snapshot(
             help="Save both JSON and Markdown reports (auto-named)",
         ),
     ] = False,
-    json_path: Annotated[Path | None, typer.Option("--json", help="Save snapshot as JSON")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
+    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
     markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
 ) -> None:
     """Capture a comprehensive PTY forensic snapshot.
@@ -747,6 +768,12 @@ def pty_snapshot(
             proc_infos = [pi for p in procs if (pi := get_process_info(p))]
             pty = check_pty_leak(windsurf_processes=proc_infos)
 
+        # --json: output JSON to stdout and skip rich display
+        if json_output:
+            data = {"timestamp": datetime.now(tz=UTC).isoformat(), "pty_info": asdict(pty)}
+            _print_json(data)
+            return
+
         _display_pty_snapshot(pty)
 
         # Handle --save flag
@@ -754,16 +781,16 @@ def pty_snapshot(
             save_dir = DEFAULT_REPORTS_DIR
             save_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_path = save_dir / f"pty-snapshot-{timestamp}.json"
+            json_file = save_dir / f"pty-snapshot-{timestamp}.json"
             markdown_path = save_dir / f"pty-snapshot-{timestamp}.md"
 
-        if json_path or markdown_path:
+        if json_file or markdown_path:
             console.print()
-            if json_path:
-                json_path = json_path.resolve()
+            if json_file:
+                json_file = json_file.resolve()
                 try:
-                    _save_pty_snapshot_json(pty, json_path)
-                    console.print(f"[green]✓ JSON snapshot saved to {json_path}[/green]")
+                    _save_pty_snapshot_json(pty, json_file)
+                    console.print(f"[green]✓ JSON snapshot saved to {json_file}[/green]")
                 except OSError as e:
                     console.print(f"[red]Error: Cannot save JSON: {e}[/red]")
             if markdown_path:
@@ -773,6 +800,220 @@ def pty_snapshot(
                     console.print(f"[green]✓ Markdown snapshot saved to {markdown_path}[/green]")
                 except OSError as e:
                     console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+        raise typer.Exit(code=130) from None
+
+
+def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
+    """Display a language server forensic snapshot to the console."""
+    # Summary table
+    summary = make_kv_table("Language Server Snapshot")
+    summary.add_row("Language Servers", str(snapshot.total_ls_count))
+    if snapshot.total_ls_memory_mb > LS_TOTAL_MEM_CRITICAL_MB:
+        mem_color = "red"
+    elif snapshot.total_ls_memory_mb > LS_TOTAL_MEM_WARNING_MB:
+        mem_color = "yellow"
+    else:
+        mem_color = "green"
+    summary.add_row("Total LS Memory", f"[{mem_color}]{snapshot.total_ls_memory_mb:.1f} MB[/{mem_color}]")
+    orphan_color = "red" if snapshot.orphaned_count > 0 else "green"
+    summary.add_row("Orphaned", f"[{orphan_color}]{snapshot.orphaned_count}[/{orphan_color}]")
+    if snapshot.windsurf_version:
+        summary.add_row("Windsurf Version", snapshot.windsurf_version)
+    if snapshot.windsurf_uptime_seconds > 0:
+        summary.add_row("Windsurf Uptime", _format_uptime(snapshot.windsurf_uptime_seconds))
+    console.print(summary)
+    console.print()
+
+    # Per-LS detail table
+    if snapshot.entries:
+        detail = make_table("Language Server Processes")
+        detail.add_column("PID", style="dim")
+        detail.add_column("Language", style="cyan")
+        detail.add_column("Memory", justify="right", style="yellow")
+        detail.add_column("CPU %", justify="right")
+        detail.add_column("Threads", justify="right", style="dim")
+        detail.add_column("Runtime", style="dim")
+        detail.add_column("Workspace", ratio=2)
+        detail.add_column("Status")
+
+        for entry in snapshot.entries:
+            runtime = _format_uptime(entry.runtime_seconds)
+            status = "[red]ORPHANED[/red]" if entry.orphaned else "[green]ok[/green]"
+            if entry.memory_mb > LS_PROC_MEM_CRITICAL_MB:
+                mem_style = "red"
+            elif entry.memory_mb > LS_PROC_MEM_WARNING_MB:
+                mem_style = "yellow"
+            else:
+                mem_style = "green"
+            detail.add_row(
+                str(entry.pid),
+                entry.language,
+                f"[{mem_style}]{entry.memory_mb:.1f} MB[/{mem_style}]",
+                f"{entry.cpu_percent:.1f}",
+                str(entry.num_threads),
+                runtime,
+                entry.workspace or "[dim]—[/dim]",
+                status,
+            )
+
+        console.print(detail)
+        console.print()
+
+    # Issues
+    if snapshot.issues:
+        console.print(make_panel("[red]Issues Detected[/red]", title="⚠ Issues"))
+        for issue in snapshot.issues:
+            console.print(f"  [red]✖[/red]  {issue}")
+        console.print()
+
+
+def _save_ls_snapshot_json(snapshot: LsSnapshot, path: Path) -> None:
+    """Save language server snapshot as JSON."""
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(asdict(snapshot), f, indent=2)
+
+
+def _save_ls_snapshot_markdown(snapshot: LsSnapshot, path: Path) -> None:
+    """Save language server snapshot as Markdown forensic report."""
+    lines = [
+        "# Language Server Forensic Snapshot",
+        "",
+        f"**Timestamp:** {snapshot.timestamp}",
+        f"**Windsurf Version:** {snapshot.windsurf_version or 'unknown'}",
+        f"**Windsurf Uptime:** {_format_uptime(snapshot.windsurf_uptime_seconds)}",
+        "",
+        "## Summary",
+        "",
+        f"- **Language Servers:** {snapshot.total_ls_count}",
+        f"- **Total LS Memory:** {snapshot.total_ls_memory_mb:.1f} MB",
+        f"- **Orphaned:** {snapshot.orphaned_count}",
+        "",
+    ]
+
+    if snapshot.entries:
+        lines.extend([
+            "## Language Server Processes",
+            "",
+            "| PID | Language | Memory | CPU % | Threads | Runtime | Workspace | Status |",
+            "|-----|----------|--------|-------|---------|---------|-----------|--------|",
+        ])
+        for entry in snapshot.entries:
+            runtime = _format_uptime(entry.runtime_seconds)
+            status = "ORPHANED" if entry.orphaned else "ok"
+            lines.append(
+                f"| {entry.pid} | {entry.language} | {entry.memory_mb:.1f} MB "
+                f"| {entry.cpu_percent:.1f} | {entry.num_threads} | {runtime} "
+                f"| {entry.workspace or '—'} | {status} |"
+            )
+        lines.append("")
+
+    if snapshot.issues:
+        lines.extend(["## Issues", ""])
+        lines.extend(f"- {issue}" for issue in snapshot.issues)
+        lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _save_snapshot_files(json_file, markdown_path, save_json_fn, save_md_fn, data) -> None:
+    """Save snapshot to JSON and/or Markdown files with error handling."""
+    if not (json_file or markdown_path):
+        return
+    console.print()
+    if json_file:
+        json_file = json_file.resolve()
+        try:
+            save_json_fn(data, json_file)
+            console.print(f"[green]✓ JSON snapshot saved to {json_file}[/green]")
+        except OSError as e:
+            console.print(f"[red]Error: Cannot save JSON: {e}[/red]")
+    if markdown_path:
+        markdown_path = markdown_path.resolve()
+        try:
+            save_md_fn(data, markdown_path)
+            console.print(f"[green]✓ Markdown snapshot saved to {markdown_path}[/green]")
+        except OSError as e:
+            console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
+
+
+def _collect_process_infos() -> list:
+    """Collect Windsurf process infos with CPU sampling."""
+    procs = get_windsurf_processes()
+
+    cpu_samples: dict[int, psutil.Process] = {}
+    for proc in procs:
+        try:
+            proc.cpu_percent()
+            cpu_samples[proc.pid] = proc
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            pass
+
+    if cpu_samples:
+        time.sleep(0.5)
+
+    cpu_values: dict[int, float] = {}
+    for pid, proc in cpu_samples.items():
+        try:
+            cpu_values[pid] = proc.cpu_percent()
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            cpu_values[pid] = 0.0
+
+    result = []
+    for p in procs:
+        cpu = cpu_values.get(p.pid, 0.0)
+        if pi := get_process_info(p, initial_cpu=cpu):
+            result.append(pi)
+
+    return result
+
+
+@app.command(name="ls-snapshot")
+def ls_snapshot(
+    _target: TargetOption = None,
+    save: Annotated[
+        bool,
+        typer.Option(
+            "--save",
+            "-s",
+            help="Save both JSON and Markdown reports (auto-named)",
+        ),
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
+    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
+    markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
+) -> None:
+    """Capture a language server forensic snapshot.
+
+    Gathers detailed per-language-server data: memory, CPU, workspace mapping,
+    and orphaned workspace detection. Use for diagnosing language server memory
+    leaks and runaway indexing processes.
+    """
+    _require_target()
+    try:
+        target_name = get_target_display_name()
+        with console.status(f"[cyan]Capturing language server snapshot for {target_name}...[/cyan]", spinner="dots"):
+            proc_infos = _collect_process_infos()
+            version = _extract_windsurf_version(proc_infos)
+            uptime = _get_windsurf_uptime(proc_infos)
+            snapshot = capture_ls_snapshot(proc_infos, version, uptime)
+
+        if json_output:
+            _print_json(asdict(snapshot))
+            return
+
+        _display_ls_snapshot(snapshot)
+
+        if save:
+            save_dir = DEFAULT_REPORTS_DIR
+            save_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+            json_file = save_dir / f"ls-snapshot-{timestamp}.json"
+            markdown_path = save_dir / f"ls-snapshot-{timestamp}.md"
+
+        _save_snapshot_files(json_file, markdown_path, _save_ls_snapshot_json, _save_ls_snapshot_markdown, snapshot)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")

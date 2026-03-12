@@ -155,6 +155,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/surfmon/cli.py" = [
     "PLC0415",    # Lazy matplotlib import — heavy library (~1s) only needed for --plot
+    "T201",       # _print_json intentionally prints JSON to stdout for agent/pipe consumption
 ]
 "scripts/**" = [
     "T201",       # Scripts naturally print output

@@ -60,5 +60,5 @@ surfmon-*.md
 
 .env
 
-# bv (beads viewer) local config and caches
-.bv/
+# brv (byterover) context tree
+.brv/
