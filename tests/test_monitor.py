@@ -1643,3 +1643,157 @@ class TestCheckPtyLeakForensic:
         active_fds = [e for e in result.fd_entries if e.size_off != "0t0"]
         assert len(idle_fds) == 1
         assert len(active_fds) == 1
+
+
+class TestDetectLanguage:
+    """Tests for _detect_language helper."""
+
+    @pytest.mark.parametrize(
+        ("cmdline", "expected"),
+        [
+            ("jdtls --config /path", "Java"),
+            ("eclipse.jdt.ls.core", "Java"),
+            ("gopls serve", "Go"),
+            ("pyright --stdio", "Python"),
+            ("pylance-langserver", "Python"),
+            ("basedpyright --verbose", "Python"),
+            ("rust-analyzer --stdio", "Rust"),
+            ("yaml-language-server --stdio", "YAML"),
+            ("json-language-server --stdio", "JSON"),
+            ("language_server_macos_arm --workspace_id foo", "Codeium"),
+            ("language_server --workspace_id foo", "Codeium"),
+            ("some-random-process", "Unknown"),
+        ],
+    )
+    def test_detect_language(self, cmdline, expected):
+        """Should detect the correct language from cmdline."""
+        from surfmon.monitor import _detect_language
+
+        assert _detect_language(cmdline) == expected
+
+
+class TestExtractWorkspaceFromCmdline:
+    """Tests for _extract_workspace_from_cmdline helper."""
+
+    def test_extracts_workspace_id(self):
+        """Should extract workspace path from --workspace_id."""
+        from surfmon.monitor import _extract_workspace_from_cmdline
+
+        cmdline = "language_server_macos_arm --workspace_id file_Users_ismar_repos_surfmon"
+        result = _extract_workspace_from_cmdline(cmdline)
+        assert result == "ismar/repos/surfmon"
+
+    def test_extracts_jdt_data_dir(self):
+        """Should extract project name from -data flag."""
+        from surfmon.monitor import _extract_workspace_from_cmdline
+
+        cmdline = "jdtls -data /home/user/.cache/jdt/myproject"
+        result = _extract_workspace_from_cmdline(cmdline)
+        assert result == "myproject"
+
+    def test_returns_empty_for_unknown(self):
+        """Should return empty string when no workspace can be extracted."""
+        from surfmon.monitor import _extract_workspace_from_cmdline
+
+        result = _extract_workspace_from_cmdline("gopls serve")
+        assert not result
+
+
+class TestIsOrphanedWorkspace:
+    """Tests for _is_orphaned_workspace helper."""
+
+    def test_not_orphaned_without_workspace_id(self):
+        """Should return False when no workspace_id flag present."""
+        from surfmon.monitor import _is_orphaned_workspace
+
+        assert _is_orphaned_workspace("gopls serve") is False
+
+    def test_not_orphaned_for_existing_workspace(self, mocker):
+        """Should return False for existing workspace path."""
+        from surfmon.monitor import _is_orphaned_workspace
+
+        # Mock Path.exists to avoid platform-specific path issues (e.g. /tmp doesn't exist on Windows)
+        mocker.patch("surfmon.monitor.Path.exists", return_value=True)
+        cmdline = "language_server --workspace_id file_tmp"
+        assert _is_orphaned_workspace(cmdline) is False
+
+    def test_orphaned_for_nonexistent_workspace(self):
+        """Should return True for non-existent workspace path."""
+        from surfmon.monitor import _is_orphaned_workspace
+
+        cmdline = "language_server --workspace_id file_Users_nobody_nonexistent_project_xyz"
+        assert _is_orphaned_workspace(cmdline) is True
+
+
+class TestCaptureLsSnapshot:
+    """Tests for capture_ls_snapshot function."""
+
+    def test_captures_language_servers(self):
+        """Should capture all language server processes."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(1000, "Windsurf", 5.0, 500.0, 1.5, 20, 3600.0, "Windsurf --windsurf_version 2.5.0"),
+            ProcessInfo(2000, "node", 10.0, 300.0, 0.9, 8, 3500.0, "node pyright --stdio"),
+            ProcessInfo(3000, "gopls", 2.0, 150.0, 0.5, 12, 3400.0, "gopls serve"),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.total_ls_count == 2
+        assert snapshot.total_ls_memory_mb == 450.0
+        assert snapshot.windsurf_version == "2.5.0"
+        assert snapshot.orphaned_count == 0
+        assert len(snapshot.issues) == 0
+
+    def test_detects_orphaned_workspace(self):
+        """Should detect orphaned workspace and report issue."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_nobody_nonexistent_project --database_dir /tmp/nonexistent_db",
+            ),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.orphaned_count == 1
+        assert len(snapshot.issues) == 1
+        assert "CRITICAL" in snapshot.issues[0]
+        assert snapshot.entries[0].orphaned is True
+
+    def test_empty_when_no_language_servers(self):
+        """Should return empty snapshot when no language servers found."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(1000, "Windsurf", 5.0, 500.0, 1.5, 20, 3600.0, "Windsurf main process"),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.total_ls_count == 0
+        assert snapshot.total_ls_memory_mb == 0.0
+        assert snapshot.orphaned_count == 0
+
+    def test_entries_sorted_by_memory_descending(self):
+        """Should sort entries by memory usage descending."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(2000, "gopls", 2.0, 100.0, 0.3, 8, 3500.0, "gopls serve"),
+            ProcessInfo(3000, "node", 5.0, 500.0, 1.5, 12, 3400.0, "node pyright --stdio"),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.entries[0].memory_mb == 500.0
+        assert snapshot.entries[1].memory_mb == 100.0
