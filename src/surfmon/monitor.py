@@ -954,38 +954,44 @@ def count_windsurf_launches_today() -> int:
     return launches
 
 
-def generate_report() -> MonitoringReport:
-    """Generate complete monitoring report with optimized CPU sampling."""
-    # Get processes
+def collect_process_infos() -> list[ProcessInfo]:
+    """Collect Windsurf process infos with CPU sampling.
+
+    Initializes CPU counters, waits 500ms, then reads final values.
+    Shared by generate_report() and CLI snapshot commands.
+    """
     procs = get_windsurf_processes()
 
-    # Initialize CPU sampling (non-blocking)
-    cpu_samples = {}
+    cpu_samples: dict[int, psutil.Process] = {}
     for proc in procs:
         try:
-            proc.cpu_percent()  # First call initializes, returns 0.0
+            proc.cpu_percent()
             cpu_samples[proc.pid] = proc
         except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
-    # Sleep once for all processes (instead of once per process)
     if cpu_samples:
-        time.sleep(0.5)  # 500ms is enough for reasonable CPU measurement
+        time.sleep(0.5)
 
-    # Get final CPU samples
-    cpu_values = {}
+    cpu_values: dict[int, float] = {}
     for pid, proc in cpu_samples.items():
         try:
             cpu_values[pid] = proc.cpu_percent()
         except psutil.NoSuchProcess, psutil.AccessDenied:
             cpu_values[pid] = 0.0
 
-    # Build process info with pre-sampled CPU
-    proc_infos = []
+    result = []
     for p in procs:
         cpu = cpu_values.get(p.pid, 0.0)
         if pi := get_process_info(p, initial_cpu=cpu):
-            proc_infos.append(pi)
+            result.append(pi)
+
+    return result
+
+
+def generate_report() -> MonitoringReport:
+    """Generate complete monitoring report with optimized CPU sampling."""
+    proc_infos = collect_process_infos()
 
     total_memory = sum(p.memory_mb for p in proc_infos)
     total_cpu = sum(p.cpu_percent for p in proc_infos)

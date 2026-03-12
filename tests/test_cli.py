@@ -97,7 +97,7 @@ class TestCheckCommand:
 
         result = runner.invoke(app, ["check", "--save"])
 
-        assert "Cannot save JSON report" in result.stdout
+        assert "Cannot save JSON" in result.stdout
 
     def test_check_with_explicit_json_file(
         self,
@@ -327,7 +327,7 @@ class TestCheckSaveDirError:
 
         result = runner.invoke(app, ["check", "--save"])
 
-        assert "Cannot save Markdown report" in result.stdout
+        assert "Cannot save Markdown" in result.stdout
 
 
 class TestPruneCommand:
@@ -949,7 +949,7 @@ class TestPtySnapshotCommand:
             windsurf_uptime_seconds=7200.0,
             raw_lsof="COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nWindsurf 1000 ismar 33u CHR 15,0 0t0 605 /dev/ptmx\n",
         )
-        mocker.patch("surfmon.cli.get_windsurf_processes", return_value=[])
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
         return mock_pty
 
@@ -1085,7 +1085,7 @@ class TestLsSnapshotCommand:
             issues=[],
         )
 
-        mocker.patch("surfmon.cli._collect_process_infos", return_value=mock_proc_infos)
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=mock_proc_infos)
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
         mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
         mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=mock_snapshot)
@@ -1175,7 +1175,7 @@ class TestLsSnapshotDisplay:
             issues=["CRITICAL: language_server_macos_arm indexing non-existent workspace"],
         )
 
-        mocker.patch("surfmon.cli._collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
         mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
         mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
@@ -1212,7 +1212,7 @@ class TestLsSnapshotDisplay:
             issues=[],
         )
 
-        mocker.patch("surfmon.cli._collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="")
         mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=0.0)
         mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)

@@ -28,9 +28,8 @@ from .monitor import (
     _get_windsurf_uptime,
     capture_ls_snapshot,
     check_pty_leak,
+    collect_process_infos,
     generate_report,
-    get_process_info,
-    get_windsurf_processes,
     is_main_windsurf_process,
     save_report_json,
 )
@@ -353,33 +352,12 @@ def check(
         # Handle --save flag (auto-generate filenames under ~/.surfmon/reports/)
         if save:
             save_dir = DEFAULT_REPORTS_DIR
-            try:
-                save_dir.mkdir(parents=True, exist_ok=True)
-            except OSError as e:
-                console.print(f"[red]Error: Cannot create reports directory: {save_dir}[/red]")
-                console.print(f"[red]  {e}[/red]")
-                raise typer.Exit(code=1) from e
+            _ensure_reports_dir(save_dir)
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
             json_file = save_dir / f"surfmon-{timestamp}.json"
             markdown_path = save_dir / f"surfmon-{timestamp}.md"
 
-        # Show saved file paths
-        if json_file or markdown_path:
-            console.print()
-            if json_file:
-                json_file = json_file.resolve()
-                try:
-                    save_report_json(report, json_file)
-                    console.print(f"[green]✓ JSON report saved to {json_file}[/green]")
-                except OSError as e:
-                    console.print(f"[red]Error: Cannot save JSON report to {json_file}: {e}[/red]")
-            if markdown_path:
-                markdown_path = markdown_path.resolve()
-                try:
-                    save_report_markdown(report, markdown_path)
-                    console.print(f"[green]✓ Markdown report saved to {markdown_path}[/green]")
-                except OSError as e:
-                    console.print(f"[red]Error: Cannot save Markdown report to {markdown_path}: {e}[/red]")
+        _save_snapshot_files(json_file, markdown_path, save_report_json, save_report_markdown, report)
 
         # Exit with non-zero if critical issues detected
         if report.log_issues:
@@ -764,8 +742,7 @@ def pty_snapshot(
         target_name = get_target_display_name()
         with console.status(f"[cyan]Capturing PTY snapshot for {target_name}...[/cyan]", spinner="dots"):
             # Gather Windsurf processes for version/uptime
-            procs = get_windsurf_processes()
-            proc_infos = [pi for p in procs if (pi := get_process_info(p))]
+            proc_infos = collect_process_infos()
             pty = check_pty_leak(windsurf_processes=proc_infos)
 
         # --json: output JSON to stdout and skip rich display
@@ -779,27 +756,12 @@ def pty_snapshot(
         # Handle --save flag
         if save:
             save_dir = DEFAULT_REPORTS_DIR
-            save_dir.mkdir(parents=True, exist_ok=True)
+            _ensure_reports_dir(save_dir)
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
             json_file = save_dir / f"pty-snapshot-{timestamp}.json"
             markdown_path = save_dir / f"pty-snapshot-{timestamp}.md"
 
-        if json_file or markdown_path:
-            console.print()
-            if json_file:
-                json_file = json_file.resolve()
-                try:
-                    _save_pty_snapshot_json(pty, json_file)
-                    console.print(f"[green]✓ JSON snapshot saved to {json_file}[/green]")
-                except OSError as e:
-                    console.print(f"[red]Error: Cannot save JSON: {e}[/red]")
-            if markdown_path:
-                markdown_path = markdown_path.resolve()
-                try:
-                    _save_pty_snapshot_markdown(pty, markdown_path)
-                    console.print(f"[green]✓ Markdown snapshot saved to {markdown_path}[/green]")
-                except OSError as e:
-                    console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
+        _save_snapshot_files(json_file, markdown_path, _save_pty_snapshot_json, _save_pty_snapshot_markdown, pty)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -939,35 +901,14 @@ def _save_snapshot_files(json_file, markdown_path, save_json_fn, save_md_fn, dat
             console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
 
 
-def _collect_process_infos() -> list:
-    """Collect Windsurf process infos with CPU sampling."""
-    procs = get_windsurf_processes()
-
-    cpu_samples: dict[int, psutil.Process] = {}
-    for proc in procs:
-        try:
-            proc.cpu_percent()
-            cpu_samples[proc.pid] = proc
-        except psutil.NoSuchProcess, psutil.AccessDenied:
-            pass
-
-    if cpu_samples:
-        time.sleep(0.5)
-
-    cpu_values: dict[int, float] = {}
-    for pid, proc in cpu_samples.items():
-        try:
-            cpu_values[pid] = proc.cpu_percent()
-        except psutil.NoSuchProcess, psutil.AccessDenied:
-            cpu_values[pid] = 0.0
-
-    result = []
-    for p in procs:
-        cpu = cpu_values.get(p.pid, 0.0)
-        if pi := get_process_info(p, initial_cpu=cpu):
-            result.append(pi)
-
-    return result
+def _ensure_reports_dir(save_dir: Path) -> None:
+    """Create reports directory with error handling."""
+    try:
+        save_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        console.print(f"[red]Error: Cannot create reports directory: {save_dir}[/red]")
+        console.print(f"[red]  {e}[/red]")
+        raise typer.Exit(code=1) from e
 
 
 @app.command(name="ls-snapshot")
@@ -995,7 +936,7 @@ def ls_snapshot(
     try:
         target_name = get_target_display_name()
         with console.status(f"[cyan]Capturing language server snapshot for {target_name}...[/cyan]", spinner="dots"):
-            proc_infos = _collect_process_infos()
+            proc_infos = collect_process_infos()
             version = _extract_windsurf_version(proc_infos)
             uptime = _get_windsurf_uptime(proc_infos)
             snapshot = capture_ls_snapshot(proc_infos, version, uptime)
@@ -1008,7 +949,7 @@ def ls_snapshot(
 
         if save:
             save_dir = DEFAULT_REPORTS_DIR
-            save_dir.mkdir(parents=True, exist_ok=True)
+            _ensure_reports_dir(save_dir)
             timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
             json_file = save_dir / f"ls-snapshot-{timestamp}.json"
             markdown_path = save_dir / f"ls-snapshot-{timestamp}.md"
