@@ -32,7 +32,7 @@ hooks = [{ id = "gitleaks", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.1"  # prek autoupdate will fill this
+rev = "v0.15.5"  # prek autoupdate will fill this
 hooks = [
   { id = "ruff", args = ["--fix"], priority = 1 },
   { id = "ruff-format", priority = 1 },
@@ -40,7 +40,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.10.2"  # prek autoupdate will fill this
+rev = "0.10.9"  # prek autoupdate will fill this
 hooks = [{ id = "uv-lock", priority = 1 }]
 
 [[repos]]
@@ -55,12 +55,12 @@ hooks = [{ id = "actionlint", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/crate-ci/typos"
-rev = "v1.43.4"  # prek autoupdate will fill this
+rev = "v1.44.0"  # prek autoupdate will fill this
 hooks = [{ id = "typos", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/igorshubovych/markdownlint-cli"
-rev = "v0.47.0"  # prek autoupdate will fill this
+rev = "v0.48.0"  # prek autoupdate will fill this
 hooks = [{ id = "markdownlint", args = ["--fix", "--ignore", "CHANGELOG.md"], priority = 1 }]
 
 [[repos]]
@@ -141,7 +141,7 @@ stages = ["post-checkout"]
 
 [[repos]]
 repo = "https://github.com/compilerla/conventional-pre-commit"
-rev = "v4.3.0"  # prek autoupdate will fill this
+rev = "v4.4.0"  # prek autoupdate will fill this
 hooks = [
   { id = "conventional-pre-commit", stages = ["commit-msg"], priority = 1, args = [
     "--strict",

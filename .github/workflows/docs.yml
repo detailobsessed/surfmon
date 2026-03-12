@@ -39,7 +39,7 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install dependencies
-      run: uv sync --group docs
+      run: uv sync --no-default-groups --group docs
 
     - name: Build documentation
       env:
