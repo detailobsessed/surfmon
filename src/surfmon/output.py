@@ -8,8 +8,6 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from surfmon.monitor import format_uptime
-
 __all__ = [
     "CPU_PERCENT_CRITICAL",
     "CPU_PERCENT_WARNING",
@@ -29,7 +27,7 @@ __all__ = [
 ]
 
 from .config import get_paths, get_target_display_name
-from .monitor import PTY_CRITICAL_COUNT, PTY_USAGE_CRITICAL_PERCENT, PTY_WARNING_COUNT
+from .monitor import PTY_CRITICAL_COUNT, PTY_USAGE_CRITICAL_PERCENT, PTY_WARNING_COUNT, format_uptime
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -126,7 +124,16 @@ def _display_system_table(report: MonitoringReport) -> None:
 
 
 def _display_windsurf_table(report: MonitoringReport) -> None:
-    """Display Windsurf resource usage table."""
+    """Display Windsurf resource usage table.
+
+    When Windsurf is not running (process_count == 0), splits into a minimal
+    runtime table and a separate configuration table so persisted data like
+    installed extensions and MCP servers isn't confused with active state.
+    """
+    if report.process_count == 0:
+        _display_windsurf_not_running(report)
+        return
+
     ws_table = make_kv_table("Windsurf Resource Usage")
 
     ws_table.add_row("Process Count", str(report.process_count))
@@ -172,6 +179,29 @@ def _display_windsurf_table(report: MonitoringReport) -> None:
 
     console.print(ws_table)
     console.print()
+
+
+def _display_windsurf_not_running(report: MonitoringReport) -> None:
+    """Display Windsurf info when not running, separating config from runtime."""
+    # Minimal runtime state
+    rt_table = make_kv_table("Windsurf Runtime")
+    rt_table.add_row("Process Count", "[dim]0[/dim]")
+    rt_table.add_row("Launches Today", str(report.windsurf_launches_today))
+    console.print(rt_table)
+    console.print()
+
+    # Persisted configuration (only if there's something to show)
+    has_config = report.extensions_count > 0 or report.mcp_servers_enabled or report.active_workspaces
+    if has_config:
+        cfg_table = make_kv_table("Windsurf Configuration")
+        if report.extensions_count > 0:
+            cfg_table.add_row("Installed Extensions", str(report.extensions_count))
+        if report.mcp_servers_enabled:
+            cfg_table.add_row("Configured MCP Servers", str(len(report.mcp_servers_enabled)))
+        if report.active_workspaces:
+            cfg_table.add_row("Cached Workspaces", str(len(report.active_workspaces)))
+        console.print(cfg_table)
+        console.print()
 
 
 def _display_workspaces_table(report: MonitoringReport) -> None:
@@ -302,20 +332,24 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
 
     _display_system_table(report)
     _display_windsurf_table(report)
-    _display_workspaces_table(report)
+
+    # Skip detail tables already summarized in the config table when not running
+    if report.process_count > 0:
+        _display_workspaces_table(report)
     _display_processes_table(report)
     _display_language_servers_table(report)
 
-    # MCP servers
-    if report.mcp_servers_enabled:
-        console.print("[bold cyan]Enabled MCP Servers:[/bold cyan]")
-        for server in report.mcp_servers_enabled:
-            console.print(f"  • {server}")
-        console.print()
-    elif verbose:
-        console.print("[bold cyan]MCP Servers:[/bold cyan]")
-        console.print("  [dim]None configured[/dim]")
-        console.print()
+    # MCP servers (skip when not running — already in config summary)
+    if report.process_count > 0:
+        if report.mcp_servers_enabled:
+            console.print("[bold cyan]Enabled MCP Servers:[/bold cyan]")
+            for server in report.mcp_servers_enabled:
+                console.print(f"  • {server}")
+            console.print()
+        elif verbose:
+            console.print("[bold cyan]MCP Servers:[/bold cyan]")
+            console.print("  [dim]None configured[/dim]")
+            console.print()
 
     # Issues
     if report.log_issues:
