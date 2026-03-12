@@ -60,7 +60,15 @@ def _make_process(pid=1234, name="language_server_macos_arm", memory_mb=500.0):
     )
 
 
-def _make_report(timestamp=None, processes=None, pty_info=None, issues=None):
+def _make_report(  # noqa: PLR0913
+    *,
+    timestamp=None,
+    processes=None,
+    pty_info=None,
+    issues=None,
+    windsurf_version="",
+    windsurf_uptime_seconds=0.0,
+):
     return MonitoringReport(
         timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
         system=_make_system_info(),
@@ -74,6 +82,8 @@ def _make_report(timestamp=None, processes=None, pty_info=None, issues=None):
         log_issues=issues or [],
         active_workspaces=[],
         windsurf_launches_today=3,
+        windsurf_version=windsurf_version,
+        windsurf_uptime_seconds=windsurf_uptime_seconds,
         pty_info=pty_info,
     )
 
@@ -173,6 +183,14 @@ class TestStoreCheck:
 
         rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
         assert len(rows) == 2
+
+    def test_stores_version_and_uptime(self, db):
+        report = _make_report(windsurf_version="1.9577.1024+next.abc", windsurf_uptime_seconds=7200.0)
+        session_id = store_check(db, report)
+
+        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        assert session["windsurf_version"] == "1.9577.1024+next.abc"
+        assert session["windsurf_uptime_s"] == 7200.0
 
     def test_no_pty_info(self, db):
         report = _make_report(pty_info=None)

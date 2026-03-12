@@ -171,25 +171,13 @@ def store_check(db: Database, report: MonitoringReport, target: str = "") -> str
     """Store a full check report. Returns the session ID."""
     session_id = _new_session_id()
 
-    # Extract version/uptime from report data
-    version = ""
-    uptime = 0.0
-    for proc in report.windsurf_processes:
-        if "--windsurf_version" in proc.cmdline:
-            parts = proc.cmdline.split()
-            for i, part in enumerate(parts):
-                if part == "--windsurf_version" and i + 1 < len(parts):
-                    version = parts[i + 1]
-                    break
-        uptime = max(uptime, proc.runtime_seconds)
-
     Table(db, "sessions").insert({
         "id": session_id,
         "timestamp": report.timestamp,
         "command": "check",
-        "windsurf_version": version,
+        "windsurf_version": report.windsurf_version,
         "windsurf_target": target,
-        "windsurf_uptime_s": uptime,
+        "windsurf_uptime_s": report.windsurf_uptime_seconds,
         "surfmon_version": __version__,
     })
 
