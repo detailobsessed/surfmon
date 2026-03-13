@@ -359,12 +359,12 @@ def check(
 
         _save_snapshot_files(json_file, markdown_path, save_report_json, save_report_markdown, report)
 
-        tip = "Tip: run [cyan]surfmon watch[/cyan] to monitor continuously and build history for [cyan]surfmon analyze[/cyan]"
-        console.print(f"[dim]{tip}[/dim]")
-
         # Exit with non-zero if critical issues detected
         if report.log_issues:
             raise typer.Exit(code=1)
+
+        tip = "Tip: run [cyan]surfmon watch[/cyan] to monitor continuously and build history for [cyan]surfmon analyze[/cyan]"
+        console.print(f"[dim]{tip}[/dim]")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
