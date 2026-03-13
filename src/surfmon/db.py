@@ -468,6 +468,7 @@ _ANALYZE_SESSION_SQL = """
     LEFT JOIN pty_snapshots ps ON ps.session_id = s.id
     WHERE {where}
     GROUP BY s.id
+    HAVING COUNT(p.id) > 0
     ORDER BY s.timestamp ASC
 """
 

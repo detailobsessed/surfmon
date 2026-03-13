@@ -632,10 +632,8 @@ class TestQueryAnalyzeSessions:
         assert session["system"]["total_memory_gb"] == 96.0
         assert session["system"]["available_memory_gb"] == 48.0
 
-    def test_session_with_no_processes(self, db):
+    def test_session_with_no_processes_is_filtered(self, db):
         report = _make_report(processes=[])
         store_check(db, report)
-        session = query_analyze_sessions(db)[0]
-        assert session["processes"] == 0
-        assert session["memory_mb"] == 0.0
-        assert session["windsurf_processes"] == []
+        sessions = query_analyze_sessions(db)
+        assert sessions == []

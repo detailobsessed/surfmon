@@ -1095,6 +1095,8 @@ def generate_report() -> MonitoringReport:
                 f"- Monitor closely, restart all Windsurf instances if it keeps growing"
             )
 
+    language_servers = find_language_servers(proc_infos)
+
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),
         system=get_system_info(),
@@ -1102,7 +1104,7 @@ def generate_report() -> MonitoringReport:
         total_windsurf_memory_mb=total_memory,
         total_windsurf_cpu_percent=total_cpu,
         process_count=len(proc_infos),
-        language_servers=find_language_servers(proc_infos),
+        language_servers=language_servers,
         mcp_servers_enabled=get_mcp_config(),
         extensions_count=count_extensions(),
         log_issues=log_issues,
