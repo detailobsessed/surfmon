@@ -171,8 +171,7 @@ def _store_to_db[T](store_fn: _StoreFn[T], data: T) -> None:
         try:
             store_fn(db, data, target=_get_target_str())
         finally:
-            if db.conn is not None:
-                db.conn.close()
+            db.close()
     except Exception as exc:
         print(f"DB write skipped: {exc}", file=sys.stderr)
 

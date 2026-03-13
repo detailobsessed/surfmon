@@ -1384,7 +1384,7 @@ class TestStoreToDbHelper:
 
         _store_to_db(mock_fn, "arg1")
         mock_fn.assert_called_once_with(mock_db.return_value, "arg1", target="stable")
-        mock_db.return_value.conn.close.assert_called_once()
+        mock_db.return_value.close.assert_called_once()
 
     def test_store_to_db_closes_on_store_error(self, mocker):
         """Should close the DB connection even when the store function raises."""
@@ -1392,7 +1392,7 @@ class TestStoreToDbHelper:
         mock_fn = MagicMock(side_effect=RuntimeError("insert failed"))
 
         _store_to_db(mock_fn, "arg1")
-        mock_db.return_value.conn.close.assert_called_once()
+        mock_db.return_value.close.assert_called_once()
 
     def test_store_to_db_failure(self, mocker):
         """Should not raise when get_db itself fails."""
