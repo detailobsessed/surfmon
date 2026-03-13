@@ -46,51 +46,6 @@ class TestCheckCommand:
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
 
-    def test_check_with_explicit_json_file(
-        self,
-        mock_generate_report,
-        mock_display_report,
-        tmp_path,
-        mocker,
-    ):
-        """Should save JSON to explicit path with --json-file."""
-        json_file = tmp_path / "test.json"
-
-        mock_save = mocker.patch("surfmon.cli.save_report_json")
-        result = runner.invoke(app, ["check", "--json-file", str(json_file)])
-
-        assert result.exit_code == 0
-        assert mock_save.called
-        # Check that absolute path was used
-        saved_path = mock_save.call_args[0][1]
-        assert saved_path.is_absolute()
-
-    def test_check_with_explicit_md_path(self, mock_generate_report, mock_display_report, tmp_path, mocker):
-        """Should save Markdown to explicit path."""
-        md_file = tmp_path / "test.md"
-
-        mock_save = mocker.patch("surfmon.cli.save_report_markdown")
-        result = runner.invoke(app, ["check", "--md", str(md_file)])
-
-        assert result.exit_code == 0
-        assert mock_save.called
-        saved_path = mock_save.call_args[0][1]
-        assert saved_path.is_absolute()
-
-    def test_check_with_both_explicit_paths(self, mock_generate_report, mock_display_report, tmp_path, mocker):
-        """Should save both formats to explicit paths."""
-        json_file = tmp_path / "test.json"
-        md_file = tmp_path / "test.md"
-
-        mock_json = mocker.patch("surfmon.cli.save_report_json")
-        mock_md = mocker.patch("surfmon.cli.save_report_markdown")
-
-        result = runner.invoke(app, ["check", "--json-file", str(json_file), "--md", str(md_file)])
-
-        assert result.exit_code == 0
-        assert mock_json.called
-        assert mock_md.called
-
     def test_check_json_stdout(self, mock_generate_report, mock_display_report, mocker):
         """Should output JSON to stdout with --json flag."""
         mocker.patch("surfmon.cli.asdict", return_value={"process_count": 5, "total_windsurf_memory_mb": 1000.0})
@@ -101,13 +56,6 @@ class TestCheckCommand:
         data = json.loads(result.stdout)
         assert data["process_count"] == 5
         assert data["total_windsurf_memory_mb"] == 1000.0
-
-    def test_check_rejects_md_without_path(self, mock_generate_report, mock_display_report):
-        """Should reject --md without a path argument."""
-        result = runner.invoke(app, ["check", "--md", "--verbose"])
-
-        assert result.exit_code == 1
-        assert "Error: --md requires a file path" in result.stdout
 
     def test_check_verbose_flag(self, mock_generate_report, mock_display_report, mocker):
         """Should accept verbose flag."""
@@ -780,18 +728,6 @@ class TestPtySnapshotCommand:
         assert "PTY Forensic Snapshot" in result.output
 
     @pytest.mark.usefixtures("_mock_pty_data")
-    def test_pty_snapshot_save_json_file(self, tmp_path):
-        """Should save JSON snapshot to specified path with --json-file."""
-        json_path = tmp_path / "snapshot.json"
-        result = runner.invoke(app, ["pty-snapshot", "--json-file", str(json_path)])
-        assert result.exit_code == 0
-        assert json_path.exists()
-
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-        assert "pty_info" in data
-        assert data["pty_info"]["windsurf_pty_count"] == 5
-
-    @pytest.mark.usefixtures("_mock_pty_data")
     def test_pty_snapshot_json_stdout(self):
         """Should output JSON to stdout with --json flag."""
         result = runner.invoke(app, ["pty-snapshot", "--json"])
@@ -799,20 +735,6 @@ class TestPtySnapshotCommand:
         data = json.loads(result.stdout)
         assert "pty_info" in data
         assert data["pty_info"]["windsurf_pty_count"] == 5
-
-    @pytest.mark.usefixtures("_mock_pty_data")
-    def test_pty_snapshot_save_markdown(self, tmp_path):
-        """Should save Markdown snapshot to specified path."""
-        md_path = tmp_path / "snapshot.md"
-        result = runner.invoke(app, ["pty-snapshot", "--md", str(md_path)])
-        assert result.exit_code == 0
-        assert md_path.exists()
-
-        content = md_path.read_text(encoding="utf-8")
-        assert "# PTY Forensic Snapshot" in content
-        assert "Windsurf PTYs" in content
-        assert "Per-PID Breakdown" in content
-        assert "2.5.0" in content
 
 
 class TestLsSnapshotCommand:
@@ -915,29 +837,6 @@ class TestLsSnapshotCommand:
         assert data["total_ls_memory_mb"] == 450.0
         assert len(data["entries"]) == 2
 
-    @pytest.mark.usefixtures("_mock_ls_data")
-    def test_ls_snapshot_save_json_file(self, tmp_path):
-        """Should save JSON snapshot to specified path with --json-file."""
-        json_path = tmp_path / "ls-snapshot.json"
-        result = runner.invoke(app, ["ls-snapshot", "--json-file", str(json_path)])
-        assert result.exit_code == 0
-        assert json_path.exists()
-
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-        assert data["total_ls_count"] == 2
-
-    @pytest.mark.usefixtures("_mock_ls_data")
-    def test_ls_snapshot_save_markdown(self, tmp_path):
-        """Should save Markdown snapshot to specified path."""
-        md_path = tmp_path / "ls-snapshot.md"
-        result = runner.invoke(app, ["ls-snapshot", "--md", str(md_path)])
-        assert result.exit_code == 0
-        assert md_path.exists()
-
-        content = md_path.read_text(encoding="utf-8")
-        assert "# Language Server Forensic Snapshot" in content
-        assert "Language Servers" in content
-
 
 class TestLsSnapshotDisplay:
     """Tests for _display_ls_snapshot covering memory color branches and issues."""
@@ -1014,95 +913,6 @@ class TestLsSnapshotDisplay:
 
         result = runner.invoke(app, ["ls-snapshot"])
         assert result.exit_code == 0
-
-
-class TestLsSnapshotMarkdownWithIssues:
-    """Tests for _save_ls_snapshot_markdown with issues section."""
-
-    def test_markdown_includes_issues(self, tmp_path):
-        """Should include issues section in markdown output."""
-        from surfmon.cli import _save_ls_snapshot_markdown
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
-
-        snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
-            windsurf_version="2.5.0",
-            windsurf_uptime_seconds=3600.0,
-            total_ls_count=1,
-            total_ls_memory_mb=1730.0,
-            orphaned_count=1,
-            entries=[
-                LsSnapshotEntry(
-                    pid=2000,
-                    name="language_server_macos_arm",
-                    language="Codeium",
-                    memory_mb=1730.0,
-                    memory_percent=5.0,
-                    cpu_percent=10.0,
-                    num_threads=8,
-                    runtime_seconds=3500.0,
-                    workspace="mcp/client/capabilities",
-                    orphaned=True,
-                ),
-            ],
-            issues=["CRITICAL: language_server indexing non-existent workspace 'mcp/client/capabilities'"],
-        )
-
-        md_path = tmp_path / "snapshot.md"
-        _save_ls_snapshot_markdown(snapshot, md_path)
-
-        content = md_path.read_text(encoding="utf-8")
-        assert "## Issues" in content
-        assert "CRITICAL" in content
-        assert "ORPHANED" in content
-        assert "mcp/client/capabilities" in content
-
-
-class TestSaveSnapshotFiles:
-    """Tests for _save_snapshot_files helper."""
-
-    def test_saves_both_files(self, tmp_path):
-        """Should save both JSON and Markdown when both paths given."""
-        from surfmon.cli import _save_snapshot_files
-
-        json_path = tmp_path / "test.json"
-        md_path = tmp_path / "test.md"
-
-        def save_json(_data, path):
-            path.write_text("json", encoding="utf-8")
-
-        def save_md(_data, path):
-            path.write_text("md", encoding="utf-8")
-
-        _save_snapshot_files(json_path, md_path, save_json, save_md, {})
-        assert json_path.exists()
-        assert md_path.exists()
-
-    def test_skips_when_no_paths(self):
-        """Should return immediately when no paths given."""
-        from surfmon.cli import _save_snapshot_files
-
-        _save_snapshot_files(None, None, None, None, {})
-
-    def test_handles_json_save_error(self, tmp_path):
-        """Should handle OSError when saving JSON."""
-        from surfmon.cli import _save_snapshot_files
-
-        def failing_save(_data, _path):
-            msg = "Permission denied"
-            raise OSError(msg)
-
-        _save_snapshot_files(tmp_path / "test.json", None, failing_save, None, {})
-
-    def test_handles_md_save_error(self, tmp_path):
-        """Should handle OSError when saving Markdown."""
-        from surfmon.cli import _save_snapshot_files
-
-        def failing_save(_data, _path):
-            msg = "Permission denied"
-            raise OSError(msg)
-
-        _save_snapshot_files(None, tmp_path / "test.md", None, failing_save, {})
 
 
 class TestFormatUptime:

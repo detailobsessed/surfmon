@@ -33,7 +33,6 @@ from .monitor import (
     format_uptime,
     generate_report,
     is_main_windsurf_process,
-    save_report_json,
 )
 from .output import (
     CPU_PERCENT_CRITICAL,
@@ -48,7 +47,6 @@ from .output import (
     make_kv_table,
     make_panel,
     make_table,
-    save_report_markdown,
 )
 
 # Language server snapshot thresholds
@@ -325,8 +323,6 @@ def check(
     _target: TargetOption = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed process information")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output report as JSON to stdout (for agent/pipe consumption)")] = False,
-    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save report as JSON to a specific file")] = None,
-    markdown_path: Annotated[Path | None, typer.Option("--md", help="Save report as Markdown")] = None,
 ) -> None:
     """
     Run a quick performance check and display results.
@@ -336,11 +332,6 @@ def check(
     """
     _require_target()
     try:
-        # Validate flag combinations
-        if markdown_path and str(markdown_path).startswith("--"):
-            console.print("[red]Error: --md requires a file path.[/red]")
-            raise typer.Exit(code=1)
-
         target_name = get_target_display_name()
         with console.status(f"[cyan]Gathering {target_name} information...[/cyan]", spinner="dots"):
             report = generate_report()
@@ -354,10 +345,7 @@ def check(
                 raise typer.Exit(code=1)
             return
 
-        show_verbose = verbose or bool(json_file) or bool(markdown_path)
-        display_report(report, verbose=show_verbose)
-
-        _save_snapshot_files(json_file, markdown_path, save_report_json, save_report_markdown, report)
+        display_report(report, verbose=verbose)
 
         # Exit with non-zero if critical issues detected
         if report.log_issues:
@@ -755,92 +743,10 @@ def _display_pty_snapshot(pty: PtyInfo) -> None:
         console.print()
 
 
-def _save_pty_snapshot_json(pty: PtyInfo, path: Path) -> None:
-    """Save PTY snapshot as JSON."""
-    data = {
-        "timestamp": datetime.now(tz=UTC).isoformat(),
-        "pty_info": asdict(pty),
-    }
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-
-def _save_pty_snapshot_markdown(pty: PtyInfo, path: Path) -> None:
-    """Save PTY snapshot as Markdown forensic report."""
-    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
-    lines = [
-        "# PTY Forensic Snapshot",
-        "",
-        f"**Timestamp:** {datetime.now(tz=UTC).isoformat()}",
-        f"**Windsurf Version:** {pty.windsurf_version or 'unknown'}",
-        f"**Windsurf Uptime:** {format_uptime(pty.windsurf_uptime_seconds)}",
-        "",
-        "## Summary",
-        "",
-        f"- **Windsurf PTYs:** {pty.windsurf_pty_count}",
-        f"- **System PTYs:** {pty.system_pty_used} / {pty.system_pty_limit} ({usage_pct:.1f}%)",
-        "",
-    ]
-
-    if pty.per_process:
-        lines.extend([
-            "## Per-PID Breakdown",
-            "",
-            "| PID | Process | PTYs | FD Range |",
-            "|-----|---------|------|----------|",
-        ])
-        for detail in pty.per_process:
-            fds_sorted = sorted(detail.fds, key=lambda f: int(f.rstrip("urw")))
-            fd_range = f"{fds_sorted[0]}..{fds_sorted[-1]}" if len(fds_sorted) > 1 else fds_sorted[0]
-            lines.append(f"| {detail.pid} | {detail.name} | {detail.pty_count} | {fd_range} |")
-        lines.append("")
-
-    if pty.non_windsurf_holders:
-        lines.extend([
-            "## Other PTY Holders",
-            "",
-            "| PID | Process | PTYs |",
-            "|-----|---------|------|",
-        ])
-        lines.extend(f"| {detail.pid} | {detail.name} | {detail.pty_count} |" for detail in pty.non_windsurf_holders)
-        lines.append("")
-
-    if pty.fd_entries:
-        active_count = sum(1 for e in pty.fd_entries if e.size_off not in {"0t0", "0"})
-        idle_count = len(pty.fd_entries) - active_count
-        lines.extend([
-            "## FD Detail (Windsurf)",
-            "",
-            f"**Active:** {active_count} | **Idle (zero offset):** {idle_count}",
-            "",
-            "| PID | FD | Device | Offset | Status |",
-            "|-----|----|--------|--------|--------|",
-        ])
-        for entry in sorted(pty.fd_entries, key=lambda e: (e.pid, int(e.fd.rstrip("urw")))):
-            is_zero = entry.size_off in {"0t0", "0"}
-            status = "idle" if is_zero else "active"
-            lines.append(f"| {entry.pid} | {entry.fd} | {entry.device} | {entry.size_off} | {status} |")
-        lines.append("")
-
-    if pty.raw_lsof:
-        lines.extend([
-            "## Raw lsof Output",
-            "",
-            "```",
-            pty.raw_lsof.strip(),
-            "```",
-            "",
-        ])
-
-    path.write_text("\n".join(lines), encoding="utf-8")
-
-
 @app.command(name="pty-snapshot")
 def pty_snapshot(
     _target: TargetOption = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
-    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
-    markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
 ) -> None:
     """Capture a comprehensive PTY forensic snapshot.
 
@@ -865,8 +771,6 @@ def pty_snapshot(
             return
 
         _display_pty_snapshot(pty)
-
-        _save_snapshot_files(json_file, markdown_path, _save_pty_snapshot_json, _save_pty_snapshot_markdown, pty)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -937,81 +841,10 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
         console.print()
 
 
-def _save_ls_snapshot_json(snapshot: LsSnapshot, path: Path) -> None:
-    """Save language server snapshot as JSON."""
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(asdict(snapshot), f, indent=2)
-
-
-def _save_ls_snapshot_markdown(snapshot: LsSnapshot, path: Path) -> None:
-    """Save language server snapshot as Markdown forensic report."""
-    lines = [
-        "# Language Server Forensic Snapshot",
-        "",
-        f"**Timestamp:** {snapshot.timestamp}",
-        f"**Windsurf Version:** {snapshot.windsurf_version or 'unknown'}",
-        f"**Windsurf Uptime:** {format_uptime(snapshot.windsurf_uptime_seconds)}",
-        "",
-        "## Summary",
-        "",
-        f"- **Language Servers:** {snapshot.total_ls_count}",
-        f"- **Total LS Memory:** {snapshot.total_ls_memory_mb:.1f} MB",
-        f"- **Orphaned:** {snapshot.orphaned_count}",
-        "",
-    ]
-
-    if snapshot.entries:
-        lines.extend([
-            "## Language Server Processes",
-            "",
-            "| PID | Language | Memory | CPU % | Threads | Runtime | Workspace | Status |",
-            "|-----|----------|--------|-------|---------|---------|-----------|--------|",
-        ])
-        for entry in snapshot.entries:
-            runtime = format_uptime(entry.runtime_seconds)
-            status = "ORPHANED" if entry.orphaned else "ok"
-            lines.append(
-                f"| {entry.pid} | {entry.language} | {entry.memory_mb:.1f} MB "
-                f"| {entry.cpu_percent:.1f} | {entry.num_threads} | {runtime} "
-                f"| {entry.workspace or '—'} | {status} |"
-            )
-        lines.append("")
-
-    if snapshot.issues:
-        lines.extend(["## Issues", ""])
-        lines.extend(f"- {issue}" for issue in snapshot.issues)
-        lines.append("")
-
-    path.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _save_snapshot_files(json_file, markdown_path, save_json_fn, save_md_fn, data) -> None:
-    """Save snapshot to JSON and/or Markdown files with error handling."""
-    if not (json_file or markdown_path):
-        return
-    console.print()
-    if json_file:
-        json_file = json_file.resolve()
-        try:
-            save_json_fn(data, json_file)
-            console.print(f"[green]✓ JSON snapshot saved to {json_file}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error: Cannot save JSON: {e}[/red]")
-    if markdown_path:
-        markdown_path = markdown_path.resolve()
-        try:
-            save_md_fn(data, markdown_path)
-            console.print(f"[green]✓ Markdown snapshot saved to {markdown_path}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
-
-
 @app.command(name="ls-snapshot")
 def ls_snapshot(
     _target: TargetOption = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
-    json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
-    markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
 ) -> None:
     """Capture a language server forensic snapshot.
 
@@ -1035,8 +868,6 @@ def ls_snapshot(
             return
 
         _display_ls_snapshot(snapshot)
-
-        _save_snapshot_files(json_file, markdown_path, _save_ls_snapshot_json, _save_ls_snapshot_markdown, snapshot)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
