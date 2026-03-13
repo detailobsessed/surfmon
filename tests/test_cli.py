@@ -232,77 +232,6 @@ class TestCleanupCommand:
         mock_proc.kill.assert_called_once()
 
 
-class TestPruneCommand:
-    """Tests for the prune command."""
-
-    def test_prune_nonexistent_directory(self, tmp_path):
-        """Should error when directory doesn't exist."""
-        result = runner.invoke(app, ["prune", str(tmp_path / "nonexistent")])
-        assert result.exit_code == 1
-        assert "not found" in result.stdout
-
-    def test_prune_not_a_directory(self, tmp_path):
-        """Should error when path is not a directory."""
-        file_path = tmp_path / "file.txt"
-        file_path.write_text("test", encoding="utf-8")
-        result = runner.invoke(app, ["prune", str(file_path)])
-        assert result.exit_code == 1
-        assert "Not a directory" in result.stdout
-
-    def test_prune_empty_directory(self, tmp_path):
-        """Should handle empty directory."""
-        result = runner.invoke(app, ["prune", str(tmp_path)])
-        assert result.exit_code == 0
-        assert "No JSON files" in result.stdout
-
-    def test_prune_with_duplicates_dry_run(self, tmp_path):
-        """Should find duplicates in dry-run mode."""
-        # Create duplicate reports (same content hash)
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path), "--dry-run"])
-        assert result.exit_code == 0
-
-    def test_prune_with_duplicates_confirmed(self, tmp_path):
-        """Should delete duplicates when confirmed."""
-        # Create duplicate reports
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path)], input="y\n")
-        assert result.exit_code == 0
-        # Should have deleted some files
-        remaining = list(tmp_path.glob("*.json"))
-        assert len(remaining) < 3
-
-    def test_prune_with_duplicates_cancelled(self, tmp_path):
-        """Should not delete when cancelled."""
-        # Create duplicate reports
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path)], input="n\n")
-        assert result.exit_code == 0
-        assert "Cancelled" in result.stdout
-        # All files should remain
-        remaining = list(tmp_path.glob("*.json"))
-        assert len(remaining) == 3
-
-    def test_prune_keep_latest(self, tmp_path):
-        """Should keep the latest report when --keep-latest is set."""
-        # Create reports with different timestamps in filenames
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_2025010{i + 1}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path), "--keep-latest"], input="y\n")
-        assert result.exit_code == 0
-
-
 class TestAnalyzeCommand:
     """Tests for the analyze command (DB-based)."""
 
@@ -596,54 +525,6 @@ class TestCleanupCommandEdgeCases:
         result = runner.invoke(app, ["cleanup", "--force"])
         assert result.exit_code == 1
         assert "Failed to kill" in result.stdout
-
-
-class TestPruneCommandEdgeCases:
-    """Tests for prune command edge cases."""
-
-    def test_prune_with_corrupt_json(self, tmp_path):
-        """Should warn about corrupt JSON files."""
-        (tmp_path / "good.json").write_text('{"process_count": 5}', encoding="utf-8")
-        (tmp_path / "bad.json").write_text("not valid json{{{", encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path)])
-        assert result.exit_code == 0
-        assert "Warning" in result.stdout or "No duplicate" in result.stdout
-
-    def test_prune_all_unique(self, tmp_path):
-        """Should report no duplicates when all reports are unique."""
-        for i in range(3):
-            report = {"process_count": i, "memory_mb": 1000 + i * 500}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path)])
-        assert result.exit_code == 0
-        assert "No duplicate" in result.stdout
-
-
-class TestPruneNoKeepLatest:
-    """Tests for prune --no-keep-latest option."""
-
-    def test_prune_no_keep_latest(self, tmp_path):
-        """Should keep the oldest report when --no-keep-latest is set."""
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_2025010{i + 1}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["prune", str(tmp_path), "--no-keep-latest"], input="y\n")
-        assert result.exit_code == 0
-
-    def test_prune_delete_failure(self, tmp_path, mocker):
-        """Should report delete failures gracefully."""
-        for i in range(3):
-            report = {"process_count": 5, "memory_mb": 1000, "timestamp": f"2025-01-0{i + 1}"}
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        mocker.patch("surfmon.cli._delete_files", return_value=(0, [("report_0.json", "Permission denied")]))
-
-        result = runner.invoke(app, ["prune", str(tmp_path)], input="y\n")
-        assert result.exit_code == 1
-        assert "Failed to delete" in result.stdout
 
 
 class TestAnalyzeCommandEdgeCases:
