@@ -72,7 +72,7 @@ DEFAULT_REPORTS_DIR = Path.home() / ".surfmon" / "reports"
 DEFAULT_WATCH_DIR = DEFAULT_REPORTS_DIR / "watch"
 
 
-def _print_json(data: dict) -> None:
+def _print_json(data: dict | list) -> None:
     """Print data as JSON to stdout for agent/pipe consumption."""
     print(json.dumps(data, indent=2, default=str))
 
@@ -517,6 +517,7 @@ def history(
     ] = None,
     limit: Annotated[int, typer.Option("--limit", "-n", help="Number of recent sessions to show")] = 20,
     since: Annotated[str | None, typer.Option("--since", "-s", help="Show sessions since duration (e.g. 24h, 7d, 2w)")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON to stdout (for agent/pipe consumption)")] = False,
 ) -> None:
     """Show recent monitoring sessions from the historical database.
 
@@ -527,13 +528,23 @@ def history(
     try:
         rows = query_history_dicts(db, command=command_filter, limit=limit, since=since)
     except ValueError as exc:
+        if json_output:
+            _print_json({"error": str(exc)})
+            raise typer.Exit(code=1) from exc
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
     if not rows:
+        if json_output:
+            _print_json([])
+            return
         console.print("[yellow]No sessions found in the database.[/yellow]")
         console.print("[dim]Run 'surfmon check', 'surfmon ls-snapshot', or 'surfmon pty-snapshot' to populate it.[/dim]")
         raise typer.Exit(code=0)
+
+    if json_output:
+        _print_json(rows)
+        return
 
     table = make_table(f"Recent Sessions ({len(rows)})")
     table.add_column("Timestamp", style="dim")
@@ -576,6 +587,7 @@ def trend(
     since: Annotated[str | None, typer.Option("--since", "-s", help="Show data since duration (e.g. 24h, 7d, 2w)")] = None,
     plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate a matplotlib chart")] = False,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plot to file")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON to stdout (for agent/pipe consumption)")] = False,
 ) -> None:
     """Show time-series trends for a metric from the historical database.
 
@@ -586,13 +598,23 @@ def trend(
     try:
         data = query_trend(db, metric=metric, since=since)
     except ValueError as exc:
+        if json_output:
+            _print_json({"error": str(exc)})
+            raise typer.Exit(code=1) from exc
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
     if not data:
+        if json_output:
+            _print_json([])
+            return
         console.print(f"[yellow]No data found for metric '{metric}'.[/yellow]")
         console.print("[dim]Run 'surfmon check' or other commands to populate the database.[/dim]")
         raise typer.Exit(code=0)
+
+    if json_output:
+        _print_json(data)
+        return
 
     # Table display
     table = make_table(f"Trend: {metric} ({len(data)} data points)")
