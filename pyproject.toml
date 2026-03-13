@@ -156,6 +156,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"src/surfmon/db.py" = [
+    "S608",   # IN clause built with '?' * N placeholders — not a true injection vector
+]
 "src/surfmon/cli.py" = [
     "PLC0415",    # Lazy matplotlib import — heavy library (~1s) only needed for --plot
     "T201",       # _print_json intentionally prints JSON to stdout for agent/pipe consumption

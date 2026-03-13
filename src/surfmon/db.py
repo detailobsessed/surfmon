@@ -449,6 +449,154 @@ _TREND_QUERIES: dict[str, tuple[str, str | None, str | None]] = {
 TREND_METRICS = list(_TREND_QUERIES)
 
 
+_ANALYZE_SESSION_SQL = """
+    SELECT
+        s.id,
+        s.timestamp,
+        s.windsurf_version,
+        COUNT(p.id) AS process_count,
+        COALESCE(SUM(p.memory_mb), 0) AS total_memory_mb,
+        COALESCE(SUM(p.cpu_percent), 0) AS total_cpu_percent,
+        COALESCE(ss.total_memory_gb, 0) AS total_memory_gb,
+        COALESCE(ss.available_memory_gb, 0) AS available_memory_gb,
+        ps.windsurf_pty_count,
+        ps.system_pty_limit,
+        ps.system_pty_used
+    FROM sessions s
+    LEFT JOIN processes p ON p.session_id = s.id
+    LEFT JOIN system_snapshots ss ON ss.session_id = s.id
+    LEFT JOIN pty_snapshots ps ON ps.session_id = s.id
+    WHERE {where}
+    GROUP BY s.id
+    ORDER BY s.timestamp ASC
+"""
+
+_LS_CMDLINE_KEYWORDS: tuple[str, ...] = (
+    "language_server",
+    "jdtls",
+    "gopls",
+    "pyright",
+    "pylance",
+    "basedpyright",
+    "yaml-language-server",
+    "json-language-server",
+    "rust-analyzer",
+    "eclipse.jdt",
+)
+
+
+def _build_analyze_where(since: str | None) -> tuple[str, list]:
+    """Build WHERE clause and params for the analyze sessions query."""
+    where_parts = ["s.command = 'check'"]
+    params: list = []
+    if since:
+        cutoff = _parse_since(since)
+        where_parts.append("s.timestamp >= ?")
+        params.append(cutoff.isoformat())
+    return " AND ".join(where_parts), params
+
+
+def _row_to_analyze_dict(row: tuple) -> dict:
+    """Convert a raw DB row to an analyze session dict."""
+    (sid, ts_str, _ws_version, proc_count, total_mem_mb, total_cpu, total_mem_gb, avail_mem_gb, pty_count, pty_limit, pty_used) = row
+    ts = datetime.fromisoformat(ts_str).replace(tzinfo=UTC) if ts_str else datetime.now(tz=UTC)
+    pty_info = (
+        {"windsurf_pty_count": pty_count or 0, "system_pty_limit": pty_limit or 0, "system_pty_used": pty_used or 0}
+        if pty_count is not None
+        else None
+    )
+    return {
+        "session_id": sid,
+        "timestamp": ts,
+        "processes": proc_count or 0,
+        "memory_mb": total_mem_mb or 0.0,
+        "cpu": total_cpu or 0.0,
+        "lang_servers": 0,
+        "issues": [],
+        "system": {"total_memory_gb": total_mem_gb or 0.0, "available_memory_gb": avail_mem_gb or 0.0},
+        "pty_info": pty_info,
+        "windsurf_processes": [],
+    }
+
+
+def _attach_processes(sessions: list[dict], db: Database) -> None:
+    """Load per-process detail and attach to session dicts in-place."""
+    if not sessions:
+        return
+    session_ids = [s["session_id"] for s in sessions]
+    placeholders = ",".join("?" * len(session_ids))
+    rows = db.execute(
+        f"SELECT session_id, name, memory_mb, cpu_percent, num_threads"
+        f" FROM processes WHERE session_id IN ({placeholders})"
+        f" ORDER BY memory_mb DESC",
+        session_ids,
+    ).fetchall()
+    index = {s["session_id"]: s for s in sessions}
+    for sid, name, memory_mb, cpu_pct, num_threads in rows:
+        if sid in index:
+            index[sid]["windsurf_processes"].append({
+                "name": name,
+                "memory_mb": memory_mb,
+                "cpu_percent": cpu_pct,
+                "num_threads": num_threads,
+            })
+
+
+def _attach_issues(sessions: list[dict], db: Database) -> None:
+    """Load issue strings and attach to session dicts in-place."""
+    if not sessions:
+        return
+    session_ids = [s["session_id"] for s in sessions]
+    placeholders = ",".join("?" * len(session_ids))
+    rows = db.execute(
+        f"SELECT session_id, message FROM issues WHERE session_id IN ({placeholders})",
+        session_ids,
+    ).fetchall()
+    index = {s["session_id"]: s for s in sessions}
+    for sid, message in rows:
+        if sid in index:
+            index[sid]["issues"].append(message)
+
+
+def _attach_ls_counts(sessions: list[dict], db: Database) -> None:
+    """Count language server processes per session and attach to session dicts."""
+    if not sessions:
+        return
+    session_ids = [s["session_id"] for s in sessions]
+    id_placeholders = ",".join("?" * len(session_ids))
+    kw_conditions = " OR ".join("lower(p.cmdline) LIKE ?" for _ in _LS_CMDLINE_KEYWORDS)
+    kw_params = [f"%{kw}%" for kw in _LS_CMDLINE_KEYWORDS]
+    rows = db.execute(
+        f"SELECT p.session_id, COUNT(*) FROM processes p"
+        f" WHERE p.session_id IN ({id_placeholders}) AND ({kw_conditions})"
+        f" GROUP BY p.session_id",
+        session_ids + kw_params,
+    ).fetchall()
+    index = {s["session_id"]: s for s in sessions}
+    for sid, count in rows:
+        if sid in index:
+            index[sid]["lang_servers"] = count
+
+
+def query_analyze_sessions(
+    db: Database,
+    since: str | None = None,
+) -> list[dict]:
+    """Query check sessions for the analyze command.
+
+    Returns one dict per check session with aggregated metrics plus
+    per-process and issue detail suitable for the analyze display and plots.
+    """
+    where, params = _build_analyze_where(since)
+    sql = _ANALYZE_SESSION_SQL.format(where=where)
+    rows = db.execute(sql, params).fetchall()
+    sessions = [_row_to_analyze_dict(row) for row in rows]
+    _attach_processes(sessions, db)
+    _attach_issues(sessions, db)
+    _attach_ls_counts(sessions, db)
+    return sessions
+
+
 def query_trend(
     db: Database,
     metric: str,

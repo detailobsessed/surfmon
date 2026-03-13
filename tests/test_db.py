@@ -15,6 +15,7 @@ from surfmon.db import (
     _parse_since,
     _set_schema_version,
     get_db,
+    query_analyze_sessions,
     query_history,
     query_history_dicts,
     query_trend,
@@ -78,7 +79,7 @@ def _make_report(  # noqa: PLR0913
     return MonitoringReport(
         timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
         system=_make_system_info(),
-        windsurf_processes=processes or [_make_process()],
+        windsurf_processes=[_make_process()] if processes is None else processes,
         total_windsurf_memory_mb=2048.0,
         total_windsurf_cpu_percent=15.0,
         process_count=5,
@@ -517,3 +518,124 @@ class TestClassifyIssueSeverity:
 
     def test_info(self):
         assert _classify_issue_severity("Extensions loaded") == "info"
+
+
+class TestQueryAnalyzeSessions:
+    def test_empty_db(self, db):
+        assert query_analyze_sessions(db) == []
+
+    def test_basic_roundtrip(self, db):
+        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
+        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+
+        sessions = query_analyze_sessions(db)
+        assert len(sessions) == 2
+        assert sessions[0]["timestamp"] < sessions[1]["timestamp"]
+
+    def test_returns_expected_keys(self, db):
+        store_check(db, _make_report())
+        session = query_analyze_sessions(db)[0]
+        assert {
+            "session_id",
+            "timestamp",
+            "processes",
+            "memory_mb",
+            "cpu",
+            "lang_servers",
+            "issues",
+            "system",
+            "pty_info",
+            "windsurf_processes",
+        }.issubset(session.keys())
+
+    def test_attaches_processes(self, db):
+        procs = [
+            _make_process(pid=1, name="Windsurf", memory_mb=600.0),
+            _make_process(pid=2, name="Windsurf Helper", memory_mb=200.0),
+        ]
+        store_check(db, _make_report(processes=procs))
+        session = query_analyze_sessions(db)[0]
+        assert len(session["windsurf_processes"]) == 2
+        assert session["windsurf_processes"][0]["memory_mb"] >= session["windsurf_processes"][1]["memory_mb"]
+
+    def test_attaches_issues(self, db):
+        store_check(db, _make_report(issues=["⚠ High memory", "⚠ Leak detected"]))
+        session = query_analyze_sessions(db)[0]
+        assert len(session["issues"]) == 2
+
+    def test_ls_count_codeium(self, db):
+        proc = _make_process(name="language_server_macos_arm", memory_mb=500.0)
+        store_check(db, _make_report(processes=[proc]))
+        session = query_analyze_sessions(db)[0]
+        assert session["lang_servers"] == 1
+
+    def test_ls_count_pyright(self, db):
+        proc = _make_process(
+            name="node",
+            memory_mb=300.0,
+        )
+        proc = ProcessInfo(
+            pid=proc.pid,
+            name="node",
+            cpu_percent=proc.cpu_percent,
+            memory_mb=proc.memory_mb,
+            memory_percent=proc.memory_percent,
+            num_threads=proc.num_threads,
+            runtime_seconds=proc.runtime_seconds,
+            cmdline="node /path/to/pyright-langserver --stdio",
+        )
+        store_check(db, _make_report(processes=[proc]))
+        session = query_analyze_sessions(db)[0]
+        assert session["lang_servers"] == 1
+
+    def test_ls_count_non_ls_process(self, db):
+        proc = ProcessInfo(
+            pid=99,
+            name="Windsurf",
+            cpu_percent=5.0,
+            memory_mb=800.0,
+            memory_percent=2.0,
+            num_threads=20,
+            runtime_seconds=3600.0,
+            cmdline="/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+        )
+        store_check(db, _make_report(processes=[proc]))
+        session = query_analyze_sessions(db)[0]
+        assert session["lang_servers"] == 0
+
+    def test_session_without_pty_info(self, db):
+        store_check(db, _make_report(pty_info=None))
+        session = query_analyze_sessions(db)[0]
+        assert session["pty_info"] is None
+
+    def test_session_with_pty_info(self, db):
+        store_check(db, _make_report(pty_info=_make_pty_info()))
+        session = query_analyze_sessions(db)[0]
+        assert session["pty_info"] is not None
+        assert session["pty_info"]["windsurf_pty_count"] == 25
+
+    def test_since_filter_excludes_old_sessions(self, db):
+        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
+        sessions = query_analyze_sessions(db, since="1h")
+        assert len(sessions) == 1
+
+    def test_ignores_non_check_commands(self, db):
+        store_check(db, _make_report())
+        store_ls_snapshot(db, _make_ls_snapshot())
+        sessions = query_analyze_sessions(db)
+        assert len(sessions) == 1
+
+    def test_system_info_populated(self, db):
+        store_check(db, _make_report())
+        session = query_analyze_sessions(db)[0]
+        assert session["system"]["total_memory_gb"] == 96.0
+        assert session["system"]["available_memory_gb"] == 48.0
+
+    def test_session_with_no_processes(self, db):
+        report = _make_report(processes=[])
+        store_check(db, report)
+        session = query_analyze_sessions(db)[0]
+        assert session["processes"] == 0
+        assert session["memory_mb"] == 0.0
+        assert session["windsurf_processes"] == []

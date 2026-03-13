@@ -18,7 +18,7 @@ import typer
 from . import __version__
 from .compare import compare_reports
 from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, get_target_display_name, set_target
-from .db import get_db, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
+from .db import get_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
 from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
@@ -66,10 +66,6 @@ ANALYZE_MEM_CHANGE_LEAK_GB = 0.5
 ANALYZE_MEM_CHANGE_GROWTH_GB = 0.2
 MEM_DIFF_SIGNIFICANT_GB = 0.01
 CPU_DIFF_SIGNIFICANT = 0.5
-
-# Default directories for reports (absolute, works when installed as uv tool)
-DEFAULT_REPORTS_DIR = Path.home() / ".surfmon" / "reports"
-DEFAULT_WATCH_DIR = DEFAULT_REPORTS_DIR / "watch"
 
 
 def _print_json(data: dict | list) -> None:
@@ -329,14 +325,6 @@ def create_summary_table(
 def check(
     _target: TargetOption = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed process information")] = False,
-    save: Annotated[
-        bool,
-        typer.Option(
-            "--save",
-            "-s",
-            help="Save both JSON and Markdown reports (auto-named, displays verbose output)",
-        ),
-    ] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output report as JSON to stdout (for agent/pipe consumption)")] = False,
     json_file: Annotated[Path | None, typer.Option("--json-file", help="Save report as JSON to a specific file")] = None,
     markdown_path: Annotated[Path | None, typer.Option("--md", help="Save report as Markdown")] = None,
@@ -345,13 +333,13 @@ def check(
     Run a quick performance check and display results.
 
     This is the main monitoring command that shows current Windsurf resource usage.
-    When using --save, verbose output is automatically enabled for more complete information.
+    All data is stored in the historical database automatically.
     """
     _require_target()
     try:
         # Validate flag combinations
         if markdown_path and str(markdown_path).startswith("--"):
-            console.print("[red]Error: --md requires a file path. Use --save to auto-generate both reports.[/red]")
+            console.print("[red]Error: --md requires a file path.[/red]")
             raise typer.Exit(code=1)
 
         target_name = get_target_display_name()
@@ -367,17 +355,8 @@ def check(
                 raise typer.Exit(code=1)
             return
 
-        # Auto-enable verbose when saving reports (more info is better)
-        show_verbose = verbose or save or bool(json_file) or bool(markdown_path)
+        show_verbose = verbose or bool(json_file) or bool(markdown_path)
         display_report(report, verbose=show_verbose)
-
-        # Handle --save flag (auto-generate filenames under ~/.surfmon/reports/)
-        if save:
-            save_dir = DEFAULT_REPORTS_DIR
-            _ensure_reports_dir(save_dir)
-            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_file = save_dir / f"surfmon-{timestamp}.json"
-            markdown_path = save_dir / f"surfmon-{timestamp}.md"
 
         _save_snapshot_files(json_file, markdown_path, save_report_json, save_report_markdown, report)
 
@@ -390,13 +369,11 @@ def check(
         raise typer.Exit(code=130) from None
 
 
-def _print_watch_banner(interval: int, session_dir: Path, save_interval: int, max_reports: int) -> None:
+def _print_watch_banner(interval: int, max_reports: int) -> None:
     """Print the watch session startup banner."""
     target_name = get_target_display_name()
     console.print(f"[cyan]Starting continuous monitoring of {target_name}...[/cyan]")
     console.print(f"  Interval: {interval}s")
-    console.print(f"  Session: {session_dir}")
-    console.print(f"  Save every: {save_interval}s")
     if max_reports > 0:
         console.print(f"  Max reports: {max_reports}")
     console.print()
@@ -408,46 +385,27 @@ def _print_watch_banner(interval: int, session_dir: Path, save_interval: int, ma
 def watch(
     _target: TargetOption = None,
     interval: Annotated[int, typer.Option("--interval", "-i", help="Check interval in seconds")] = 5,
-    output_dir: Annotated[
-        Path,
-        typer.Option("--output", "-o", help="Output directory for periodic reports"),
-    ] = DEFAULT_WATCH_DIR,
-    save_interval: Annotated[int, typer.Option("--save-interval", "-s", help="Save full report every N seconds")] = 300,
     max_reports: Annotated[int, typer.Option("--max", "-n", help="Stop after N checks (0 = infinite)")] = 0,
 ) -> None:
     """
     Continuously monitor Windsurf with live updates.
 
     Shows a live-updating dashboard with resource usage changes over time.
-    Saves periodic JSON reports for historical analysis.
-    Each watch session creates a new timestamped folder.
+    All data is written to the historical database. Use 'surfmon analyze' to
+    review the session afterwards.
     """
     _require_target()
 
-    # Reset stop flag at start of watch (in case of previous Ctrl+C)
     _state["stop_monitoring"] = False
 
-    # Create session-specific subdirectory
-    session_timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-    session_dir = output_dir / session_timestamp
-    try:
-        session_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        console.print(f"[red]Error: Cannot create output directory: {session_dir}[/red]")
-        console.print(f"[red]  {e}[/red]")
-        console.print("[dim]Use --output to specify a writable directory.[/dim]")
-        raise typer.Exit(code=1) from e
+    _print_watch_banner(interval, max_reports)
 
-    _print_watch_banner(interval, session_dir, save_interval, max_reports)
-
-    # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     prev_report = None
     report_count = 0
     session_start = time.time()
-    last_save = session_start
 
     try:
         with Live(console=console, refresh_per_second=4) as live:
@@ -459,19 +417,7 @@ def watch(
                 report_count += 1
                 _store_to_db(store_check, report)
 
-                # Update live display
                 live.update(create_summary_table(report, prev_report, session_start=session_start))
-
-                # Save report periodically
-                current_time = time.time()
-                if current_time - last_save >= save_interval:
-                    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-                    report_path = session_dir / f"{timestamp}.json"
-                    try:
-                        save_report_json(report, report_path)
-                    except OSError as e:
-                        console.print(f"\n[yellow]Warning: Could not save report: {e}[/yellow]")
-                    last_save = current_time
 
                 prev_report = report
                 time.sleep(interval)
@@ -919,14 +865,6 @@ def _save_pty_snapshot_markdown(pty: PtyInfo, path: Path) -> None:
 @app.command(name="pty-snapshot")
 def pty_snapshot(
     _target: TargetOption = None,
-    save: Annotated[
-        bool,
-        typer.Option(
-            "--save",
-            "-s",
-            help="Save both JSON and Markdown reports (auto-named)",
-        ),
-    ] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
     json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
     markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
@@ -935,7 +873,7 @@ def pty_snapshot(
 
     Gathers detailed PTY ownership data for diagnosing Windsurf PTY leaks.
     Shows per-PID breakdown, FD-level detail, and Windsurf version/uptime.
-    Use --save to generate files suitable for attaching to bug reports.
+    Data is always stored in the historical database.
     """
     _require_target()
     try:
@@ -954,14 +892,6 @@ def pty_snapshot(
             return
 
         _display_pty_snapshot(pty)
-
-        # Handle --save flag
-        if save:
-            save_dir = DEFAULT_REPORTS_DIR
-            _ensure_reports_dir(save_dir)
-            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_file = save_dir / f"pty-snapshot-{timestamp}.json"
-            markdown_path = save_dir / f"pty-snapshot-{timestamp}.md"
 
         _save_snapshot_files(json_file, markdown_path, _save_pty_snapshot_json, _save_pty_snapshot_markdown, pty)
 
@@ -1103,27 +1033,9 @@ def _save_snapshot_files(json_file, markdown_path, save_json_fn, save_md_fn, dat
             console.print(f"[red]Error: Cannot save Markdown: {e}[/red]")
 
 
-def _ensure_reports_dir(save_dir: Path) -> None:
-    """Create reports directory with error handling."""
-    try:
-        save_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        console.print(f"[red]Error: Cannot create reports directory: {save_dir}[/red]")
-        console.print(f"[red]  {e}[/red]")
-        raise typer.Exit(code=1) from e
-
-
 @app.command(name="ls-snapshot")
 def ls_snapshot(
     _target: TargetOption = None,
-    save: Annotated[
-        bool,
-        typer.Option(
-            "--save",
-            "-s",
-            help="Save both JSON and Markdown reports (auto-named)",
-        ),
-    ] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output snapshot as JSON to stdout (for agent/pipe consumption)")] = False,
     json_file: Annotated[Path | None, typer.Option("--json-file", help="Save snapshot as JSON to a specific file")] = None,
     markdown_path: Annotated[Path | None, typer.Option("--md", help="Save snapshot as Markdown")] = None,
@@ -1132,7 +1044,7 @@ def ls_snapshot(
 
     Gathers detailed per-language-server data: memory, CPU, workspace mapping,
     and orphaned workspace detection. Use for diagnosing language server memory
-    leaks and runaway indexing processes.
+    leaks and runaway indexing processes. Data is always stored in the historical database.
     """
     _require_target()
     try:
@@ -1150,13 +1062,6 @@ def ls_snapshot(
             return
 
         _display_ls_snapshot(snapshot)
-
-        if save:
-            save_dir = DEFAULT_REPORTS_DIR
-            _ensure_reports_dir(save_dir)
-            timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-            json_file = save_dir / f"ls-snapshot-{timestamp}.json"
-            markdown_path = save_dir / f"ls-snapshot-{timestamp}.md"
 
         _save_snapshot_files(json_file, markdown_path, _save_ls_snapshot_json, _save_ls_snapshot_markdown, snapshot)
 
@@ -1223,6 +1128,13 @@ def _delete_files(files: list[Path]) -> tuple[int, list[tuple[str, str]]]:
     return deleted, failed
 
 
+def _print_prune_deprecation_notice() -> None:
+    """Print deprecation notice for the prune command."""
+    console.print("[yellow]Warning: prune is deprecated. surfmon no longer writes watch session files.[/yellow]")
+    console.print("[dim]Use 'surfmon history' to review past sessions from the database.[/dim]")
+    console.print()
+
+
 @app.command()
 def prune(
     directory: Annotated[Path, typer.Argument(help="Directory containing JSON reports to prune")],
@@ -1232,14 +1144,14 @@ def prune(
         typer.Option("--keep-latest/--no-keep-latest", help="Always keep the most recent report"),
     ] = True,
 ) -> None:
-    """Remove duplicate/identical monitoring reports.
+    """[Deprecated] Remove duplicate/identical monitoring reports.
 
-    Compares JSON reports in a directory and removes duplicates, keeping only
-    unique reports. This is useful after running watch mode for extended periods,
-    as identical reports accumulate when nothing changes.
+    This command is deprecated. surfmon no longer writes watch session files.
+    Use 'surfmon history' to review past sessions from the database.
 
-    By default, always keeps the latest report even if it's a duplicate.
+    The command remains functional for users with existing file artifacts.
     """
+    _print_prune_deprecation_notice()
     if not directory.exists():
         console.print(f"[red]Error: Directory not found: {directory}[/red]")
         raise typer.Exit(code=1)
@@ -1303,50 +1215,6 @@ def prune(
         for filename, error in failed:
             console.print(f"  {filename}: {error}")
         raise typer.Exit(code=1)
-
-
-def _parse_timestamp(raw: str) -> datetime:
-    """Parse a report timestamp, treating naive values as local time then UTC."""
-    ts = datetime.fromisoformat(raw)
-    if ts.tzinfo is None:
-        ts = ts.astimezone()
-    return ts.astimezone(UTC)
-
-
-def _load_reports(directory: Path) -> list[dict]:
-    """Load and parse JSON report files from a directory."""
-    report_files = sorted(directory.glob("*.json"))
-    if not report_files:
-        console.print(f"[yellow]No JSON reports found in {directory}[/yellow]")
-        raise typer.Exit(code=0)
-
-    reports = []
-    for report_file in report_files:
-        try:
-            with report_file.open(encoding="utf-8") as f:
-                data = json.load(f)
-                reports.append({
-                    "timestamp": _parse_timestamp(data["timestamp"]),
-                    "processes": data["process_count"],
-                    "memory_mb": data["total_windsurf_memory_mb"],
-                    "cpu": data["total_windsurf_cpu_percent"],
-                    "lang_servers": len(data["language_servers"]),
-                    "issues": data["log_issues"],
-                    "file": report_file.name,
-                    "system": data["system"],
-                    "windsurf_processes": data["windsurf_processes"],
-                    "extensions_count": data["extensions_count"],
-                    "mcp_servers_enabled": data["mcp_servers_enabled"],
-                    "pty_info": data.get("pty_info"),
-                })
-        except (json.JSONDecodeError, KeyError) as e:
-            console.print(f"[yellow]Warning: Could not parse {report_file.name}: {e}[/yellow]")
-
-    if not reports:
-        console.print("[red]No valid reports found[/red]")
-        raise typer.Exit(code=1)
-
-    return reports
 
 
 def _display_analysis_summary(reports: list[dict]) -> None:
@@ -1543,20 +1411,14 @@ def _plot_row2_charts(axes, timestamps: list, reports: list[dict]) -> None:
     # PTY Usage
     _plot_pty_chart(axes[1, 1], timestamps, reports)
 
-    # Language Servers & Extensions
+    # Language Servers Over Time
     ax = axes[1, 2]
-    ax2 = ax.twinx()
     ls_count = [r["lang_servers"] for r in reports]
-    ext_count = [r["extensions_count"] for r in reports]
-    line1 = ax.plot(timestamps, ls_count, "b-o", linewidth=2, label="Language Servers")
-    line2 = ax2.plot(timestamps, ext_count, "g-s", linewidth=2, label="Extensions")
-    ax.set_ylabel("Language Servers", color="b", fontsize=10)
-    ax2.set_ylabel("Extensions", color="g", fontsize=10)
+    ax.plot(timestamps, ls_count, "b-o", linewidth=2, label="Language Servers")
+    ax.set_ylabel("Language Server Count", color="b", fontsize=10)
     ax.tick_params(axis="y", labelcolor="b")
-    ax2.tick_params(axis="y", labelcolor="g")
-    ax.set_title("Language Servers & Extensions", fontsize=11, fontweight="bold")
-    lines = line1 + line2
-    ax.legend(lines, [line.get_label() for line in lines], loc="upper left", fontsize=8)
+    ax.set_title("Language Servers", fontsize=11, fontweight="bold")
+    ax.legend(loc="upper left", fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
@@ -1680,23 +1542,26 @@ def _generate_analysis_plots(reports: list[dict], output: Path) -> None:
 
 @app.command()
 def analyze(
-    directory: Annotated[Path, typer.Argument(help="Directory containing JSON reports to analyze")],
+    since: Annotated[str, typer.Option("--since", "-s", help="Time window to analyze (e.g. 24h, 7d, 30m)")] = "24h",
     plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate visualizations")] = False,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plots to file")] = None,
 ) -> None:
-    """Analyze historical reports to identify trends and issues.
+    """Analyze historical check sessions to identify trends and issues.
 
-    Examines multiple JSON reports from watch mode to detect:
-    - Memory leaks and growth patterns
-    - Process count changes
-    - Performance degradation
-    - Recurring issues
+    Reads from the surfmon database. Use --since to control the time window.
+    Detects: memory leaks, process count changes, performance degradation.
     """
-    if not directory.exists():
-        console.print(f"[red]Error: Directory not found: {directory}[/red]")
-        raise typer.Exit(code=1)
+    db = get_db()
+    try:
+        reports = query_analyze_sessions(db, since=since)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
-    reports = _load_reports(directory)
+    if not reports:
+        console.print(f"[yellow]No check sessions found in the last {since}.[/yellow]")
+        console.print("[dim]Run 'surfmon check' or 'surfmon watch' to populate the database.[/dim]")
+        raise typer.Exit(code=0)
 
     console.print()
     console.print(make_panel("[bold cyan]Historical Analysis[/bold cyan]"))
