@@ -153,28 +153,6 @@ class TestVersionCallback:
         assert "surfmon" in result.stdout
 
 
-class TestCompareCommand:
-    """Tests for the compare command."""
-
-    def test_compare_missing_before_file(self, tmp_path):
-        """Should error when before file doesn't exist."""
-        after_file = tmp_path / "after.json"
-        after_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
-
-        result = runner.invoke(app, ["compare", str(tmp_path / "nonexistent.json"), str(after_file)])
-        assert result.exit_code == 1
-        assert "not found" in result.stdout
-
-    def test_compare_missing_after_file(self, tmp_path):
-        """Should error when after file doesn't exist."""
-        before_file = tmp_path / "before.json"
-        before_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
-
-        result = runner.invoke(app, ["compare", str(before_file), str(tmp_path / "nonexistent.json")])
-        assert result.exit_code == 1
-        assert "not found" in result.stdout
-
-
 class TestCleanupCommand:
     """Tests for the cleanup command."""
 
@@ -588,23 +566,6 @@ class TestCreateSummaryTableChanges:
 
         table = create_summary_table(report, prev_report)
         assert table is not None
-
-
-class TestCompareCommandErrors:
-    """Tests for compare command error handling."""
-
-    def test_compare_exception_from_compare_reports(self, tmp_path, mocker):
-        """Should handle exceptions from compare_reports."""
-        before_file = tmp_path / "before.json"
-        after_file = tmp_path / "after.json"
-        before_file.write_text('{"timestamp": "2025-01-01"}', encoding="utf-8")
-        after_file.write_text('{"timestamp": "2025-01-02"}', encoding="utf-8")
-
-        mocker.patch("surfmon.cli.compare_reports", side_effect=KeyError("missing_key"))
-
-        result = runner.invoke(app, ["compare", str(before_file), str(after_file)])
-        assert result.exit_code == 1
-        assert "Error comparing" in result.stdout
 
 
 class TestCleanupCommandEdgeCases:

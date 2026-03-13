@@ -19,7 +19,6 @@ __all__ = [
     "Table",
     "console",
     "display_report",
-    "make_diff_table",
     "make_kv_table",
     "make_panel",
     "make_table",
@@ -76,16 +75,6 @@ def make_kv_table(title: str) -> Table:
     table = make_table(title)
     table.add_column("Metric", style="cyan", ratio=1)
     table.add_column("Value", style="green", ratio=2, overflow="fold")
-    return table
-
-
-def make_diff_table(title: str) -> Table:
-    """Create a comparison table (Metric | Before | After | Change)."""
-    table = make_table(title)
-    table.add_column("Metric", style="cyan", ratio=2)
-    table.add_column("Before", style="dim", ratio=1)
-    table.add_column("After", style="dim", ratio=1)
-    table.add_column("Change", style="green", ratio=2, overflow="fold")
     return table
 
 

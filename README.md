@@ -22,7 +22,6 @@
   - [check — Quick Performance Snapshot](#check--quick-performance-snapshot)
   - [watch — Live Monitoring Dashboard](#watch--live-monitoring-dashboard)
   - [analyze — Historical Trend Analysis](#analyze--historical-trend-analysis)
-  - [compare — Before/After Diff](#compare--beforeafter-diff)
   - [cleanup — Remove Orphaned Processes](#cleanup--remove-orphaned-processes)
   - [prune — Deduplicate Watch Reports](#prune--deduplicate-watch-reports)
   - [pty-snapshot — PTY Forensic Capture](#pty-snapshot--pty-forensic-capture)
@@ -136,17 +135,6 @@ surfmon analyze reports/watch/20260204-134518/ --plot --output analysis.png
 
 ![Analysis Plot](docs/screenshots/surfmon-analysis.png)
 
-### `compare` — Before/After Diff
-
-```bash
-surfmon check -t stable --json before.json
-# ... make changes ...
-surfmon check -t stable --json after.json
-surfmon compare before.json after.json
-```
-
-![Compare Reports](docs/screenshots/compare.png)
-
 ### `cleanup` — Remove Orphaned Processes
 
 Detects and kills orphaned `chrome_crashpad_handler` processes left behind after Windsurf exits. Windsurf must be closed for this command to work.
@@ -209,7 +197,7 @@ export SURFMON_TARGET=insiders
 surfmon check
 ```
 
-The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands that operate on saved files (`compare`, `prune`, `analyze`) do not require it.
+The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands that operate on saved data (`prune`, `analyze`) do not require it.
 
 ## Exit Codes
 
@@ -233,16 +221,14 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 ```
 src/surfmon/
     __init__.py        # Version
-    cli.py             # Typer CLI — check, watch, compare, cleanup, prune, analyze
+    cli.py             # Typer CLI — check, watch, cleanup, prune, analyze
     config.py          # Target detection, paths, environment config
     monitor.py         # Core data collection — processes, language servers, MCP, PTYs
     output.py          # Rich terminal display and Markdown export
-    compare.py         # Report comparison with colored diffs
 tests/
     conftest.py        # Shared fixtures
     test_bugfixes.py   # Regression tests
     test_cli.py        # CLI command tests
-    test_compare.py    # Report comparison tests
     test_config.py     # Configuration and target detection tests
     test_monitor.py    # Core monitoring logic tests
     test_output.py     # Display and formatting tests

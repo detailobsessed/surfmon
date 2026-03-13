@@ -16,7 +16,6 @@ import psutil
 import typer
 
 from . import __version__
-from .compare import compare_reports
 from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, get_target_display_name, set_target
 from .db import get_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
 from .monitor import (
@@ -427,32 +426,6 @@ def watch(
 
     console.print()
     console.print(f"[green]✓ Monitoring stopped after {report_count} checks[/green]")
-
-
-@app.command()
-def compare(
-    before: Annotated[Path, typer.Argument(help="Path to 'before' report JSON")],
-    after: Annotated[Path, typer.Argument(help="Path to 'after' report JSON")],
-) -> None:
-    """
-    Compare two monitoring reports to show changes.
-
-    Useful for analyzing the impact of configuration changes or identifying
-    performance regressions over time.
-    """
-    if not before.exists():
-        console.print(f"[red]Error: Before report not found: {before}[/red]")
-        raise typer.Exit(code=1)
-
-    if not after.exists():
-        console.print(f"[red]Error: After report not found: {after}[/red]")
-        raise typer.Exit(code=1)
-
-    try:
-        compare_reports(before, after)
-    except Exception as e:
-        console.print(f"[red]Error comparing reports: {e}[/red]")
-        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -1542,7 +1515,7 @@ def _generate_analysis_plots(reports: list[dict], output: Path) -> None:
 
 @app.command()
 def analyze(
-    since: Annotated[str, typer.Option("--since", "-s", help="Time window to analyze (e.g. 24h, 7d, 30m)")] = "24h",
+    since: Annotated[str, typer.Option("--since", "-s", help="Time window to analyze (e.g. 24h, 7d, 30m)")] = "7d",
     plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate visualizations")] = False,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plots to file")] = None,
 ) -> None:
