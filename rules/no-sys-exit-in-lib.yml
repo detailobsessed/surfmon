@@ -1,0 +1,10 @@
+id: no-sys-exit-in-lib
+language: python
+severity: warning
+rule:
+  pattern: sys.exit($$$)
+message: Do not call sys.exit() in library code — raise an exception instead
+note: sys.exit() should only appear in cli.py; library code should raise exceptions
+ignores:
+  - "**/cli.py"
+  - "**/tests/**"
