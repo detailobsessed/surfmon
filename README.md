@@ -72,9 +72,6 @@ surfmon check -t stable
 # Verbose output with all process details
 surfmon check -t stable -v
 
-# Save reports (auto-named with timestamp, enables verbose output)
-surfmon check -t next -s
-
 # Target Windsurf Insiders
 surfmon check -t insiders
 ```
@@ -98,10 +95,7 @@ The main command. Shows system resources, Windsurf memory/CPU, active workspaces
 ```bash
 surfmon check -t stable                        # Basic check
 surfmon check -t stable -v                     # Verbose (all processes)
-surfmon check -t next -s                       # Auto-save JSON + Markdown reports (enables verbose)
-surfmon check -t stable --json report.json     # Save JSON to specific path
-surfmon check -t stable --md report.md         # Save Markdown to specific path
-surfmon check -t stable --json r.json --md r.md  # Save both formats with custom names
+surfmon check -t stable --json                 # Output JSON to stdout (for agent/pipe consumption)
 ```
 
 ### `watch` — Live Monitoring Dashboard
@@ -155,13 +149,11 @@ surfmon prune reports/watch/20260204-134518/
 
 ### `pty-snapshot` — PTY Forensic Capture
 
-Captures a detailed PTY ownership snapshot for diagnosing Windsurf's PTY leak. Shows per-PID breakdown, FD-level detail (active vs idle), Windsurf version, and uptime. Use `--save` to generate JSON + Markdown files suitable for attaching to bug reports.
+Captures a detailed PTY ownership snapshot for diagnosing Windsurf's PTY leak. Shows per-PID breakdown, FD-level detail (active vs idle), Windsurf version, and uptime.
 
 ```bash
 surfmon pty-snapshot -t next                   # Display snapshot
-surfmon pty-snapshot -t stable --save          # Auto-save JSON + Markdown
-surfmon pty-snapshot -t next --json snap.json  # Save JSON to specific path
-surfmon pty-snapshot -t next --md snap.md      # Save Markdown to specific path
+surfmon pty-snapshot -t next --json            # Output JSON to stdout (for agent/pipe consumption)
 ```
 
 ## What It Monitors
