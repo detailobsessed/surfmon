@@ -1378,15 +1378,24 @@ class TestStoreToDbHelper:
     """Tests for the _store_to_db helper."""
 
     def test_store_to_db_success(self, mocker):
-        """Should call store function with db and target."""
+        """Should call store function with db and target, then close the connection."""
         mock_db = mocker.patch("surfmon.cli.get_db")
         mock_fn = MagicMock()
 
         _store_to_db(mock_fn, "arg1")
         mock_fn.assert_called_once_with(mock_db.return_value, "arg1", target="stable")
+        mock_db.return_value.conn.close.assert_called_once()
+
+    def test_store_to_db_closes_on_store_error(self, mocker):
+        """Should close the DB connection even when the store function raises."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mock_fn = MagicMock(side_effect=RuntimeError("insert failed"))
+
+        _store_to_db(mock_fn, "arg1")
+        mock_db.return_value.conn.close.assert_called_once()
 
     def test_store_to_db_failure(self, mocker):
-        """Should not raise on DB errors."""
+        """Should not raise when get_db itself fails."""
         mocker.patch("surfmon.cli.get_db", side_effect=OSError("disk full"))
         _store_to_db(MagicMock(), "arg1")
 
