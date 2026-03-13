@@ -2,13 +2,12 @@
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from typer.testing import CliRunner
 
-from surfmon.cli import _get_target_str, _parse_timestamp, _store_to_db, app
+from surfmon.cli import _get_target_str, _store_to_db, app
 from surfmon.config import reset_target
 
 runner = CliRunner()
@@ -46,58 +45,6 @@ class TestCheckCommand:
         """Should run check command successfully."""
         result = runner.invoke(app, ["check"])
         assert result.exit_code == 0
-
-    def test_check_with_save_flag(self, mock_generate_report, mock_display_report, tmp_path, monkeypatch, mocker):
-        """Should save both JSON and Markdown with --save flag and enable verbose."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
-
-        mock_json = mocker.patch("surfmon.cli.save_report_json")
-        mock_md = mocker.patch("surfmon.cli.save_report_markdown")
-        mock_display = mocker.patch("surfmon.cli.display_report")
-
-        result = runner.invoke(app, ["check", "--save"])
-
-        assert result.exit_code == 0
-        assert mock_json.called
-        assert mock_md.called
-
-        # Check that paths were auto-generated under ~/.surfmon/reports/
-        json_path = mock_json.call_args[0][1]
-        md_path = mock_md.call_args[0][1]
-        assert json_path.name.startswith("surfmon-")
-        assert json_path.name.endswith(".json")
-        assert md_path.name.startswith("surfmon-")
-        assert md_path.name.endswith(".md")
-        assert ".surfmon" in str(json_path)
-        assert "reports" in str(json_path)
-
-        # Check that verbose was enabled
-        assert mock_display.call_args[1]["verbose"] is True
-
-    def test_check_with_save_short_form(self, mock_generate_report, mock_display_report, tmp_path, monkeypatch, mocker):
-        """Should save both reports with -s short form."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
-
-        mock_json = mocker.patch("surfmon.cli.save_report_json")
-        mock_md = mocker.patch("surfmon.cli.save_report_markdown")
-
-        result = runner.invoke(app, ["check", "-s"])
-
-        assert result.exit_code == 0
-        assert mock_json.called
-        assert mock_md.called
-
-    def test_check_save_handles_write_error(self, mock_generate_report, mock_display_report, tmp_path, mocker):
-        """Should handle write errors gracefully when saving reports."""
-        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
-        mocker.patch("surfmon.cli.save_report_json", side_effect=OSError("Permission denied"))
-        mocker.patch("surfmon.cli.save_report_markdown")
-
-        result = runner.invoke(app, ["check", "--save"])
-
-        assert "Cannot save JSON" in result.stdout
 
     def test_check_with_explicit_json_file(
         self,
@@ -307,29 +254,6 @@ class TestCleanupCommand:
         mock_proc.kill.assert_called_once()
 
 
-class TestCheckSaveDirError:
-    """Tests for check --save directory creation failure."""
-
-    def test_check_save_mkdir_failure(self, mock_generate_report, mock_display_report, mocker):
-        """Should exit with error when reports directory cannot be created."""
-        mocker.patch.object(Path, "mkdir", side_effect=OSError("Permission denied"))
-
-        result = runner.invoke(app, ["check", "--save"])
-
-        assert result.exit_code == 1
-        assert "Cannot create reports directory" in result.stdout
-
-    def test_check_md_write_error(self, mock_generate_report, mock_display_report, tmp_path, mocker):
-        """Should handle markdown write error gracefully."""
-        mocker.patch("surfmon.cli.Path.home", return_value=tmp_path)
-        mocker.patch("surfmon.cli.save_report_json")
-        mocker.patch("surfmon.cli.save_report_markdown", side_effect=OSError("Disk full"))
-
-        result = runner.invoke(app, ["check", "--save"])
-
-        assert "Cannot save Markdown" in result.stdout
-
-
 class TestPruneCommand:
     """Tests for the prune command."""
 
@@ -402,112 +326,75 @@ class TestPruneCommand:
 
 
 class TestAnalyzeCommand:
-    """Tests for the analyze command."""
+    """Tests for the analyze command (DB-based)."""
 
-    def test_analyze_nonexistent_directory(self, tmp_path):
-        """Should error when directory doesn't exist."""
-        result = runner.invoke(app, ["analyze", str(tmp_path / "nonexistent")])
+    @pytest.fixture
+    def _mock_sessions(self, mocker):
+        """Mock query_analyze_sessions with sample session dicts."""
+        from datetime import timedelta
+
+        mocker.patch("surfmon.cli.get_db")
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        return mocker.patch(
+            "surfmon.cli.query_analyze_sessions",
+            return_value=[
+                {
+                    "session_id": i,
+                    "timestamp": base + timedelta(minutes=i * 5),
+                    "processes": 5 + i,
+                    "memory_mb": 1000.0 + i * 50,
+                    "cpu": 10.0 + i,
+                    "lang_servers": i,
+                    "issues": [],
+                    "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0 - i},
+                    "pty_info": None,
+                    "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500.0 + i * 20, "cpu_percent": 5.0, "num_threads": 10}],
+                }
+                for i in range(5)
+            ],
+        )
+
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_basic(self):
+        """Should analyze sessions from DB successfully."""
+        result = runner.invoke(app, ["analyze"])
+        assert result.exit_code == 0
+        assert "Historical Analysis" in result.stdout
+
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_with_since_option(self):
+        """Should accept --since option."""
+        result = runner.invoke(app, ["analyze", "--since", "7d"])
+        assert result.exit_code == 0
+
+    def test_analyze_empty_db(self, mocker):
+        """Should exit gracefully when no sessions in DB."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
+        result = runner.invoke(app, ["analyze"])
+        assert result.exit_code == 0
+        assert "No check sessions" in result.stdout
+
+    def test_analyze_invalid_since(self, mocker):
+        """Should exit with error on invalid --since value."""
+        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("Invalid duration 'xyz'"))
+        result = runner.invoke(app, ["analyze", "--since", "xyz"])
         assert result.exit_code == 1
-        assert "not found" in result.stdout
+        assert "Invalid duration" in result.stdout
 
-    def test_analyze_empty_directory(self, tmp_path):
-        """Should handle empty directory."""
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
-        assert result.exit_code == 0
-        assert "No JSON reports" in result.stdout
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_with_plot_flag(self):
+        """Should handle --plot flag without errors."""
+        result = runner.invoke(app, ["analyze", "--plot"])
+        assert result.exit_code == 0 or "Historical Analysis" in result.stdout
 
-    def test_analyze_with_reports(self, tmp_path):
-        """Should analyze reports successfully."""
-        # Create sample reports with varied data
-        for i in range(5):
-            report = {
-                "timestamp": f"2025-01-0{i + 1}T12:00:00",
-                "process_count": 5 + i,
-                "total_windsurf_memory_mb": 1000 + i * 100,
-                "total_windsurf_cpu_percent": 10.0 + i,
-                "memory_mb": 1000 + i * 100,
-                "language_servers": [],
-                "log_issues": [] if i < 3 else ["Issue detected"],
-                "system": {
-                    "total_memory_gb": 32.0,
-                    "available_memory_gb": 16.0 - i,
-                    "swap_used_gb": 1.0 + i * 0.1,
-                    "swap_total_gb": 4.0,
-                },
-                "windsurf_processes": [
-                    {"name": "Windsurf", "memory_mb": 500 + i * 50, "cpu_percent": 5.0},
-                    {"name": "Helper (GPU)", "memory_mb": 200 + i * 20, "cpu_percent": 2.0},
-                ],
-                "extensions_count": 10 + i,
-                "mcp_servers_enabled": [],
-            }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_analyze_with_plot_flag(self, tmp_path):
-        """Should handle --plot flag."""
-        # Create sample reports with varied data for plotting
-        for i in range(5):
-            report = {
-                "timestamp": f"2025-01-0{i + 1}T12:0{i}:00",
-                "process_count": 5 + i,
-                "total_windsurf_memory_mb": 1000 + i * 100,
-                "total_windsurf_cpu_percent": 10.0 + i,
-                "memory_mb": 1000 + i * 100,
-                "language_servers": [{"pid": 1001, "name": "pylsp", "memory_mb": 50}] if i > 2 else [],
-                "log_issues": ["Issue"] if i > 3 else [],
-                "system": {
-                    "total_memory_gb": 32.0,
-                    "available_memory_gb": 16.0 - i,
-                    "swap_used_gb": 1.0 + i * 0.1,
-                    "swap_total_gb": 4.0,
-                },
-                "windsurf_processes": [
-                    {"name": "Windsurf", "memory_mb": 500 + i * 50, "cpu_percent": 5.0},
-                    {"name": "Helper (GPU)", "memory_mb": 200, "cpu_percent": 2.0},
-                ],
-                "extensions_count": 10 + i,
-                "mcp_servers_enabled": [],
-            }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        # Run analyze with plot - may have matplotlib warnings
-        result = runner.invoke(app, ["analyze", str(tmp_path), "--plot"])
-        # Check that analysis output was produced (tables shown)
-        assert "Historical Analysis" in result.stdout or "Timeline" in result.stdout
-
+    @pytest.mark.usefixtures("_mock_sessions")
     def test_analyze_with_output_file(self, tmp_path):
-        """Should save plot to output file."""
-        # Create sample reports with varied data
-        for i in range(5):
-            report = {
-                "timestamp": f"2025-01-0{i + 1}T12:0{i}:00",
-                "process_count": 5 + i,
-                "total_windsurf_memory_mb": 1000 + i * 100,
-                "total_windsurf_cpu_percent": 10.0 + i,
-                "memory_mb": 1000 + i * 100,
-                "language_servers": [],
-                "log_issues": [],
-                "system": {
-                    "total_memory_gb": 32.0,
-                    "available_memory_gb": 16.0 - i,
-                    "swap_used_gb": 1.0 + i * 0.1,
-                    "swap_total_gb": 4.0,
-                },
-                "windsurf_processes": [
-                    {"name": "Windsurf", "memory_mb": 500 + i * 50, "cpu_percent": 5.0},
-                ],
-                "extensions_count": 10 + i,
-                "mcp_servers_enabled": [],
-            }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
+        """Should pass output path to plot generation."""
         output_file = tmp_path / "plot.png"
-        result = runner.invoke(app, ["analyze", str(tmp_path), "--plot", "--output", str(output_file)])
-        # Check that analysis output was produced
-        assert "Historical Analysis" in result.stdout or "Timeline" in result.stdout
+        result = runner.invoke(app, ["analyze", "--plot", "--output", str(output_file)])
+        assert "Historical Analysis" in result.stdout or result.exit_code == 0
 
 
 class TestTargetOption:
@@ -554,36 +441,17 @@ class TestTargetOption:
 class TestWatchCommand:
     """Tests for the watch command."""
 
-    def test_watch_creates_session_directory(
+    def test_watch_runs_and_stores_to_db(
         self,
-        tmp_path,
         mock_generate_report,
         mocker,
     ):
-        """Should create session directory."""
+        """Should run watch loop and store each report to DB."""
         mocker.patch("surfmon.cli.Live")
         mocker.patch("surfmon.cli.time.sleep", side_effect=KeyboardInterrupt)
-        result = runner.invoke(app, ["watch", "--output", str(tmp_path), "--max", "1"])
-        # Should exit gracefully
-        assert result.exit_code == 0 or "Interrupted" in result.stdout or "stopped" in result.stdout.lower()
-
-    def test_watch_handles_unwritable_output_dir(
-        self,
-        mock_generate_report,
-        mocker,
-    ):
-        """Should exit with error when output directory cannot be created."""
-        mocker.patch.object(Path, "mkdir", side_effect=OSError("Permission denied"))
-        result = runner.invoke(app, ["watch", "--output", "unwritable_dir", "--max", "1"])
-        assert result.exit_code == 1
-        assert "Cannot create output directory" in result.stdout
-
-    def test_watch_default_output_dir_is_absolute(self):
-        """Default output dir should be under ~/.surfmon, not a relative path."""
-        from surfmon.cli import DEFAULT_WATCH_DIR
-
-        assert DEFAULT_WATCH_DIR.is_absolute(), f"Default output_dir should be absolute, got: {DEFAULT_WATCH_DIR}"
-        assert ".surfmon" in str(DEFAULT_WATCH_DIR)
+        mocker.patch("surfmon.cli._store_to_db")
+        result = runner.invoke(app, ["watch", "--max", "1"])
+        assert result.exit_code == 0 or "stopped" in result.stdout.lower()
 
 
 class TestCreateSummaryTable:
@@ -818,91 +686,81 @@ class TestPruneNoKeepLatest:
 
 
 class TestAnalyzeCommandEdgeCases:
-    """Tests for analyze command edge cases."""
+    """Tests for analyze command edge cases (DB-based)."""
 
-    def test_analyze_with_invalid_json(self, tmp_path):
-        """Should warn about invalid JSON and continue."""
-        (tmp_path / "bad.json").write_text("not valid json", encoding="utf-8")
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
-        assert result.exit_code == 1
-        assert "No valid reports" in result.stdout
+    def _make_sessions(self, mocker, overrides_per_session):
+        """Helper: patch query_analyze_sessions with per-session override dicts."""
+        from datetime import timedelta
 
-    def test_analyze_memory_leak_detection(self, tmp_path):
-        """Should detect potential memory leak with large memory growth."""
-        for i in range(3):
-            report = {
-                "timestamp": f"2025-01-01T12:0{i}:00",
-                "process_count": 5,
-                "total_windsurf_memory_mb": 1000 + i * 1000,
-                "total_windsurf_cpu_percent": 10.0,
-                "memory_mb": 1000 + i * 1000,
-                "language_servers": [],
-                "log_issues": [],
-                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
-                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
-                "extensions_count": 10,
-                "mcp_servers_enabled": [],
+        mocker.patch("surfmon.cli.get_db")
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        sessions = [
+            {
+                "session_id": i,
+                "timestamp": base + timedelta(minutes=i * 5),
+                "processes": overrides_per_session[i].get("processes", 5),
+                "memory_mb": overrides_per_session[i].get("memory_mb", 1000.0),
+                "cpu": 10.0,
+                "lang_servers": 0,
+                "issues": overrides_per_session[i].get("issues", []),
+                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0},
+                "pty_info": None,
+                "windsurf_processes": [
+                    {
+                        "name": "Windsurf",
+                        "memory_mb": overrides_per_session[i].get("proc_mem", 500.0),
+                        "cpu_percent": 5.0,
+                        "num_threads": 10,
+                    }
+                ],
             }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
+            for i in range(len(overrides_per_session))
+        ]
+        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=sessions)
 
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
+    def test_analyze_memory_leak_detection(self, mocker):
+        """Should detect potential memory leak with large memory growth."""
+        self._make_sessions(
+            mocker,
+            [
+                {"memory_mb": 1000.0, "proc_mem": 500.0},
+                {"memory_mb": 2000.0, "proc_mem": 1000.0},
+                {"memory_mb": 3000.0, "proc_mem": 1500.0},
+            ],
+        )
+        result = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
         assert "MEMORY LEAK" in result.stdout
 
-    def test_analyze_stable_memory(self, tmp_path):
+    def test_analyze_stable_memory(self, mocker):
         """Should report stable memory when change is small."""
-        for i in range(3):
-            report = {
-                "timestamp": f"2025-01-01T12:0{i}:00",
-                "process_count": 5 - i,
-                "total_windsurf_memory_mb": 1000 + i * 10,
-                "total_windsurf_cpu_percent": 10.0,
-                "memory_mb": 1000 + i * 10,
-                "language_servers": [],
-                "log_issues": [],
-                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
-                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
-                "extensions_count": 10,
-                "mcp_servers_enabled": [],
-            }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        self._make_sessions(
+            mocker,
+            [
+                {"memory_mb": 1000.0, "processes": 5},
+                {"memory_mb": 1010.0, "processes": 4},
+                {"memory_mb": 1020.0, "processes": 3},
+            ],
+        )
+        result = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
         assert "Memory stable" in result.stdout
         assert "Process count decreased" in result.stdout
 
-    def test_analyze_process_increase(self, tmp_path):
+    def test_analyze_process_increase(self, mocker):
         """Should warn about process count increase > 5."""
-        for i in range(3):
-            report = {
-                "timestamp": f"2025-01-01T12:0{i}:00",
-                "process_count": 5 + i * 5,
-                "total_windsurf_memory_mb": 1000,
-                "total_windsurf_cpu_percent": 10.0,
-                "memory_mb": 1000,
-                "language_servers": [],
-                "log_issues": ["issue"] if i == 2 else [],
-                "system": {"total_memory_gb": 32.0, "available_memory_gb": 16.0, "swap_used_gb": 1.0, "swap_total_gb": 4.0},
-                "windsurf_processes": [{"name": "Windsurf", "memory_mb": 500, "cpu_percent": 5.0, "num_threads": 10}],
-                "extensions_count": 10,
-                "mcp_servers_enabled": [],
-            }
-            (tmp_path / f"report_{i}.json").write_text(json.dumps(report), encoding="utf-8")
-
-        result = runner.invoke(app, ["analyze", str(tmp_path)])
+        self._make_sessions(
+            mocker,
+            [
+                {"processes": 5, "issues": []},
+                {"processes": 10, "issues": []},
+                {"processes": 15, "issues": ["issue"]},
+            ],
+        )
+        result = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
         assert "Process count increased" in result.stdout
         assert "Current Issues" in result.stdout
-
-    def test_parse_timestamp_treats_naive_input_as_local_time(self):
-        """Naive timestamps should be interpreted as local time before UTC normalization."""
-        raw = "2025-01-01T12:00:00"
-        parsed = _parse_timestamp(raw)
-
-        expected = datetime.fromisoformat(raw).astimezone().astimezone(UTC)
-        assert parsed == expected
-        assert parsed.tzinfo == UTC
 
 
 class TestSignalHandler:
@@ -994,18 +852,6 @@ class TestPtySnapshotCommand:
         assert "Windsurf PTYs" in content
         assert "Per-PID Breakdown" in content
         assert "2.5.0" in content
-
-    @pytest.mark.usefixtures("_mock_pty_data")
-    def test_pty_snapshot_save_flag(self, tmp_path, monkeypatch):
-        """Should auto-save both JSON and Markdown with --save."""
-        monkeypatch.setattr("surfmon.cli.DEFAULT_REPORTS_DIR", tmp_path)
-        result = runner.invoke(app, ["pty-snapshot", "--save"])
-        assert result.exit_code == 0
-
-        json_files = list(tmp_path.glob("pty-snapshot-*.json"))
-        md_files = list(tmp_path.glob("pty-snapshot-*.md"))
-        assert len(json_files) == 1
-        assert len(md_files) == 1
 
 
 class TestLsSnapshotCommand:
@@ -1130,18 +976,6 @@ class TestLsSnapshotCommand:
         content = md_path.read_text(encoding="utf-8")
         assert "# Language Server Forensic Snapshot" in content
         assert "Language Servers" in content
-
-    @pytest.mark.usefixtures("_mock_ls_data")
-    def test_ls_snapshot_save_flag(self, tmp_path, monkeypatch):
-        """Should auto-save both JSON and Markdown with --save."""
-        monkeypatch.setattr("surfmon.cli.DEFAULT_REPORTS_DIR", tmp_path)
-        result = runner.invoke(app, ["ls-snapshot", "--save"])
-        assert result.exit_code == 0
-
-        json_files = list(tmp_path.glob("ls-snapshot-*.json"))
-        md_files = list(tmp_path.glob("ls-snapshot-*.md"))
-        assert len(json_files) == 1
-        assert len(md_files) == 1
 
 
 class TestLsSnapshotDisplay:
