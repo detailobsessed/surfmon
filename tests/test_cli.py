@@ -136,6 +136,24 @@ class TestCheckCommand:
 
         assert result.exit_code == 1
 
+    def test_check_shows_watch_tip(self, mock_generate_report, mock_display_report):
+        """Should show watch discoverability tip in normal mode."""
+        result = runner.invoke(app, ["check"])
+
+        assert result.exit_code == 0
+        output = " ".join(result.stdout.split())
+        assert "surfmon watch" in output
+        assert "surfmon analyze" in output
+
+    def test_check_json_hides_watch_tip(self, mock_generate_report, mock_display_report, mocker):
+        """Should not show watch tip in --json mode."""
+        mocker.patch("surfmon.cli.asdict", return_value={"process_count": 5})
+
+        result = runner.invoke(app, ["check", "--json"])
+
+        assert result.exit_code == 0
+        assert "surfmon watch" not in result.stdout
+
 
 class TestVersionCallback:
     """Tests for version callback."""
