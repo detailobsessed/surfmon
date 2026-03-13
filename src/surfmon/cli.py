@@ -21,6 +21,7 @@ from .db import get_db, query_analyze_sessions, query_history_dicts, query_trend
 
 if TYPE_CHECKING:
     from sqlite_utils import Database
+
 from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
