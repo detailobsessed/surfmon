@@ -363,12 +363,12 @@ def check(
         if report.log_issues:
             raise typer.Exit(code=1)
 
-        tip = "Tip: run [cyan]surfmon watch[/cyan] to monitor continuously and build history for [cyan]surfmon analyze[/cyan]"
-        console.print(f"[dim]{tip}[/dim]")
-
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
         raise typer.Exit(code=130) from None
+    else:
+        tip = "Tip: run [cyan]surfmon watch[/cyan] to monitor continuously and build history for [cyan]surfmon analyze[/cyan]"
+        console.print(f"[dim]{tip}[/dim]")
 
 
 def _print_watch_banner(interval: int, max_reports: int) -> None:
