@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from sqlite_utils import Database
 
 from .monitor import (
+    ISSUE_CRITICAL_PREFIX,
+    ISSUE_WARNING_PREFIX,
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
@@ -794,6 +796,18 @@ def pty_snapshot(
         raise typer.Exit(code=130) from None
 
 
+def _style_issue(issue: str) -> str:
+    """Wrap the prefix marker of an issue string in Rich colour markup."""
+    stripped = issue.lstrip()
+    if stripped.startswith(ISSUE_CRITICAL_PREFIX):
+        rest = stripped[len(ISSUE_CRITICAL_PREFIX):]
+        return f"[red]{ISSUE_CRITICAL_PREFIX}[/red]{rest}"
+    if stripped.startswith(ISSUE_WARNING_PREFIX):
+        rest = stripped[len(ISSUE_WARNING_PREFIX):]
+        return f"[yellow]{ISSUE_WARNING_PREFIX}[/yellow]{rest}"
+    return issue
+
+
 def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     """Display a language server forensic snapshot to the console."""
     # Summary table
@@ -854,7 +868,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     if snapshot.issues:
         console.print(make_panel("[red]Issues Detected[/red]", title="⚠ Issues"))
         for issue in snapshot.issues:
-            console.print(f"  {issue}")
+            console.print(f"  {_style_issue(issue)}")
         console.print()
 
 
