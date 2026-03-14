@@ -873,8 +873,13 @@ def ls_snapshot(
         raise typer.Exit(code=130) from None
 
 
-def _display_analysis_summary(reports: list[dict]) -> None:
-    """Display timeline, key metrics, and analysis text."""
+def _display_analysis_summary(reports: list[dict], *, summary: bool = False) -> None:
+    """Display timeline, key metrics, and analysis text.
+
+    Args:
+        reports: Parsed report dicts from the database.
+        summary: When True, suppress the per-session timeline table.
+    """
     # Session summary
     duration = reports[-1]["timestamp"] - reports[0]["timestamp"]
     console.print(
@@ -883,29 +888,30 @@ def _display_analysis_summary(reports: list[dict]) -> None:
     )
     console.print()
 
-    # Timeline table
-    timeline = make_table("Timeline")
-    timeline.add_column("Time", style="dim")
-    timeline.add_column("Proc", justify="right")
-    timeline.add_column("Memory", justify="right")
-    timeline.add_column("CPU", justify="right")
-    timeline.add_column("LS", justify="right")
-    timeline.add_column("Issues", justify="right")
+    if not summary:
+        # Timeline table
+        timeline = make_table("Timeline")
+        timeline.add_column("Time", style="dim")
+        timeline.add_column("Proc", justify="right")
+        timeline.add_column("Memory", justify="right")
+        timeline.add_column("CPU", justify="right")
+        timeline.add_column("LS", justify="right")
+        timeline.add_column("Issues", justify="right")
 
-    for r in reports:
-        mem_gb = r["memory_mb"] / MB_PER_GB
-        mem_color = "red" if mem_gb > ANALYZE_MEM_GB_HIGH else "yellow" if mem_gb > ANALYZE_MEM_GB_MEDIUM else "green"
-        timeline.add_row(
-            r["timestamp"].strftime("%H:%M"),
-            str(r["processes"]),
-            f"[{mem_color}]{mem_gb:.2f} GB[/{mem_color}]",
-            f"{r['cpu']:.1f}%",
-            str(r["lang_servers"]),
-            str(len(r["issues"])),
-        )
+        for r in reports:
+            mem_gb = r["memory_mb"] / MB_PER_GB
+            mem_color = "red" if mem_gb > ANALYZE_MEM_GB_HIGH else "yellow" if mem_gb > ANALYZE_MEM_GB_MEDIUM else "green"
+            timeline.add_row(
+                r["timestamp"].strftime("%H:%M"),
+                str(r["processes"]),
+                f"[{mem_color}]{mem_gb:.2f} GB[/{mem_color}]",
+                f"{r['cpu']:.1f}%",
+                str(r["lang_servers"]),
+                str(len(r["issues"])),
+            )
 
-    console.print(timeline)
-    console.print()
+        console.print(timeline)
+        console.print()
 
     # Key metrics
     _display_key_metrics(reports)
@@ -1199,6 +1205,9 @@ def _generate_analysis_plots(reports: list[dict], output: Path) -> None:
 @app.command()
 def analyze(
     since: Annotated[str, typer.Option("--since", "-s", help="Time window to analyze (e.g. 24h, 7d, 30m)")] = "7d",
+    summary: Annotated[
+        bool, typer.Option("--summary", "-S", help="Show only key metrics and issues, suppress per-session timeline")
+    ] = False,
     plot: Annotated[bool, typer.Option("--plot", "-p", help="Generate visualizations")] = False,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Save plots to file")] = None,
 ) -> None:
@@ -1223,7 +1232,7 @@ def analyze(
     console.print(make_panel("[bold cyan]Historical Analysis[/bold cyan]"))
     console.print()
 
-    _display_analysis_summary(reports)
+    _display_analysis_summary(reports, summary=summary)
 
     if plot:
         output_path = _prompt_for_plot_output_path() if output is None else Path(os.path.expandvars(str(output))).expanduser()

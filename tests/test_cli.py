@@ -251,6 +251,31 @@ class TestAnalyzeCommand:
         result = runner.invoke(app, ["analyze", "--plot", "--output", str(output_file)])
         assert "Historical Analysis" in result.stdout or result.exit_code == 0
 
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_summary_suppresses_timeline(self):
+        """--summary should suppress the Timeline table but keep Key Metrics."""
+        result = runner.invoke(app, ["analyze", "--summary"])
+        assert result.exit_code == 0
+        assert "Historical Analysis" in result.stdout
+        assert "Key Metrics" in result.stdout
+        assert "Timeline" not in result.stdout
+
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_summary_short_flag(self):
+        """Short flag -S should work the same as --summary."""
+        result = runner.invoke(app, ["analyze", "-S"])
+        assert result.exit_code == 0
+        assert "Key Metrics" in result.stdout
+        assert "Timeline" not in result.stdout
+
+    @pytest.mark.usefixtures("_mock_sessions")
+    def test_analyze_without_summary_shows_timeline(self):
+        """Without --summary, the Timeline table should be present."""
+        result = runner.invoke(app, ["analyze"])
+        assert result.exit_code == 0
+        assert "Timeline" in result.stdout
+        assert "Key Metrics" in result.stdout
+
 
 class TestTargetOption:
     """Tests for target option (required for live commands)."""
