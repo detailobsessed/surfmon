@@ -26,6 +26,7 @@ from .monitor import (
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
     LsSnapshot,
+    LsSnapshotEntry,
     MonitoringReport,
     PtyInfo,
     _extract_windsurf_version,
@@ -800,6 +801,15 @@ def pty_snapshot(
         raise typer.Exit(code=130) from None
 
 
+def _ls_entry_status(entry: LsSnapshotEntry) -> str:
+    """Return a Rich-styled status string for a language server entry."""
+    if entry.orphaned:
+        return "[red]ORPHANED[/red]"
+    if entry.stale:
+        return "[yellow]STALE[/yellow]"
+    return "[green]ok[/green]"
+
+
 def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     """Display a language server forensic snapshot to the console."""
     # Summary table
@@ -835,7 +845,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
 
         for entry in snapshot.entries:
             runtime = format_uptime(entry.runtime_seconds)
-            status = "[red]ORPHANED[/red]" if entry.orphaned else "[green]ok[/green]"
+            status = _ls_entry_status(entry)
             if entry.memory_mb > LS_PROC_MEM_CRITICAL_MB:
                 mem_style = "red"
             elif entry.memory_mb > LS_PROC_MEM_WARNING_MB:

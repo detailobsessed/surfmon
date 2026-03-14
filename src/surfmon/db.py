@@ -27,7 +27,7 @@ DB_DIR = Path.home() / ".surfmon"
 DB_PATH = DB_DIR / "surfmon.db"
 
 # Bump this when adding migrations. Each migration upgrades from (version - 1) to version.
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 
 # Duration shorthand parser: "24h", "7d", "30m"
 _DURATION_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
