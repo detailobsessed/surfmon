@@ -9,7 +9,6 @@ from sqlite_utils.db import Table
 from surfmon.db import (
     HISTORY_COLUMNS,
     SCHEMA_VERSION,
-    _classify_issue_severity,
     _ensure_schema,
     _get_schema_version,
     _parse_since,
@@ -508,16 +507,22 @@ class TestParseSince:
 
 class TestClassifyIssueSeverity:
     def test_critical(self):
-        assert _classify_issue_severity("Critical failure occurred") == "critical"
-        assert _classify_issue_severity("✖ Process crashed") == "critical"
+        from surfmon.monitor import classify_issue_severity
+
+        assert classify_issue_severity("✖ Process crashed") == "critical"
+        assert classify_issue_severity("✖  CRITICAL: PTY exhaustion") == "critical"
 
     def test_warning(self):
-        assert _classify_issue_severity("⚠ Memory leak detected") == "warning"
-        assert _classify_issue_severity("Warning: high memory") == "warning"
-        assert _classify_issue_severity("Potential memory leak") == "warning"
+        from surfmon.monitor import classify_issue_severity
 
-    def test_info(self):
-        assert _classify_issue_severity("Extensions loaded") == "info"
+        assert classify_issue_severity("⚠ Memory leak detected") == "warning"
+        assert classify_issue_severity("⚠  Extension errors: foo (3)") == "warning"
+
+    def test_unprefixed_defaults_to_warning(self):
+        from surfmon.monitor import classify_issue_severity
+
+        assert classify_issue_severity("Extensions loaded") == "warning"
+        assert classify_issue_severity("Some plain issue") == "warning"
 
 
 class TestQueryAnalyzeSessions:
