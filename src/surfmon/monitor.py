@@ -1139,10 +1139,14 @@ def max_issue_severity(issues: list[str]) -> int:
     """
     if not issues:
         return EXIT_OK
+    severity = EXIT_WARNING  # safe default for unprefixed issues
     for issue in issues:
-        if issue.lstrip().startswith(ISSUE_CRITICAL_PREFIX):
+        stripped = issue.lstrip()
+        if stripped.startswith(ISSUE_CRITICAL_PREFIX):
             return EXIT_CRITICAL
-    return EXIT_WARNING
+        if stripped.startswith(ISSUE_WARNING_PREFIX):
+            severity = EXIT_WARNING
+    return severity
 
 
 def save_report_json(report: MonitoringReport, output_path: Path) -> None:
