@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 import psutil
 import typer
@@ -17,6 +17,10 @@ import typer
 from . import __version__
 from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, get_target_display_name, set_target
 from .db import get_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
+
+if TYPE_CHECKING:
+    from sqlite_utils import Database
+
 from .monitor import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
@@ -151,11 +155,20 @@ def _get_target_str() -> str:
         return ""
 
 
-def _store_to_db(store_fn, *args, **kwargs) -> None:
+class _StoreFn[T](Protocol):
+    """Callback signature shared by store_check, store_ls_snapshot, and store_pty_snapshot."""
+
+    def __call__(self, db: Database, data: T, /, target: str = "") -> str: ...
+
+
+def _store_to_db[T](store_fn: _StoreFn[T], data: T) -> None:
     """Best-effort DB write — log warning on failure, never crash."""
     try:
         db = get_db()
-        store_fn(db, *args, target=_get_target_str(), **kwargs)
+        try:
+            store_fn(db, data, target=_get_target_str())
+        finally:
+            db.close()
     except Exception as exc:
         print(f"DB write skipped: {exc}", file=sys.stderr)
 
