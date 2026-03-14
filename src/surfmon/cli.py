@@ -455,6 +455,8 @@ def history(
             raise typer.Exit(code=1) from exc
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
+    finally:
+        db.close()
 
     if not rows:
         if json_output:
@@ -525,6 +527,8 @@ def trend(
             raise typer.Exit(code=1) from exc
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
+    finally:
+        db.close()
 
     if not data:
         if json_output:
@@ -1238,6 +1242,8 @@ def analyze(
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
+    finally:
+        db.close()
 
     if not reports:
         console.print(f"[yellow]No check sessions found in the last {since}.[/yellow]")

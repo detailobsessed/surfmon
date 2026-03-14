@@ -265,6 +265,20 @@ class TestAnalyzeCommand:
         assert result.exit_code == 1
         assert "Invalid duration" in result.stdout
 
+    def test_analyze_closes_db(self, mocker):
+        """Should close the DB connection after querying."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
+        runner.invoke(app, ["analyze"])
+        mock_db.return_value.close.assert_called_once()
+
+    def test_analyze_closes_db_on_error(self, mocker):
+        """Should close the DB connection even when query raises."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("bad"))
+        runner.invoke(app, ["analyze", "--since", "xyz"])
+        mock_db.return_value.close.assert_called_once()
+
     @pytest.mark.usefixtures("_mock_sessions")
     def test_analyze_with_plot_flag(self):
         """Should handle --plot flag without errors."""
@@ -998,6 +1012,20 @@ class TestHistoryCommand:
         assert "error" in data
         assert "Invalid duration format" in data["error"]
 
+    def test_history_closes_db(self, mocker):
+        """Should close the DB connection after querying."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        runner.invoke(app, ["history"])
+        mock_db.return_value.close.assert_called_once()
+
+    def test_history_closes_db_on_error(self, mocker):
+        """Should close the DB connection even when query raises."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("bad"))
+        runner.invoke(app, ["history"])
+        mock_db.return_value.close.assert_called_once()
+
 
 class TestTrendCommand:
     """Tests for the trend command."""
@@ -1090,6 +1118,20 @@ class TestTrendCommand:
         data = json.loads(result.output)
         assert "error" in data
         assert "Unknown metric" in data["error"]
+
+    def test_trend_closes_db(self, mocker):
+        """Should close the DB connection after querying."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        runner.invoke(app, ["trend", "memory"])
+        mock_db.return_value.close.assert_called_once()
+
+    def test_trend_closes_db_on_error(self, mocker):
+        """Should close the DB connection even when query raises."""
+        mock_db = mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("bad"))
+        runner.invoke(app, ["trend", "invalid"])
+        mock_db.return_value.close.assert_called_once()
 
 
 class TestTrendHelpers:
