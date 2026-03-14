@@ -35,6 +35,10 @@ SHARED_LOG_TAIL_BYTES = 30000
 ISSUE_CRITICAL_PREFIX = "✖"
 ISSUE_WARNING_PREFIX = "⚠"
 
+# Substring used in stale-workspace issue messages — kept as a constant so the
+# template in capture_ls_snapshot and the filter in generate_report stay in sync.
+_STALE_ISSUE_MARKER = "still running for closed workspace"
+
 # Exit codes for the check command
 EXIT_OK = 0
 EXIT_WARNING = 1
@@ -480,6 +484,7 @@ def capture_ls_snapshot(
     windsurf_version: str,
     windsurf_uptime: float,
     active_workspaces: list[WorkspaceInfo] | None = None,
+    lang_servers: list[ProcessInfo] | None = None,
 ) -> LsSnapshot:
     """Capture a forensic snapshot of all language server processes.
 
@@ -487,7 +492,8 @@ def capture_ls_snapshot(
     workspace mapping, orphaned status (indexing deleted workspace), and
     stale status (workspace exists but not open in the IDE).
     """
-    lang_servers = find_language_servers(proc_infos)
+    if lang_servers is None:
+        lang_servers = find_language_servers(proc_infos)
     active_ws_paths = {ws.path for ws in active_workspaces} if active_workspaces else set()
 
     entries = []
@@ -539,7 +545,7 @@ def capture_ls_snapshot(
         elif stale:
             stale_count += 1
             issues.append(
-                f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
+                f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) {_STALE_ISSUE_MARKER} "
                 f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
 
@@ -1226,10 +1232,11 @@ def generate_report() -> MonitoringReport:
         windsurf_version,
         windsurf_uptime,
         active_workspaces=active_workspaces,
+        lang_servers=language_servers,
     )
     # Only add stale-workspace issues from the snapshot — orphan detection
     # is already handled by check_log_issues() → check_orphaned_workspaces().
-    log_issues.extend(issue for issue in ls_snapshot.issues if "still running for closed workspace" in issue)
+    log_issues.extend(issue for issue in ls_snapshot.issues if _STALE_ISSUE_MARKER in issue)
 
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),
