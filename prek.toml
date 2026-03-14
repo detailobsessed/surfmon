@@ -90,6 +90,14 @@ types_or = ["bash", "shell", "python", "ruby", "perl"]
 priority = 0
 
 [[repos.hooks]]
+id = "check-unspecified-encoding"
+name = "check unspecified encoding in write_text/read_text"
+entry = "uv run scripts/check_unspecified_encoding.py"
+language = "system"
+types = ["python"]
+priority = 1
+
+[[repos.hooks]]
 id = "ast-grep"
 name = "ast-grep structural lint"
 entry = "uv run ast-grep scan"
