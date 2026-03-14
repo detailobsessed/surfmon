@@ -48,7 +48,11 @@ def get_db(db_path: Path | None = None) -> Database:
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     db = Database(path)
-    _ensure_schema(db)
+    try:
+        _ensure_schema(db)
+    except Exception:
+        db.close()
+        raise
     return db
 
 
