@@ -92,7 +92,7 @@ def _migration_001_add_stale_column(db: Database) -> None:
     if "ls_entries" in db.table_names():
         columns = {col.name for col in db["ls_entries"].columns}
         if "stale" not in columns:
-            db.execute("ALTER TABLE ls_entries ADD COLUMN stale INTEGER DEFAULT 0")
+            Table(db, "ls_entries").add_column("stale", int, not_null_default=0)
 
 
 _MIGRATIONS: list = [_migration_001_add_stale_column]

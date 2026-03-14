@@ -824,6 +824,8 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     summary.add_row("Total LS Memory", f"[{mem_color}]{snapshot.total_ls_memory_mb:.1f} MB[/{mem_color}]")
     orphan_color = "red" if snapshot.orphaned_count > 0 else "green"
     summary.add_row("Orphaned", f"[{orphan_color}]{snapshot.orphaned_count}[/{orphan_color}]")
+    stale_color = "yellow" if snapshot.stale_count > 0 else "green"
+    summary.add_row("Stale", f"[{stale_color}]{snapshot.stale_count}[/{stale_color}]")
     if snapshot.windsurf_version:
         summary.add_row("Windsurf Version", snapshot.windsurf_version)
     if snapshot.windsurf_uptime_seconds > 0:
