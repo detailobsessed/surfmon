@@ -900,6 +900,9 @@ def ls_snapshot(
 
         _display_ls_snapshot(snapshot)
 
+        if snapshot.issues:
+            raise typer.Exit(code=max_issue_severity(snapshot.issues))
+
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
         raise typer.Exit(code=130) from None

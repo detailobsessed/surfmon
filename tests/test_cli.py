@@ -806,6 +806,50 @@ class TestLsSnapshotCommand:
         assert data["total_ls_memory_mb"] == 450.0
         assert len(data["entries"]) == 2
 
+    def test_ls_snapshot_exits_2_on_critical_issues(self, mocker):
+        """Should exit with code 2 when snapshot has critical issues."""
+        from surfmon.monitor import LsSnapshot
+
+        snapshot = LsSnapshot(
+            timestamp="2025-06-01T12:00:00+00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=300.0,
+            orphaned_count=1,
+            entries=[],
+            issues=["✖  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
+        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
+        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+
+        result = runner.invoke(app, ["ls-snapshot"])
+        assert result.exit_code == 2
+
+    def test_ls_snapshot_exits_1_on_warning_issues(self, mocker):
+        """Should exit with code 1 when snapshot has only warning issues."""
+        from surfmon.monitor import LsSnapshot
+
+        snapshot = LsSnapshot(
+            timestamp="2025-06-01T12:00:00+00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=300.0,
+            orphaned_count=0,
+            entries=[],
+            issues=["⚠  High memory usage detected"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
+        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
+        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+
+        result = runner.invoke(app, ["ls-snapshot"])
+        assert result.exit_code == 1
+
 
 class TestLsSnapshotDisplay:
     """Tests for _display_ls_snapshot covering memory color branches and issues."""
@@ -844,7 +888,7 @@ class TestLsSnapshotDisplay:
         mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
-        assert result.exit_code == 0
+        assert result.exit_code == 2
         assert "Language Server Snapshot" in result.output
 
     def test_display_warning_memory(self, mocker):
