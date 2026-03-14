@@ -391,6 +391,23 @@ class TestStorePtySnapshot:
         assert len(rows) == 1
         assert rows[0]["pty_count"] == 20
 
+    def test_stores_issues(self, db):
+        pty = _make_pty_info()
+        pty.issues = ["\u26a0  Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)"]
+        session_id = store_pty_snapshot(db, pty)
+
+        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 1
+        assert rows[0]["severity"] == "warning"
+        assert "PTY leak" in rows[0]["message"]
+
+    def test_no_issues_stores_nothing(self, db):
+        pty = _make_pty_info()
+        session_id = store_pty_snapshot(db, pty)
+
+        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        assert len(rows) == 0
+
 
 class TestQueryHistory:
     def test_empty_db(self, db):

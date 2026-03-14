@@ -779,13 +779,20 @@ def pty_snapshot(
 
         _store_to_db(store_pty_snapshot, pty)
 
+        exit_code = max_issue_severity(pty.issues)
+
         # --json: output JSON to stdout and skip rich display
         if json_output:
             data = {"timestamp": datetime.now(tz=UTC).isoformat(), "pty_info": asdict(pty)}
             _print_json(data)
+            if exit_code:
+                raise typer.Exit(code=exit_code)
             return
 
         _display_pty_snapshot(pty)
+
+        if exit_code:
+            raise typer.Exit(code=exit_code)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")

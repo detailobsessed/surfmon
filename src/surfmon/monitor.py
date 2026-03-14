@@ -7,7 +7,7 @@ import os
 import re
 import subprocess  # noqa: S404
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -112,6 +112,7 @@ class PtyInfo:
     windsurf_version: str = ""
     windsurf_uptime_seconds: float = 0.0
     raw_lsof: str = ""
+    issues: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -672,6 +673,42 @@ def _get_windsurf_uptime(processes: list[ProcessInfo]) -> float:
     return max(p.runtime_seconds for p in processes)
 
 
+def _classify_pty_issues(
+    windsurf_pty_count: int,
+    system_pty_used: int,
+    system_pty_limit: int,
+) -> list[str]:
+    """Generate issue strings for PTY leak severity.
+
+    Returns a list of 0 or 1 issue strings, classified as critical or warning
+    using the standard ``ISSUE_CRITICAL_PREFIX`` / ``ISSUE_WARNING_PREFIX`` markers.
+    """
+    if windsurf_pty_count <= 0:
+        return []
+
+    usage_pct = (system_pty_used / system_pty_limit) * 100 if system_pty_limit > 0 else 0
+
+    if windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
+        return [
+            (
+                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Windsurf processes are holding {windsurf_pty_count} PTYs "
+                f"(system: {system_pty_used}/{system_pty_limit}, {usage_pct:.0f}% used) "
+                f"- Fix: Restart all Windsurf instances to release leaked PTYs"
+            )
+        ]
+
+    if windsurf_pty_count >= PTY_WARNING_COUNT:
+        return [
+            (
+                f"{ISSUE_WARNING_PREFIX}  Windsurf PTY leak detected: {windsurf_pty_count} PTYs held "
+                f"(system: {system_pty_used}/{system_pty_limit}) "
+                f"- Monitor closely, restart all Windsurf instances if it keeps growing"
+            )
+        ]
+
+    return []
+
+
 def check_pty_leak(windsurf_processes: list[ProcessInfo] | None = None) -> PtyInfo:
     """Check for PTY (pseudo-terminal) leak by Windsurf.
 
@@ -732,6 +769,8 @@ def check_pty_leak(windsurf_processes: list[ProcessInfo] | None = None) -> PtyIn
         version = _extract_windsurf_version(windsurf_processes)
         uptime = _get_windsurf_uptime(windsurf_processes)
 
+    issues = _classify_pty_issues(windsurf_pty_count, system_pty_used, system_pty_limit)
+
     return PtyInfo(
         windsurf_pty_count=windsurf_pty_count,
         system_pty_limit=system_pty_limit,
@@ -742,6 +781,7 @@ def check_pty_leak(windsurf_processes: list[ProcessInfo] | None = None) -> PtyIn
         windsurf_version=version,
         windsurf_uptime_seconds=uptime,
         raw_lsof=raw_lsof,
+        issues=issues,
     )
 
 
@@ -1100,21 +1140,7 @@ def generate_report() -> MonitoringReport:
     # Build log issues, including PTY leak detection
     log_issues = check_log_issues()
 
-    # Report PTY leak as an issue
-    if pty_info.windsurf_pty_count > 0:
-        usage_pct = (pty_info.system_pty_used / pty_info.system_pty_limit) * 100 if pty_info.system_pty_limit > 0 else 0
-        if pty_info.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
-            log_issues.append(
-                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Windsurf processes are holding {pty_info.windsurf_pty_count} PTYs "
-                f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
-                f"- Fix: Restart all Windsurf instances to release leaked PTYs"
-            )
-        elif pty_info.windsurf_pty_count >= PTY_WARNING_COUNT:
-            log_issues.append(
-                f"{ISSUE_WARNING_PREFIX}  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
-                f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}) "
-                f"- Monitor closely, restart all Windsurf instances if it keeps growing"
-            )
+    log_issues.extend(pty_info.issues)
 
     language_servers = find_language_servers(proc_infos)
 
