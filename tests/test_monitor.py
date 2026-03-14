@@ -1984,7 +1984,7 @@ class TestIsStaleWorkspace:
         )
         cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
 
-        active_paths: set[str] = {"/Users/test/my-project"}
+        active_paths: set[str] = {str(Path("/Users/test/my-project"))}
         assert _is_stale_workspace(cmdline, active_paths) is False
 
     def test_not_stale_when_no_workspace_id(self):
@@ -2061,7 +2061,7 @@ class TestCaptureLsSnapshotStaleDetection:
         ]
 
         active_workspaces = [
-            WorkspaceInfo(id="ws1", path="/Users/test/my-project", exists=True),
+            WorkspaceInfo(id="ws1", path=str(Path("/Users/test/my-project")), exists=True),
         ]
 
         snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces)
