@@ -330,6 +330,14 @@ def store_pty_snapshot(db: Database, pty: PtyInfo, target: str = "") -> str:
     })
 
     _store_pty_data(db, session_id, pty)
+
+    for issue_msg in pty.issues:
+        Table(db, "issues").insert({
+            "session_id": session_id,
+            "severity": classify_issue_severity(issue_msg),
+            "message": issue_msg,
+        })
+
     return session_id
 
 

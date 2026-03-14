@@ -721,6 +721,70 @@ class TestPtySnapshotCommand:
         assert "pty_info" in data
         assert data["pty_info"]["windsurf_pty_count"] == 5
 
+    def test_pty_snapshot_exit_code_warning(self, mocker):
+        """Should exit 1 when PTY count triggers a warning."""
+        from surfmon.monitor import PtyInfo
+
+        mock_pty = PtyInfo(
+            windsurf_pty_count=75,
+            system_pty_limit=511,
+            system_pty_used=100,
+            issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+
+        result = runner.invoke(app, ["pty-snapshot"])
+        assert result.exit_code == 1
+
+    def test_pty_snapshot_exit_code_critical(self, mocker):
+        """Should exit 2 when PTY count triggers a critical issue."""
+        from surfmon.monitor import PtyInfo
+
+        mock_pty = PtyInfo(
+            windsurf_pty_count=504,
+            system_pty_limit=511,
+            system_pty_used=509,
+            issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+
+        result = runner.invoke(app, ["pty-snapshot"])
+        assert result.exit_code == 2
+
+    def test_pty_snapshot_json_exit_code_warning(self, mocker):
+        """Should exit 1 with --json when PTY count triggers a warning."""
+        from surfmon.monitor import PtyInfo
+
+        mock_pty = PtyInfo(
+            windsurf_pty_count=75,
+            system_pty_limit=511,
+            system_pty_used=100,
+            issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+
+        result = runner.invoke(app, ["pty-snapshot", "--json"])
+        assert result.exit_code == 1
+
+    def test_pty_snapshot_json_exit_code_critical(self, mocker):
+        """Should exit 2 with --json when PTY count triggers a critical issue."""
+        from surfmon.monitor import PtyInfo
+
+        mock_pty = PtyInfo(
+            windsurf_pty_count=504,
+            system_pty_limit=511,
+            system_pty_used=509,
+            issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+
+        result = runner.invoke(app, ["pty-snapshot", "--json"])
+        assert result.exit_code == 2
+
 
 class TestLsSnapshotCommand:
     """Tests for the ls-snapshot command."""

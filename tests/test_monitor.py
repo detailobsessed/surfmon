@@ -16,6 +16,7 @@ from surfmon.monitor import (
     PtyFdEntry,
     PtyInfo,
     SystemInfo,
+    _classify_pty_issues,
     _extract_windsurf_version,
     _extract_workspace_from_cmdline,
     _get_system_pty_limit,
@@ -1005,7 +1006,7 @@ class TestCheckPtyLeak:
 
 
 class TestPtyLeakIssueDetection:
-    """Tests for PTY leak issue reporting in generate_report."""
+    """Tests for PTY leak issue propagation from check_pty_leak into generate_report."""
 
     def test_critical_pty_leak_generates_issue(self, mock_process, mocker):
         """Should generate CRITICAL issue when PTY count >= 200."""
@@ -1026,7 +1027,18 @@ class TestPtyLeakIssueDetection:
         mock_issues.return_value = []
         proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
         mock_proc_info.return_value = proc_info
-        mock_pty.return_value = PtyInfo(windsurf_pty_count=504, system_pty_limit=511, system_pty_used=509)
+        mock_pty.return_value = PtyInfo(
+            windsurf_pty_count=504,
+            system_pty_limit=511,
+            system_pty_used=509,
+            issues=[
+                (
+                    "\u2716  CRITICAL: Windsurf processes are holding 504 PTYs "
+                    "(system: 509/511, 100% used) "
+                    "- Fix: Restart all Windsurf instances to release leaked PTYs"
+                )
+            ],
+        )
 
         report = generate_report()
 
@@ -1053,7 +1065,18 @@ class TestPtyLeakIssueDetection:
         mock_issues.return_value = []
         proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
         mock_proc_info.return_value = proc_info
-        mock_pty.return_value = PtyInfo(windsurf_pty_count=75, system_pty_limit=511, system_pty_used=100)
+        mock_pty.return_value = PtyInfo(
+            windsurf_pty_count=75,
+            system_pty_limit=511,
+            system_pty_used=100,
+            issues=[
+                (
+                    "\u26a0  Windsurf PTY leak detected: 75 PTYs held "
+                    "(system: 100/511) "
+                    "- Monitor closely, restart all Windsurf instances if it keeps growing"
+                )
+            ],
+        )
 
         report = generate_report()
 
@@ -1084,6 +1107,36 @@ class TestPtyLeakIssueDetection:
         report = generate_report()
 
         assert not any("PTY" in issue for issue in report.log_issues)
+
+
+class TestClassifyPtyIssues:
+    """Tests for _classify_pty_issues helper."""
+
+    def test_no_ptys_no_issues(self):
+        assert _classify_pty_issues(0, 0, 511) == []
+
+    def test_below_warning_threshold_no_issues(self):
+        assert _classify_pty_issues(10, 20, 511) == []
+
+    def test_warning_threshold(self):
+        issues = _classify_pty_issues(50, 60, 511)
+        assert len(issues) == 1
+        assert "PTY leak" in issues[0]
+        assert "\u26a0" in issues[0]
+
+    def test_critical_by_count(self):
+        issues = _classify_pty_issues(200, 210, 511)
+        assert len(issues) == 1
+        assert "CRITICAL" in issues[0]
+        assert "\u2716" in issues[0]
+
+    def test_critical_by_usage_percent(self):
+        issues = _classify_pty_issues(50, 420, 511)
+        assert len(issues) == 1
+        assert "CRITICAL" in issues[0]
+
+    def test_zero_pty_limit_no_crash(self):
+        assert _classify_pty_issues(0, 0, 0) == []
 
 
 class TestSurfmonProcessExclusion:
