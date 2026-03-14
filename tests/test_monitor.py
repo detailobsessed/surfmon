@@ -2262,7 +2262,7 @@ class TestGetActiveWorkspacesCloseEvents:
         log_dir = tmp_path / "20260314T120000"
         log_dir.mkdir()
         main_log = log_dir / "main.log"
-        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n")
+        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
@@ -2276,7 +2276,7 @@ class TestGetActiveWorkspacesCloseEvents:
         log_dir = tmp_path / "20260314T120000"
         log_dir.mkdir()
         main_log = log_dir / "main.log"
-        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n{LOAD_LINE}\n")
+        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n{LOAD_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
@@ -2297,7 +2297,7 @@ class TestGetActiveWorkspacesCloseEvents:
         log_dir = tmp_path / "20260314T120000"
         log_dir.mkdir()
         main_log = log_dir / "main.log"
-        main_log.write_text(f"{LOAD_LINE}\n{other_load}\n{CLOSE_LINE}\n")
+        main_log.write_text(f"{LOAD_LINE}\n{other_load}\n{CLOSE_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
