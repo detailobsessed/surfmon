@@ -23,10 +23,18 @@ __all__ = [
     "make_panel",
     "make_table",
     "save_report_markdown",
+    "style_issue",
 ]
 
 from .config import get_paths, get_target_display_name
-from .monitor import PTY_CRITICAL_COUNT, PTY_USAGE_CRITICAL_PERCENT, PTY_WARNING_COUNT, format_uptime
+from .monitor import (
+    ISSUE_CRITICAL_PREFIX,
+    ISSUE_WARNING_PREFIX,
+    PTY_CRITICAL_COUNT,
+    PTY_USAGE_CRITICAL_PERCENT,
+    PTY_WARNING_COUNT,
+    format_uptime,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -302,6 +310,18 @@ def _display_verbose_info(report: MonitoringReport) -> None:
         console.print()
 
 
+def style_issue(issue: str) -> str:
+    """Wrap the prefix marker of an issue string in Rich colour markup."""
+    stripped = issue.lstrip()
+    if stripped.startswith(ISSUE_CRITICAL_PREFIX):
+        rest = stripped[len(ISSUE_CRITICAL_PREFIX) :]
+        return f"[red]{ISSUE_CRITICAL_PREFIX}[/red]{rest}"
+    if stripped.startswith(ISSUE_WARNING_PREFIX):
+        rest = stripped[len(ISSUE_WARNING_PREFIX) :]
+        return f"[yellow]{ISSUE_WARNING_PREFIX}[/yellow]{rest}"
+    return issue
+
+
 def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     """Display report in rich terminal format."""
     console.print()
@@ -344,7 +364,7 @@ def display_report(report: MonitoringReport, verbose: bool = False) -> None:
     if report.log_issues:
         console.print(
             make_panel(
-                "\n".join(report.log_issues),
+                "\n".join(style_issue(issue) for issue in report.log_issues),
                 title="[bold red]Issues Detected[/bold red]",
                 style="red",
             )
