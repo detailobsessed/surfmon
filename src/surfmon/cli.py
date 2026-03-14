@@ -800,10 +800,10 @@ def _style_issue(issue: str) -> str:
     """Wrap the prefix marker of an issue string in Rich colour markup."""
     stripped = issue.lstrip()
     if stripped.startswith(ISSUE_CRITICAL_PREFIX):
-        rest = stripped[len(ISSUE_CRITICAL_PREFIX):]
+        rest = stripped[len(ISSUE_CRITICAL_PREFIX) :]
         return f"[red]{ISSUE_CRITICAL_PREFIX}[/red]{rest}"
     if stripped.startswith(ISSUE_WARNING_PREFIX):
-        rest = stripped[len(ISSUE_WARNING_PREFIX):]
+        rest = stripped[len(ISSUE_WARNING_PREFIX) :]
         return f"[yellow]{ISSUE_WARNING_PREFIX}[/yellow]{rest}"
     return issue
 
