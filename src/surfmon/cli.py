@@ -894,14 +894,18 @@ def ls_snapshot(
 
         _store_to_db(store_ls_snapshot, snapshot)
 
+        exit_code = max_issue_severity(snapshot.issues)
+
         if json_output:
             _print_json(asdict(snapshot))
+            if exit_code:
+                raise typer.Exit(code=exit_code)
             return
 
         _display_ls_snapshot(snapshot)
 
-        if snapshot.issues:
-            raise typer.Exit(code=max_issue_severity(snapshot.issues))
+        if exit_code:
+            raise typer.Exit(code=exit_code)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
