@@ -1895,21 +1895,13 @@ class TestMaxIssueSeverity:
         assert max_issue_severity(issues) == EXIT_WARNING
 
     def test_critical_pty_issue(self):
-        assert max_issue_severity(
-            ["\u2716  CRITICAL: Windsurf processes are holding 250 PTYs"]
-        ) == EXIT_CRITICAL
+        assert max_issue_severity(["\u2716  CRITICAL: Windsurf processes are holding 250 PTYs"]) == EXIT_CRITICAL
 
     def test_warning_pty_issue(self):
-        assert max_issue_severity(
-            ["\u26a0  Windsurf PTY leak detected: 60 PTYs held"]
-        ) == EXIT_WARNING
+        assert max_issue_severity(["\u26a0  Windsurf PTY leak detected: 60 PTYs held"]) == EXIT_WARNING
 
     def test_extension_host_crash_is_critical(self):
-        assert max_issue_severity(
-            ["\u2716  2 extension host crash(es) - PIDs: 1234, 5678"]
-        ) == EXIT_CRITICAL
+        assert max_issue_severity(["\u2716  2 extension host crash(es) - PIDs: 1234, 5678"]) == EXIT_CRITICAL
 
     def test_oom_is_critical(self):
-        assert max_issue_severity(
-            ["\u2716  Out of memory errors detected"]
-        ) == EXIT_CRITICAL
+        assert max_issue_severity(["\u2716  Out of memory errors detected"]) == EXIT_CRITICAL
