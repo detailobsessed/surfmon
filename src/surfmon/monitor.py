@@ -3,6 +3,7 @@
 import contextlib
 import json
 import operator
+import os
 import re
 import subprocess  # noqa: S404
 import time
@@ -205,7 +206,7 @@ def get_windsurf_processes() -> list[psutil.Process]:
             exe = proc.info["exe"] or ""
 
             # Skip the monitoring tool itself
-            if "surfmon" in cmdline.lower():
+            if proc.pid == os.getpid():
                 continue
 
             # Only match processes from the configured Windsurf app
