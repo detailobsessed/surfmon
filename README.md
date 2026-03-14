@@ -23,7 +23,6 @@
   - [watch — Live Monitoring Dashboard](#watch--live-monitoring-dashboard)
   - [analyze — Historical Trend Analysis](#analyze--historical-trend-analysis)
   - [cleanup — Remove Orphaned Processes](#cleanup--remove-orphaned-processes)
-  - [prune — Deduplicate Watch Reports](#prune--deduplicate-watch-reports)
   - [pty-snapshot — PTY Forensic Capture](#pty-snapshot--pty-forensic-capture)
 - [What It Monitors](#what-it-monitors)
 - [Target Selection](#target-selection)
@@ -85,7 +84,7 @@ surfmon check -t insiders
 
 - 🔍 **Debug Performance Issues** — Identify memory leaks, CPU spikes, and resource bottlenecks
 - 📊 **Monitor Over Time** — Track resource usage trends with watch sessions and historical analysis
-- 🧹 **Clean Up Resources** — Remove orphaned processes and duplicate reports
+- 🧹 **Clean Up Resources** — Remove orphaned processes
 - 🔧 **Troubleshoot Crashes** — Detect extension host crashes, language server issues, and PTY leaks
 - 📈 **Visualize Trends** — Generate matplotlib plots showing resource usage over time
 
@@ -144,15 +143,6 @@ surfmon cleanup -t stable           # Interactive (asks for confirmation)
 surfmon cleanup -t next --force     # No confirmation
 ```
 
-### `prune` — Deduplicate Watch Reports
-
-Removes duplicate/identical JSON reports that accumulate during `watch` sessions when nothing changes.
-
-```bash
-surfmon prune reports/watch/20260204-134518/ --dry-run
-surfmon prune reports/watch/20260204-134518/
-```
-
 ### `pty-snapshot` — PTY Forensic Capture
 
 Captures a detailed PTY ownership snapshot for diagnosing Windsurf's PTY leak. Shows per-PID breakdown, FD-level detail (active vs idle), Windsurf version, and uptime. Use `--save` to generate JSON + Markdown files suitable for attaching to bug reports.
@@ -197,7 +187,7 @@ export SURFMON_TARGET=insiders
 surfmon check
 ```
 
-The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands that operate on saved data (`prune`, `analyze`) do not require it.
+The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands that operate on saved data (`analyze`) do not require it.
 
 ## Exit Codes
 
@@ -221,7 +211,7 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 ```
 src/surfmon/
     __init__.py        # Version
-    cli.py             # Typer CLI — check, watch, cleanup, prune, analyze
+    cli.py             # Typer CLI — check, watch, cleanup, analyze
     config.py          # Target detection, paths, environment config
     monitor.py         # Core data collection — processes, language servers, MCP, PTYs
     output.py          # Rich terminal display and Markdown export
