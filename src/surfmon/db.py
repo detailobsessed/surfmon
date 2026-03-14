@@ -16,6 +16,7 @@ from sqlite_utils import Database
 from sqlite_utils.db import NotFoundError, Table
 
 from . import __version__
+from .monitor import classify_issue_severity
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -226,16 +227,6 @@ def _new_session_id() -> str:
     return str(uuid.uuid4())
 
 
-def _classify_issue_severity(message: str) -> str:
-    """Classify issue severity from its message text."""
-    msg_lower = message.lower()
-    if "critical" in msg_lower or "✖" in message:
-        return "critical"
-    if "⚠" in message or "warning" in msg_lower or "leak" in msg_lower:
-        return "warning"
-    return "info"
-
-
 def store_check(db: Database, report: MonitoringReport, target: str = "") -> str:
     """Store a full check report. Returns the session ID."""
     session_id = _new_session_id()
@@ -279,7 +270,7 @@ def store_check(db: Database, report: MonitoringReport, target: str = "") -> str
     for issue_msg in report.log_issues:
         Table(db, "issues").insert({
             "session_id": session_id,
-            "severity": _classify_issue_severity(issue_msg),
+            "severity": classify_issue_severity(issue_msg),
             "message": issue_msg,
         })
 
@@ -317,7 +308,7 @@ def store_ls_snapshot(db: Database, snapshot: LsSnapshot, target: str = "") -> s
     for issue_msg in snapshot.issues:
         Table(db, "issues").insert({
             "session_id": session_id,
-            "severity": _classify_issue_severity(issue_msg),
+            "severity": classify_issue_severity(issue_msg),
             "message": issue_msg,
         })
 

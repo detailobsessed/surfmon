@@ -36,6 +36,7 @@ from .monitor import (
     format_uptime,
     generate_report,
     is_main_windsurf_process,
+    max_issue_severity,
 )
 from .output import (
     CPU_PERCENT_CRITICAL,
@@ -50,6 +51,7 @@ from .output import (
     make_kv_table,
     make_panel,
     make_table,
+    style_issue,
 )
 
 # Language server snapshot thresholds
@@ -347,18 +349,19 @@ def check(
 
         _store_to_db(store_check, report)
 
+        exit_code = max_issue_severity(report.log_issues)
+
         # --json: output JSON to stdout and skip rich display
         if json_output:
             _print_json(asdict(report))
-            if report.log_issues:
-                raise typer.Exit(code=1)
+            if exit_code:
+                raise typer.Exit(code=exit_code)
             return
 
         display_report(report, verbose=verbose)
 
-        # Exit with non-zero if critical issues detected
-        if report.log_issues:
-            raise typer.Exit(code=1)
+        if exit_code:
+            raise typer.Exit(code=exit_code)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -849,7 +852,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     if snapshot.issues:
         console.print(make_panel("[red]Issues Detected[/red]", title="⚠ Issues"))
         for issue in snapshot.issues:
-            console.print(f"  [red]✖[/red]  {issue}")
+            console.print(f"  {style_issue(issue)}")
         console.print()
 
 
@@ -875,11 +878,18 @@ def ls_snapshot(
 
         _store_to_db(store_ls_snapshot, snapshot)
 
+        exit_code = max_issue_severity(snapshot.issues)
+
         if json_output:
             _print_json(asdict(snapshot))
+            if exit_code:
+                raise typer.Exit(code=exit_code)
             return
 
         _display_ls_snapshot(snapshot)
+
+        if exit_code:
+            raise typer.Exit(code=exit_code)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")

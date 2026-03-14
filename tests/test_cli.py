@@ -66,19 +66,35 @@ class TestCheckCommand:
         # Check that verbose was passed
         assert mock_display.call_args[1]["verbose"] is True
 
-    def test_check_exits_with_error_on_issues(self, mock_generate_report, mock_display_report):
-        """Should exit with code 1 when critical issues detected."""
-        # Mock report with issues
-        mock_generate_report.return_value.log_issues = ["Critical error"]
+    def test_check_exits_with_code_2_on_critical_issues(self, mock_generate_report, mock_display_report):
+        """Should exit with code 2 when critical issues detected."""
+        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
+
+        result = runner.invoke(app, ["check"])
+
+        assert result.exit_code == 2
+
+    def test_check_exits_with_code_1_on_warnings(self, mock_generate_report, mock_display_report):
+        """Should exit with code 1 when only warnings detected."""
+        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
 
         result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
 
-    def test_check_json_exits_with_error_on_issues(self, mock_generate_report, mock_display_report, mocker):
-        """Should exit with code 1 in JSON mode when critical issues detected."""
-        mock_generate_report.return_value.log_issues = ["Critical error"]
-        mocker.patch("surfmon.cli.asdict", return_value={"log_issues": ["Critical error"]})
+    def test_check_json_exits_with_code_2_on_critical_issues(self, mock_generate_report, mock_display_report, mocker):
+        """Should exit with code 2 in JSON mode when critical issues detected."""
+        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
+        mocker.patch("surfmon.cli.asdict", return_value={"log_issues": ["\u2716  CRITICAL: Orphaned workspace"]})
+
+        result = runner.invoke(app, ["check", "--json"])
+
+        assert result.exit_code == 2
+
+    def test_check_json_exits_with_code_1_on_warnings(self, mock_generate_report, mock_display_report, mocker):
+        """Should exit with code 1 in JSON mode when only warnings detected."""
+        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
+        mocker.patch("surfmon.cli.asdict", return_value={"log_issues": ["\u26a0  Extension errors: some.ext (3)"]})
 
         result = runner.invoke(app, ["check", "--json"])
 
@@ -104,12 +120,32 @@ class TestCheckCommand:
 
     def test_check_error_hides_watch_tip(self, mock_generate_report, mock_display_report):
         """Should not show watch tip when check exits with error."""
-        mock_generate_report.return_value.log_issues = ["Critical error"]
+        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
+
+        result = runner.invoke(app, ["check"])
+
+        assert result.exit_code == 2
+        assert "surfmon watch" not in result.stdout
+
+    def test_check_warning_hides_watch_tip(self, mock_generate_report, mock_display_report):
+        """Should not show watch tip when check exits with warning."""
+        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
 
         result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
         assert "surfmon watch" not in result.stdout
+
+    def test_check_critical_takes_precedence_over_warnings(self, mock_generate_report, mock_display_report):
+        """Should exit with code 2 when both critical and warning issues present."""
+        mock_generate_report.return_value.log_issues = [
+            "\u26a0  Extension errors: some.ext (3)",
+            "\u2716  CRITICAL: Orphaned workspace",
+        ]
+
+        result = runner.invoke(app, ["check"])
+
+        assert result.exit_code == 2
 
 
 class TestVersionCallback:
@@ -786,6 +822,50 @@ class TestLsSnapshotCommand:
         assert data["total_ls_memory_mb"] == 450.0
         assert len(data["entries"]) == 2
 
+    def test_ls_snapshot_exits_2_on_critical_issues(self, mocker):
+        """Should exit with code 2 when snapshot has critical issues."""
+        from surfmon.monitor import LsSnapshot
+
+        snapshot = LsSnapshot(
+            timestamp="2025-06-01T12:00:00+00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=300.0,
+            orphaned_count=1,
+            entries=[],
+            issues=["✖  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
+        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
+        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+
+        result = runner.invoke(app, ["ls-snapshot"])
+        assert result.exit_code == 2
+
+    def test_ls_snapshot_exits_1_on_warning_issues(self, mocker):
+        """Should exit with code 1 when snapshot has only warning issues."""
+        from surfmon.monitor import LsSnapshot
+
+        snapshot = LsSnapshot(
+            timestamp="2025-06-01T12:00:00+00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=300.0,
+            orphaned_count=0,
+            entries=[],
+            issues=["⚠  High memory usage detected"],
+        )
+        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
+        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
+        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
+        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+
+        result = runner.invoke(app, ["ls-snapshot"])
+        assert result.exit_code == 1
+
 
 class TestLsSnapshotDisplay:
     """Tests for _display_ls_snapshot covering memory color branches and issues."""
@@ -815,7 +895,7 @@ class TestLsSnapshotDisplay:
                     orphaned=True,
                 ),
             ],
-            issues=["CRITICAL: language_server_macos_arm indexing non-existent workspace"],
+            issues=["\u2716  CRITICAL: language_server_macos_arm indexing non-existent workspace"],
         )
 
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
@@ -824,7 +904,7 @@ class TestLsSnapshotDisplay:
         mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
-        assert result.exit_code == 0
+        assert result.exit_code == 2
         assert "Language Server Snapshot" in result.output
 
     def test_display_warning_memory(self, mocker):

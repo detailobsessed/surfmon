@@ -30,6 +30,15 @@ PTY_USAGE_CRITICAL_PERCENT = 80
 LOG_TAIL_BYTES = 50000
 SHARED_LOG_TAIL_BYTES = 30000
 
+# Issue severity markers used in log_issues strings
+ISSUE_CRITICAL_PREFIX = "✖"
+ISSUE_WARNING_PREFIX = "⚠"
+
+# Exit codes for the check command
+EXIT_OK = 0
+EXIT_WARNING = 1
+EXIT_CRITICAL = 2
+
 
 @dataclass
 class ProcessInfo:
@@ -476,7 +485,8 @@ def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, wi
         if orphaned:
             orphaned_count += 1
             issues.append(
-                f"CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
+                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
 
     # Sort by memory descending for easy triage
@@ -560,7 +570,7 @@ def _check_orphaned_workspace_proc(cmdline: str, proc: psutil.Process) -> str | 
     parts = workspace.split("/")
     workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
     return (
-        f"✖  CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
+        f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
         f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
         f"Fix: Close Windsurf, run: rm -rf {database_dir}"
     )
@@ -812,7 +822,12 @@ def _check_orphaned_crashpad_handlers() -> list[str]:
     oldest_days = max(age for _, age in orphaned)
     age_str = _format_age_str(oldest_days)
     pids_str = ", ".join(pids[:MAX_DISPLAY_ITEMS]) + (", ..." if len(pids) > MAX_DISPLAY_ITEMS else "")
-    return [f"⚠  {len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force"]
+    return [
+        (
+            f"{ISSUE_WARNING_PREFIX}  {len(orphaned)} orphaned crash handler(s) "
+            f"(oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force"
+        )
+    ]
 
 
 def _check_extension_logs_dir() -> list[str]:
@@ -832,7 +847,7 @@ def _check_extension_logs_dir() -> list[str]:
 
     return [
         (
-            f"⚠  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
+            f"{ISSUE_WARNING_PREFIX}  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
             f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
         )
     ]
@@ -854,18 +869,18 @@ def _check_main_log_issues(latest_log: Path) -> list[str]:
     crashes = [pid for pid, code in crash_lines if code != "0"]
     if crashes:
         pids_str = ", ".join(crashes[:MAX_DISPLAY_ITEMS]) + (", ..." if len(crashes) > MAX_DISPLAY_ITEMS else "")
-        issues.append(f"✖  {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
+        issues.append(f"{ISSUE_CRITICAL_PREFIX}  {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
 
     update_errors = content.count("UpdateService error")
     if update_errors:
-        issues.append(f"⚠  {update_errors} update check request(s) timed out (check DNS/firewall settings)")
+        issues.append(f"{ISSUE_WARNING_PREFIX}  {update_errors} update check request(s) timed out (check DNS/firewall settings)")
 
     if "out of memory" in content.lower() or "oom" in content.lower():
-        issues.append("✖  Out of memory errors detected")
+        issues.append(f"{ISSUE_CRITICAL_PREFIX}  Out of memory errors detected")
 
     renderer_crashes = content.count("GPU process crashed")
     if renderer_crashes > 0:
-        issues.append(f"⚠  {renderer_crashes} GPU/renderer crash(es) detected")
+        issues.append(f"{ISSUE_WARNING_PREFIX}  {renderer_crashes} GPU/renderer crash(es) detected")
 
     return issues
 
@@ -893,10 +908,10 @@ def _check_shared_process_log_issues(latest_log: Path) -> list[str]:
     if extension_errors:
         sorted_exts = sorted(extension_errors.items(), key=operator.itemgetter(1), reverse=True)
         ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:MAX_DISPLAY_ITEMS]])
-        return [f"⚠  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}"]
+        return [f"{ISSUE_WARNING_PREFIX}  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}"]
 
     if len(error_lines) > EXTENSION_ERROR_LINES_THRESHOLD:
-        return [f"⚠  {len(error_lines)} extension errors in shared process"]
+        return [f"{ISSUE_WARNING_PREFIX}  {len(error_lines)} extension errors in shared process"]
 
     return []
 
@@ -909,7 +924,12 @@ def _check_network_log_issues(latest_log: Path) -> list[str]:
 
     telemetry_errors = content.count("windsurf-telemetry.codeium.com")
     if telemetry_errors > TELEMETRY_ERROR_THRESHOLD:
-        return [f"⚠  {telemetry_errors} telemetry connection failure(s) to windsurf-telemetry.codeium.com (check DNS/firewall settings)"]
+        return [
+            (
+                f"{ISSUE_WARNING_PREFIX}  {telemetry_errors} telemetry connection failure(s) "
+                f"to windsurf-telemetry.codeium.com (check DNS/firewall settings)"
+            )
+        ]
     return []
 
 
@@ -1084,13 +1104,13 @@ def generate_report() -> MonitoringReport:
         usage_pct = (pty_info.system_pty_used / pty_info.system_pty_limit) * 100 if pty_info.system_pty_limit > 0 else 0
         if pty_info.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
             log_issues.append(
-                f"✖  CRITICAL: Windsurf processes are holding {pty_info.windsurf_pty_count} PTYs "
+                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Windsurf processes are holding {pty_info.windsurf_pty_count} PTYs "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}, {usage_pct:.0f}% used) "
                 f"- Fix: Restart all Windsurf instances to release leaked PTYs"
             )
         elif pty_info.windsurf_pty_count >= PTY_WARNING_COUNT:
             log_issues.append(
-                f"⚠  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
+                f"{ISSUE_WARNING_PREFIX}  Windsurf PTY leak detected: {pty_info.windsurf_pty_count} PTYs held "
                 f"(system: {pty_info.system_pty_used}/{pty_info.system_pty_limit}) "
                 f"- Monitor closely, restart all Windsurf instances if it keeps growing"
             )
@@ -1114,6 +1134,38 @@ def generate_report() -> MonitoringReport:
         windsurf_uptime_seconds=_get_windsurf_uptime(proc_infos),
         pty_info=pty_info,
     )
+
+
+def classify_issue_severity(message: str) -> str:
+    """Classify a single issue string into a severity label.
+
+    Returns ``"critical"`` or ``"warning"`` based on the prefix marker
+    (``✖`` → critical, ``⚠`` → warning).
+
+    Issues without a recognised prefix are treated as warnings (safe default).
+    """
+    stripped = message.lstrip()
+    if stripped.startswith(ISSUE_CRITICAL_PREFIX):
+        return "critical"
+    if stripped.startswith(ISSUE_WARNING_PREFIX):
+        return "warning"
+    return "warning"
+
+
+def max_issue_severity(issues: list[str]) -> int:
+    """Determine the highest severity among issue strings.
+
+    Returns EXIT_OK (0) for no issues, EXIT_WARNING (1) for warnings only,
+    or EXIT_CRITICAL (2) if any critical issue is present.
+
+    Delegates per-issue classification to :func:`classify_issue_severity`.
+    """
+    if not issues:
+        return EXIT_OK
+    for issue in issues:
+        if classify_issue_severity(issue) == "critical":
+            return EXIT_CRITICAL
+    return EXIT_WARNING
 
 
 def save_report_json(report: MonitoringReport, output_path: Path) -> None:

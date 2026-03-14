@@ -183,9 +183,14 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 
 ## Exit Codes
 
+These apply to the `check` and `ls-snapshot` commands:
+
 - `0` — No issues detected
-- `1` — Issues detected (see output)
+- `1` — Warnings only (non-critical, e.g. extension errors)
+- `2` — Critical issues present (e.g. orphaned workspaces, OOM, PTY exhaustion)
 - `130` — Interrupted (Ctrl+C)
+
+> **Migration note:** Previously, exit code `1` meant "any issue detected." Scripts that check `exit_code == 1` should now check `exit_code != 0` to catch both warnings and critical issues.
 
 ## Common Issues
 
