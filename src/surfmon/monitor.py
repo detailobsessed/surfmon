@@ -144,7 +144,13 @@ class LsSnapshot:
     orphaned_count: int
     stale_count: int
     entries: list[LsSnapshotEntry]
-    issues: list[str]
+    orphan_issues: list[str]
+    stale_issues: list[str]
+
+    @property
+    def issues(self) -> list[str]:
+        """All issues combined (orphan + stale)."""
+        return self.orphan_issues + self.stale_issues
 
 
 @dataclass
@@ -491,10 +497,9 @@ def capture_ls_snapshot(
     active_ws_paths = {ws.path for ws in active_workspaces} if active_workspaces else set()
 
     entries = []
-    issues = []
+    orphan_issues: list[str] = []
+    stale_issues: list[str] = []
     total_memory = 0.0
-    orphaned_count = 0
-    stale_count = 0
 
     for ls in lang_servers:
         # Use original cmdline for detection (before enhancement)
@@ -531,14 +536,12 @@ def capture_ls_snapshot(
         total_memory += ls.memory_mb
 
         if orphaned:
-            orphaned_count += 1
-            issues.append(
+            orphan_issues.append(
                 f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
                 f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
         elif stale:
-            stale_count += 1
-            issues.append(
+            stale_issues.append(
                 f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
                 f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
@@ -552,10 +555,11 @@ def capture_ls_snapshot(
         windsurf_uptime_seconds=windsurf_uptime,
         total_ls_count=len(entries),
         total_ls_memory_mb=total_memory,
-        orphaned_count=orphaned_count,
-        stale_count=stale_count,
+        orphaned_count=len(orphan_issues),
+        stale_count=len(stale_issues),
         entries=entries,
-        issues=issues,
+        orphan_issues=orphan_issues,
+        stale_issues=stale_issues,
     )
 
 
@@ -1027,7 +1031,7 @@ def _check_network_log_issues(latest_log: Path) -> list[str]:
     return []
 
 
-def check_log_issues() -> list[str]:
+def check_log_issues(*, include_orphans: bool = True) -> list[str]:
     """Check for common issues in Windsurf logs.
 
     Parses recent Windsurf logs to detect:
@@ -1038,10 +1042,17 @@ def check_log_issues() -> list[str]:
     - OOM (out of memory) errors
     - Renderer crashes
     - Extension errors
+
+    Args:
+        include_orphans: When False, skip the orphaned-workspace process scan.
+            Set to False when the caller performs its own orphan detection
+            (e.g. via ``capture_ls_snapshot``) to avoid a redundant
+            ``psutil.process_iter`` walk.
     """
     issues = []
 
-    issues.extend(check_orphaned_workspaces())
+    if include_orphans:
+        issues.extend(check_orphaned_workspaces())
     issues.extend(_check_orphaned_crashpad_handlers())
     issues.extend(_check_extension_logs_dir())
 
@@ -1211,8 +1222,10 @@ def generate_report() -> MonitoringReport:
     # Check PTY usage (pass process info for version/uptime extraction)
     pty_info = check_pty_leak(windsurf_processes=proc_infos)
 
-    # Build log issues, including PTY leak detection
-    log_issues = check_log_issues()
+    # Build log issues — skip orphan scan here; capture_ls_snapshot
+    # performs orphan detection from the already-collected proc_infos,
+    # avoiding a redundant psutil.process_iter walk.
+    log_issues = check_log_issues(include_orphans=False)
 
     log_issues.extend(pty_info.issues)
 
@@ -1227,9 +1240,7 @@ def generate_report() -> MonitoringReport:
         windsurf_uptime,
         active_workspaces=active_workspaces,
     )
-    # Only add stale-workspace issues from the snapshot — orphan detection
-    # is already handled by check_log_issues() → check_orphaned_workspaces().
-    log_issues.extend(issue for issue in ls_snapshot.issues if "still running for closed workspace" in issue)
+    log_issues.extend(ls_snapshot.issues)
 
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),

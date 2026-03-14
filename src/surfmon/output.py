@@ -265,40 +265,9 @@ def _ls_entry_status_rich(entry: LsSnapshotEntry) -> str:
 
 
 def _display_language_servers_table(report: MonitoringReport) -> None:
-    """Display language servers table.
-
-    Uses the ``ls_snapshot`` when available for richer output including
-    workspace, language, and orphan/stale status columns.  Falls back
-    to the raw ``language_servers`` list otherwise.
-    """
-    snapshot = report.ls_snapshot
-    if snapshot is not None:
-        _display_ls_snapshot_table(snapshot)
-        return
-
-    if not report.language_servers:
-        return
-
-    ls_table = make_table("Language Servers")
-    ls_table.add_column("PID", style="dim")
-    ls_table.add_column("Type", style="cyan", ratio=3, overflow="fold")
-    ls_table.add_column("Memory", justify="right", style="green")
-    ls_table.add_column("CPU %", justify="right", style="yellow")
-
-    for ls in report.language_servers:
-        server_type = ls.cmdline
-        mem_style = "red" if ls.memory_mb > LS_MEMORY_HIGH_MB else "yellow" if ls.memory_mb > LS_MEMORY_MEDIUM_MB else "green"
-        cpu_style = "red" if ls.cpu_percent > LS_CPU_HIGH else "yellow" if ls.cpu_percent > LS_CPU_MEDIUM else "green"
-
-        ls_table.add_row(
-            str(ls.pid),
-            server_type,
-            f"[{mem_style}]{ls.memory_mb:.0f} MB[/{mem_style}]",
-            f"[{cpu_style}]{ls.cpu_percent:.1f}[/{cpu_style}]",
-        )
-
-    console.print(ls_table)
-    console.print()
+    """Display language servers table with workspace/status columns."""
+    if report.ls_snapshot is not None:
+        _display_ls_snapshot_table(report.ls_snapshot)
 
 
 def _display_ls_snapshot_table(snapshot: LsSnapshot) -> None:
@@ -468,49 +437,23 @@ def _format_pty_markdown(pty: Any) -> list[str]:
 
 def _format_ls_markdown(report: MonitoringReport) -> list[str]:
     """Format the language servers section for markdown output."""
-    if report.ls_snapshot and report.ls_snapshot.entries:
-        snap = report.ls_snapshot
-        lines: list[str] = [
-            "## Language Servers",
-            "",
-            (f"**Total:** {snap.total_ls_count} | **Orphaned:** {snap.orphaned_count} | **Stale:** {snap.stale_count}"),
-            "",
-            "| PID | Language | Workspace | Memory | CPU % | Status |",
-            "|-----|----------|-----------|--------|-------|--------|",
-        ]
-        for entry in snap.entries:
-            status = "ORPHANED" if entry.orphaned else "STALE" if entry.stale else "ok"
-            lines.append(
-                f"| {entry.pid} | {entry.language} | {entry.workspace} | {entry.memory_mb:.0f} MB | {entry.cpu_percent:.1f}% | {status} |"
-            )
-        lines.append("")
-        return lines
-
-    if not report.language_servers:
+    if not (report.ls_snapshot and report.ls_snapshot.entries):
         return []
 
-    lines = [
+    snap = report.ls_snapshot
+    lines: list[str] = [
         "## Language Servers",
         "",
-        "| PID | Type | Memory | CPU % |",
-        "|-----|------|--------|-------|",
+        (f"**Total:** {snap.total_ls_count} | **Orphaned:** {snap.orphaned_count} | **Stale:** {snap.stale_count}"),
+        "",
+        "| PID | Language | Workspace | Memory | CPU % | Status |",
+        "|-----|----------|-----------|--------|-------|--------|",
     ]
-    for ls in report.language_servers:
-        cmdline_lower = ls.cmdline.lower()
-        if "language_server_macos_arm" in cmdline_lower:
-            server_type = "Windsurf (Codeium)"
-        elif "jdtls" in cmdline_lower or "eclipse.jdt" in cmdline_lower:
-            server_type = "Java (JDT.LS)"
-        elif "basedpyright" in cmdline_lower:
-            server_type = "Python (basedpyright)"
-        elif "yaml" in cmdline_lower:
-            server_type = "YAML"
-        elif "json" in cmdline_lower:
-            server_type = "JSON"
-        else:
-            server_type = "Other"
-
-        lines.append(f"| {ls.pid} | {server_type} | {ls.memory_mb:.0f} MB | {ls.cpu_percent:.1f}% |")
+    for entry in snap.entries:
+        status = "ORPHANED" if entry.orphaned else "STALE" if entry.stale else "ok"
+        lines.append(
+            f"| {entry.pid} | {entry.language} | {entry.workspace} | {entry.memory_mb:.0f} MB | {entry.cpu_percent:.1f}% | {status} |"
+        )
     lines.append("")
     return lines
 
