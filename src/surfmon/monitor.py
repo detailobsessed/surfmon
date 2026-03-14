@@ -485,7 +485,8 @@ def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, wi
         if orphaned:
             orphaned_count += 1
             issues.append(
-                f"CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
+                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
 
     # Sort by memory descending for easy triage
@@ -1138,8 +1139,8 @@ def generate_report() -> MonitoringReport:
 def classify_issue_severity(message: str) -> str:
     """Classify a single issue string into a severity label.
 
-    Returns ``"critical"``, ``"warning"``, or ``"info"`` based on the
-    prefix marker (``✖`` → critical, ``⚠`` → warning).
+    Returns ``"critical"`` or ``"warning"`` based on the prefix marker
+    (``✖`` → critical, ``⚠`` → warning).
 
     Issues without a recognised prefix are treated as warnings (safe default).
     """

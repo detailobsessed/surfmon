@@ -835,7 +835,7 @@ class TestLsSnapshotDisplay:
                     orphaned=True,
                 ),
             ],
-            issues=["CRITICAL: language_server_macos_arm indexing non-existent workspace"],
+            issues=["\u2716  CRITICAL: language_server_macos_arm indexing non-existent workspace"],
         )
 
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
