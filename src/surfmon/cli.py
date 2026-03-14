@@ -854,7 +854,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     if snapshot.issues:
         console.print(make_panel("[red]Issues Detected[/red]", title="⚠ Issues"))
         for issue in snapshot.issues:
-            console.print(f"  [red]✖[/red]  {issue}")
+            console.print(f"  {issue}")
         console.print()
 
 
