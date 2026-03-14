@@ -1134,6 +1134,8 @@ def max_issue_severity(issues: list[str]) -> int:
     Severity is determined by the prefix marker:
     - ``✖`` → critical
     - ``⚠`` → warning
+
+    Issues without a recognised prefix are treated as warnings (safe default).
     """
     if not issues:
         return EXIT_OK

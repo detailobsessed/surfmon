@@ -1905,3 +1905,7 @@ class TestMaxIssueSeverity:
 
     def test_oom_is_critical(self):
         assert max_issue_severity(["\u2716  Out of memory errors detected"]) == EXIT_CRITICAL
+
+    def test_unprefixed_issue_treated_as_warning(self):
+        """Issues without a recognised prefix default to warning (safe fallback)."""
+        assert max_issue_severity(["Some issue without prefix"]) == EXIT_WARNING

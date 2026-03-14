@@ -184,7 +184,8 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 ## Exit Codes
 
 - `0` — No issues detected
-- `1` — Issues detected (see output)
+- `1` — Warnings only (non-critical, e.g. extension errors)
+- `2` — Critical issues present (e.g. orphaned workspaces, OOM, PTY exhaustion)
 - `130` — Interrupted (Ctrl+C)
 
 ## Common Issues
