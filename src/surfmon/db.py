@@ -87,7 +87,15 @@ def _set_schema_version(db: Database, version: int) -> None:
 
 # Migrations: list of callables, each upgrading from (index + 1) to (index + 2).
 # Each callable receives the Database and performs the schema change.
-_MIGRATIONS: list = []
+def _migration_001_add_stale_column(db: Database) -> None:
+    """Add stale column to ls_entries for IDE-state-aware orphan detection."""
+    if "ls_entries" in db.table_names():
+        columns = {col.name for col in db["ls_entries"].columns}
+        if "stale" not in columns:
+            db.execute("ALTER TABLE ls_entries ADD COLUMN stale INTEGER DEFAULT 0")
+
+
+_MIGRATIONS: list = [_migration_001_add_stale_column]
 
 
 def _ensure_schema(db: Database) -> None:
@@ -157,6 +165,7 @@ def _ensure_schema(db: Database) -> None:
                 "runtime_s": float,
                 "workspace": str,
                 "orphaned": int,
+                "stale": int,
             },
             pk="id",
             foreign_keys=[("session_id", "sessions", "id")],
@@ -303,6 +312,7 @@ def store_ls_snapshot(db: Database, snapshot: LsSnapshot, target: str = "") -> s
             "runtime_s": entry.runtime_seconds,
             "workspace": entry.workspace,
             "orphaned": int(entry.orphaned),
+            "stale": int(entry.stale),
         })
 
     for issue_msg in snapshot.issues:

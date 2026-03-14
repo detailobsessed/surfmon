@@ -35,6 +35,7 @@ from .monitor import (
     collect_process_infos,
     format_uptime,
     generate_report,
+    get_active_workspaces,
     is_main_windsurf_process,
     max_issue_severity,
 )
@@ -881,7 +882,8 @@ def ls_snapshot(
             proc_infos = collect_process_infos()
             version = _extract_windsurf_version(proc_infos)
             uptime = _get_windsurf_uptime(proc_infos)
-            snapshot = capture_ls_snapshot(proc_infos, version, uptime)
+            active_workspaces = get_active_workspaces()
+            snapshot = capture_ls_snapshot(proc_infos, version, uptime, active_workspaces)
 
         _store_to_db(store_ls_snapshot, snapshot)
 

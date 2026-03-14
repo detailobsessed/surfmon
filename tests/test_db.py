@@ -103,6 +103,7 @@ def _make_ls_snapshot(timestamp=None, entries=None, issues=None):
         total_ls_count=2,
         total_ls_memory_mb=800.0,
         orphaned_count=0,
+        stale_count=0,
         entries=entries
         or [
             LsSnapshotEntry(
