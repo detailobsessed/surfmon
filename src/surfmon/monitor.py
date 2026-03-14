@@ -1227,7 +1227,9 @@ def generate_report() -> MonitoringReport:
         windsurf_uptime,
         active_workspaces=active_workspaces,
     )
-    log_issues.extend(ls_snapshot.issues)
+    # Only add stale-workspace issues from the snapshot — orphan detection
+    # is already handled by check_log_issues() → check_orphaned_workspaces().
+    log_issues.extend(issue for issue in ls_snapshot.issues if "still running for closed workspace" in issue)
 
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),
