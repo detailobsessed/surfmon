@@ -461,7 +461,10 @@ def _is_stale_workspace(cmdline: str, active_ws_paths: set[str]) -> bool:
 
     Returns True when the workspace exists on disk (not orphaned) but does
     not appear in the set of active Windsurf workspace paths.
+    Returns False when active_ws_paths is empty (cannot determine staleness).
     """
+    if not active_ws_paths:
+        return False
     workspace_id = _extract_workspace_id(cmdline)
     if not workspace_id:
         return False
