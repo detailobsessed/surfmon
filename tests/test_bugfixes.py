@@ -33,6 +33,7 @@ class TestZeroDivisionWithZeroMemory:
         report.active_workspaces = []
         report.windsurf_launches_today = 1
         report.pty_info = None
+        report.ls_snapshot = None
         report.system = MagicMock()
         report.system.total_memory_gb = 0.0
         report.system.available_memory_gb = 0.0

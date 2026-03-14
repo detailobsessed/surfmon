@@ -26,7 +26,6 @@ from .monitor import (
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
     LsSnapshot,
-    LsSnapshotEntry,
     MonitoringReport,
     PtyInfo,
     _extract_windsurf_version,
@@ -48,6 +47,7 @@ from .output import (
     WINDSURF_MEM_PERCENT_WARNING,
     Live,
     Table,
+    _ls_entry_status_rich,
     console,
     display_report,
     make_kv_table,
@@ -257,6 +257,19 @@ def _add_pty_row(table: Table, report: MonitoringReport, prev_report: Monitoring
     )
 
 
+def _add_ls_snapshot_rows(table: Table, report: MonitoringReport) -> None:
+    """Add orphaned/stale sub-rows when ls_snapshot is available."""
+    if report.ls_snapshot is None:
+        return
+    snap = report.ls_snapshot
+    if snap.total_ls_count == 0:
+        return
+    orphan_color = "red" if snap.orphaned_count > 0 else "green"
+    table.add_row("  Orphaned", f"[{orphan_color}]{snap.orphaned_count}[/{orphan_color}]", "")
+    stale_color = "yellow" if snap.stale_count > 0 else "green"
+    table.add_row("  Stale", f"[{stale_color}]{snap.stale_count}[/{stale_color}]", "")
+
+
 def _format_elapsed(seconds: float) -> str:
     """Format elapsed seconds as H:MM:SS or M:SS."""
     total = int(seconds)
@@ -319,6 +332,8 @@ def create_summary_table(
     # Language servers
     ls_change = _format_change(len(report.language_servers) - len(prev_report.language_servers)) if prev_report else ""
     table.add_row("Lang Servers", str(len(report.language_servers)), ls_change)
+
+    _add_ls_snapshot_rows(table, report)
 
     # PTYs
     _add_pty_row(table, report, prev_report)
@@ -801,13 +816,8 @@ def pty_snapshot(
         raise typer.Exit(code=130) from None
 
 
-def _ls_entry_status(entry: LsSnapshotEntry) -> str:
-    """Return a Rich-styled status string for a language server entry."""
-    if entry.orphaned:
-        return "[red]ORPHANED[/red]"
-    if entry.stale:
-        return "[yellow]STALE[/yellow]"
-    return "[green]ok[/green]"
+# Use the canonical Rich status helper from output.py.
+_ls_entry_status = _ls_entry_status_rich
 
 
 def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
