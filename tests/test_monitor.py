@@ -87,6 +87,7 @@ class TestGetWindsurfProcesses:
     def test_finds_windsurf_processes(self, mocker):
         """Should find processes from Windsurf.app and exclude monitoring tool."""
         mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mocker.patch("surfmon.monitor.os.getpid", return_value=3)
         # Setup mocks
         proc1 = Mock()
         proc1.info = {
@@ -96,6 +97,7 @@ class TestGetWindsurfProcesses:
             "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
         }
         proc1.name.return_value = "Windsurf"
+        proc1.pid = 1
 
         proc2 = Mock()
         proc2.info = {
@@ -105,16 +107,18 @@ class TestGetWindsurfProcesses:
             "exe": "/Applications/Windsurf.app/Contents/Frameworks/Electron Framework.framework/Windsurf Helper",
         }
         proc2.name.return_value = "Windsurf Helper"
+        proc2.pid = 2
 
-        # This should be excluded (monitoring tool)
+        # This should be excluded (monitoring tool — same PID as os.getpid())
         proc3 = Mock()
         proc3.info = {
             "pid": 3,
             "name": "python3",
-            "cmdline": ["python", "windsurf-monitor", "check"],
+            "cmdline": ["python", "-m", "surfmon", "check"],
             "exe": "/usr/bin/python3",
         }
         proc3.name.return_value = "python3"
+        proc3.pid = 3
 
         # This should be excluded (unrelated)
         proc4 = Mock()
@@ -125,6 +129,7 @@ class TestGetWindsurfProcesses:
             "exe": "/path/to/chrome",
         }
         proc4.name.return_value = "chrome"
+        proc4.pid = 4
 
         mock_proc_iter.return_value = [proc1, proc2, proc3, proc4]
 
@@ -137,6 +142,37 @@ class TestGetWindsurfProcesses:
         assert proc2 in result
         assert proc3 not in result
         assert proc4 not in result
+
+    def test_does_not_exclude_ls_with_surfmon_in_workspace(self, mocker):
+        """Codeium LS indexing a workspace named 'surfmon' must not be excluded.
+
+        Regression test: the old self-exclusion filter checked for 'surfmon' in
+        the cmdline string, which falsely excluded any LS whose --workspace_id
+        contained the word 'surfmon'.
+        """
+        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mocker.patch("surfmon.monitor.os.getpid", return_value=99999)
+
+        proc_ls = Mock()
+        proc_ls.info = {
+            "pid": 100,
+            "name": "language_server_macos_arm",
+            "cmdline": [
+                "/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm",
+                "--workspace_id",
+                "file_Users_ismar_repos_surfmon_code_workspace",
+            ],
+            "exe": "/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm",
+        }
+        proc_ls.name.return_value = "language_server_macos_arm"
+        proc_ls.pid = 100
+
+        mock_proc_iter.return_value = [proc_ls]
+
+        result = get_windsurf_processes()
+
+        assert len(result) == 1
+        assert proc_ls in result
 
     def test_handles_access_denied(self, mocker):
         """Should handle AccessDenied exceptions."""
@@ -1053,9 +1089,10 @@ class TestPtyLeakIssueDetection:
 class TestSurfmonProcessExclusion:
     """Tests for excluding surfmon from process list."""
 
-    def test_excludes_surfmon_process(self, mocker):
-        """Should exclude surfmon monitoring tool from process list."""
+    def test_excludes_surfmon_process_by_pid(self, mocker):
+        """Should exclude surfmon by PID match, not by cmdline string."""
         mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mocker.patch("surfmon.monitor.os.getpid", return_value=2)
 
         # Windsurf process
         proc1 = Mock()
@@ -1066,16 +1103,19 @@ class TestSurfmonProcessExclusion:
             "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
         }
         proc1.name.return_value = "Windsurf"
+        proc1.pid = 1
 
-        # Surfmon process (should be excluded)
+        # Surfmon process — exe contains Windsurf.app so it would pass the
+        # app-name filter; the PID check must be the reason it's excluded.
         proc2 = Mock()
         proc2.info = {
             "pid": 2,
             "name": "python",
-            "cmdline": ["python", "-m", "surfmon", "check"],
-            "exe": "/usr/bin/python",
+            "cmdline": ["/Applications/Windsurf.app/venv/bin/python", "-m", "surfmon"],
+            "exe": "/Applications/Windsurf.app/venv/bin/python",
         }
         proc2.name.return_value = "python"
+        proc2.pid = 2
 
         mock_proc_iter.return_value = [proc1, proc2]
 
