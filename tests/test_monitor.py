@@ -25,6 +25,7 @@ from surfmon.monitor import (
     _is_orphaned_workspace,
     _is_stale_workspace,
     _parse_lsof_line,
+    _parse_workspace_event,
     _resolve_workspace_path,
     check_log_issues,
     check_pty_leak,
@@ -1247,22 +1248,18 @@ class TestOrphanedWorkspaceDetection:
 
 
 class TestWorkspaceParsingEdgeCases:
-    """Tests for _parse_workspace_from_log_line edge cases."""
+    """Tests for _parse_workspace_event edge cases."""
 
     def test_returns_none_for_unrelated_line(self):
         """Should return None for lines without workspace info."""
-        from surfmon.monitor import _parse_workspace_from_log_line
-
-        result = _parse_workspace_from_log_line("some random log line")
+        result = _parse_workspace_event("some random log line")
 
         assert result is None
 
     def test_returns_none_for_incomplete_match(self):
         """Should return None when id or path can't be extracted."""
-        from surfmon.monitor import _parse_workspace_from_log_line
-
         line = 'Window will load {"workspaceUri": {"incomplete": true}}'
-        result = _parse_workspace_from_log_line(line)
+        result = _parse_workspace_event(line)
 
         assert result is None
 
@@ -2191,3 +2188,121 @@ class TestMaxIssueSeverity:
     def test_unprefixed_issue_treated_as_warning(self):
         """Issues without a recognised prefix default to warning (safe fallback)."""
         assert max_issue_severity(["Some issue without prefix"]) == EXIT_WARNING
+
+
+# ---------------------------------------------------------------------------
+# _parse_workspace_event
+# ---------------------------------------------------------------------------
+
+LOAD_LINE = (
+    "2026-03-13 08:20:06.089 [info] WindsurfWindowsMainManager: Window will load "
+    '{"windowId":1,"workspaceUri":{"id":"abc123","uri":{"$mid":1,'
+    '"fsPath":"/Users/test/my-project","external":"file:///Users/test/my-project",'
+    '"path":"/Users/test/my-project","scheme":"file"}}}'
+)
+
+CLOSE_LINE = (
+    "2026-03-13 15:16:50.366 [info] WindsurfWindowsMainManager: Window will close "
+    '{"windowId":1,"workspaceUri":{"id":"abc123","uri":{"$mid":1,'
+    '"fsPath":"/Users/test/my-project","external":"file:///Users/test/my-project",'
+    '"path":"/Users/test/my-project","scheme":"file"}}}'
+)
+
+
+class TestParseWorkspaceEvent:
+    """Tests for _parse_workspace_event."""
+
+    def test_parse_load_event(self):
+        result = _parse_workspace_event(LOAD_LINE)
+        assert result is not None
+        event_type, ws = result
+        assert event_type == "load"
+        assert ws.id == "abc123"
+        assert ws.path == "/Users/test/my-project"
+
+    def test_parse_close_event(self):
+        result = _parse_workspace_event(CLOSE_LINE)
+        assert result is not None
+        event_type, ws = result
+        assert event_type == "close"
+        assert ws.id == "abc123"
+        assert ws.path == "/Users/test/my-project"
+
+    def test_returns_none_for_unrelated_line(self):
+        assert _parse_workspace_event("[info] Something else happened") is None
+
+    def test_returns_none_without_workspace_uri(self):
+        line = '2026-03-13 08:20:06 [info] WindsurfWindowsMainManager: Window will load {"windowId":1}'
+        assert _parse_workspace_event(line) is None
+
+    def test_returns_none_for_other_workspace_event(self):
+        line = (
+            "2026-03-13 08:20:06 [info] WindsurfWindowsMainManager: Window will focus "
+            '{"windowId":1,"workspaceUri":{"id":"abc","uri":{"fsPath":"/tmp/x"}}}'
+        )
+        assert _parse_workspace_event(line) is None
+
+    def test_extracts_loaded_at_timestamp(self):
+        result = _parse_workspace_event(LOAD_LINE)
+        assert result is not None
+        _, ws = result
+        assert ws.loaded_at == "2026-03-13 08:20:06.089"
+
+
+# ---------------------------------------------------------------------------
+# get_active_workspaces — close event handling
+# ---------------------------------------------------------------------------
+
+
+class TestGetActiveWorkspacesCloseEvents:
+    """Tests for get_active_workspaces close event handling."""
+
+    def test_close_removes_workspace_from_active_set(self, tmp_path, mocker):
+        """A workspace that is loaded then closed should not appear in results."""
+        log_dir = tmp_path / "20260314T120000"
+        log_dir.mkdir()
+        main_log = log_dir / "main.log"
+        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n")
+
+        paths_mock = Mock()
+        paths_mock.logs_dir = tmp_path
+        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+
+        result = get_active_workspaces()
+        assert len(result) == 0
+
+    def test_load_after_close_re_adds_workspace(self, tmp_path, mocker):
+        """A workspace closed then re-loaded should appear in results."""
+        log_dir = tmp_path / "20260314T120000"
+        log_dir.mkdir()
+        main_log = log_dir / "main.log"
+        main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n{LOAD_LINE}\n")
+
+        paths_mock = Mock()
+        paths_mock.logs_dir = tmp_path
+        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+
+        result = get_active_workspaces()
+        assert len(result) == 1
+        assert result[0].id == "abc123"
+
+    def test_only_closed_workspace_removed(self, tmp_path, mocker):
+        """Other workspaces should survive when one is closed."""
+        other_load = (
+            "2026-03-13 08:20:06.089 [info] WindsurfWindowsMainManager: Window will load "
+            '{"windowId":2,"workspaceUri":{"id":"other456","uri":{"$mid":1,'
+            '"fsPath":"/Users/test/other-project","external":"file:///Users/test/other-project",'
+            '"path":"/Users/test/other-project","scheme":"file"}}}'
+        )
+        log_dir = tmp_path / "20260314T120000"
+        log_dir.mkdir()
+        main_log = log_dir / "main.log"
+        main_log.write_text(f"{LOAD_LINE}\n{other_load}\n{CLOSE_LINE}\n")
+
+        paths_mock = Mock()
+        paths_mock.logs_dir = tmp_path
+        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+
+        result = get_active_workspaces()
+        assert len(result) == 1
+        assert result[0].id == "other456"
