@@ -30,6 +30,15 @@ PTY_USAGE_CRITICAL_PERCENT = 80
 LOG_TAIL_BYTES = 50000
 SHARED_LOG_TAIL_BYTES = 30000
 
+# Issue severity markers used in log_issues strings
+ISSUE_CRITICAL_PREFIX = "✖"
+ISSUE_WARNING_PREFIX = "⚠"
+
+# Exit codes for the check command
+EXIT_OK = 0
+EXIT_WARNING = 1
+EXIT_CRITICAL = 2
+
 
 @dataclass
 class ProcessInfo:
@@ -1114,6 +1123,24 @@ def generate_report() -> MonitoringReport:
         windsurf_uptime_seconds=_get_windsurf_uptime(proc_infos),
         pty_info=pty_info,
     )
+
+
+def max_issue_severity(issues: list[str]) -> int:
+    """Determine the highest severity among issue strings.
+
+    Returns EXIT_OK (0) for no issues, EXIT_WARNING (1) for warnings only,
+    or EXIT_CRITICAL (2) if any critical issue is present.
+
+    Severity is determined by the prefix marker:
+    - ``✖`` → critical
+    - ``⚠`` → warning
+    """
+    if not issues:
+        return EXIT_OK
+    for issue in issues:
+        if issue.lstrip().startswith(ISSUE_CRITICAL_PREFIX):
+            return EXIT_CRITICAL
+    return EXIT_WARNING
 
 
 def save_report_json(report: MonitoringReport, output_path: Path) -> None:

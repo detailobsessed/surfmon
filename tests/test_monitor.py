@@ -9,6 +9,9 @@ import pytest
 
 from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
+    EXIT_CRITICAL,
+    EXIT_OK,
+    EXIT_WARNING,
     ProcessInfo,
     PtyFdEntry,
     PtyInfo,
@@ -32,6 +35,7 @@ from surfmon.monitor import (
     get_process_info,
     get_system_info,
     get_windsurf_processes,
+    max_issue_severity,
     save_report_json,
 )
 
@@ -1862,3 +1866,50 @@ class TestCaptureLsSnapshot:
 
         assert snapshot.entries[0].memory_mb == 500.0
         assert snapshot.entries[1].memory_mb == 100.0
+
+
+class TestMaxIssueSeverity:
+    """Tests for max_issue_severity."""
+
+    def test_no_issues_returns_ok(self):
+        assert max_issue_severity([]) == EXIT_OK
+
+    def test_warning_only_returns_warning(self):
+        assert max_issue_severity(["\u26a0  Extension errors: some.ext (3)"]) == EXIT_WARNING
+
+    def test_critical_only_returns_critical(self):
+        assert max_issue_severity(["\u2716  CRITICAL: Orphaned workspace"]) == EXIT_CRITICAL
+
+    def test_mixed_returns_critical(self):
+        issues = [
+            "\u26a0  Extension errors: some.ext (3)",
+            "\u2716  CRITICAL: Orphaned workspace",
+        ]
+        assert max_issue_severity(issues) == EXIT_CRITICAL
+
+    def test_multiple_warnings_returns_warning(self):
+        issues = [
+            "\u26a0  Extension errors: some.ext (3)",
+            "\u26a0  2 orphaned crash handler(s) (oldest: 1.5 days, PIDs: 123)",
+        ]
+        assert max_issue_severity(issues) == EXIT_WARNING
+
+    def test_critical_pty_issue(self):
+        assert max_issue_severity(
+            ["\u2716  CRITICAL: Windsurf processes are holding 250 PTYs"]
+        ) == EXIT_CRITICAL
+
+    def test_warning_pty_issue(self):
+        assert max_issue_severity(
+            ["\u26a0  Windsurf PTY leak detected: 60 PTYs held"]
+        ) == EXIT_WARNING
+
+    def test_extension_host_crash_is_critical(self):
+        assert max_issue_severity(
+            ["\u2716  2 extension host crash(es) - PIDs: 1234, 5678"]
+        ) == EXIT_CRITICAL
+
+    def test_oom_is_critical(self):
+        assert max_issue_severity(
+            ["\u2716  Out of memory errors detected"]
+        ) == EXIT_CRITICAL
