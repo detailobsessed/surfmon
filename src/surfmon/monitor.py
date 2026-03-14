@@ -421,6 +421,11 @@ def _extract_workspace_id(cmdline: str) -> str | None:
 def _format_workspace_short(workspace_id: str) -> str:
     """Resolve a workspace_id and format it as a short display path."""
     resolved = _resolve_workspace_path(workspace_id)
+    return _format_workspace_display(workspace_id, resolved)
+
+
+def _format_workspace_display(workspace_id: str, resolved: Path | None) -> str:
+    """Format a workspace_id as a short display path using a pre-resolved path."""
     if resolved is not None:
         parts = resolved.parts
         return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else str(resolved)
@@ -491,9 +496,19 @@ def capture_ls_snapshot(
         # Use original cmdline for detection (before enhancement)
         original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
         language = _detect_language(original_proc.cmdline)
-        workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
-        orphaned = _is_orphaned_workspace(original_proc.cmdline)
-        stale = not orphaned and bool(active_ws_paths) and _is_stale_workspace(original_proc.cmdline, active_ws_paths)
+
+        # Resolve workspace path once — avoids redundant filesystem walks
+        # for display formatting, orphan detection, and stale detection.
+        workspace_id = _extract_workspace_id(original_proc.cmdline)
+        resolved_path = _resolve_workspace_path(workspace_id) if workspace_id else None
+
+        if workspace_id:
+            workspace = _format_workspace_display(workspace_id, resolved_path)
+        else:
+            workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
+
+        orphaned = workspace_id is not None and resolved_path is None
+        stale = not orphaned and bool(active_ws_paths) and resolved_path is not None and str(resolved_path) not in active_ws_paths
 
         entry = LsSnapshotEntry(
             pid=ls.pid,
