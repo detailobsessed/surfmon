@@ -215,7 +215,7 @@ class TestAnalyzeCommand:
         """Mock query_analyze_sessions with sample session dicts."""
         from datetime import timedelta
 
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         return mocker.patch(
             "surfmon.cli.query_analyze_sessions",
@@ -251,7 +251,7 @@ class TestAnalyzeCommand:
 
     def test_analyze_empty_db(self, mocker):
         """Should exit gracefully when no sessions in DB."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
         result = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
@@ -259,11 +259,27 @@ class TestAnalyzeCommand:
 
     def test_analyze_invalid_since(self, mocker):
         """Should exit with error on invalid --since value."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("Invalid duration 'xyz'"))
         result = runner.invoke(app, ["analyze", "--since", "xyz"])
         assert result.exit_code == 1
         assert "Invalid duration" in result.stdout
+
+    def test_analyze_closes_db(self, mocker):
+        """Should use open_db context manager to ensure DB is closed."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
+        runner.invoke(app, ["analyze"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
+
+    def test_analyze_closes_db_on_error(self, mocker):
+        """Should use open_db context manager even when query raises."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("bad"))
+        runner.invoke(app, ["analyze", "--since", "xyz"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
 
     @pytest.mark.usefixtures("_mock_sessions")
     def test_analyze_with_plot_flag(self):
@@ -534,7 +550,7 @@ class TestAnalyzeCommandEdgeCases:
         """Helper: patch query_analyze_sessions with per-session override dicts."""
         from datetime import timedelta
 
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         sessions = [
             {
@@ -881,7 +897,7 @@ class TestHistoryCommand:
 
     def test_history_empty(self, mocker):
         """Should handle empty database gracefully."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
         result = runner.invoke(app, ["history"])
         assert result.exit_code == 0
@@ -889,7 +905,7 @@ class TestHistoryCommand:
 
     def test_history_with_data(self, mocker):
         """Should display sessions table."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_history_dicts",
             return_value=[
@@ -917,14 +933,14 @@ class TestHistoryCommand:
 
     def test_history_with_command_filter(self, mocker):
         """Should pass command filter to query."""
-        mock_db = mocker.patch("surfmon.cli.get_db")
+        mock_open = mocker.patch("surfmon.cli.open_db")
         mock_query = mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
         runner.invoke(app, ["history", "--command", "check"])
-        mock_query.assert_called_once_with(mock_db.return_value, command="check", limit=20, since=None)
+        mock_query.assert_called_once_with(mock_open.return_value.__enter__.return_value, command="check", limit=20, since=None)
 
     def test_history_with_issues(self, mocker):
         """Should show issue count with styling."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_history_dicts",
             return_value=[
@@ -951,7 +967,7 @@ class TestHistoryCommand:
 
     def test_history_json_with_data(self, mocker):
         """Should output JSON array when --json is passed."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_history_dicts",
             return_value=[
@@ -982,7 +998,7 @@ class TestHistoryCommand:
 
     def test_history_json_empty(self, mocker):
         """Should output empty JSON array when no data."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
         result = runner.invoke(app, ["history", "--json"])
         assert result.exit_code == 0
@@ -990,7 +1006,7 @@ class TestHistoryCommand:
 
     def test_history_json_error(self, mocker):
         """Should output JSON error object when ValueError is raised in --json mode."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("Invalid duration format: 'xyz'"))
         result = runner.invoke(app, ["history", "--json", "--since", "xyz"])
         assert result.exit_code == 1
@@ -998,13 +1014,29 @@ class TestHistoryCommand:
         assert "error" in data
         assert "Invalid duration format" in data["error"]
 
+    def test_history_closes_db(self, mocker):
+        """Should use open_db context manager to ensure DB is closed."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        runner.invoke(app, ["history"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
+
+    def test_history_closes_db_on_error(self, mocker):
+        """Should use open_db context manager even when query raises."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("bad"))
+        runner.invoke(app, ["history"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
+
 
 class TestTrendCommand:
     """Tests for the trend command."""
 
     def test_trend_empty(self, mocker):
         """Should handle empty data gracefully."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_trend", return_value=[])
         result = runner.invoke(app, ["trend", "memory"])
         assert result.exit_code == 0
@@ -1012,7 +1044,7 @@ class TestTrendCommand:
 
     def test_trend_with_data(self, mocker):
         """Should display trend table and summary."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_trend",
             return_value=[
@@ -1028,14 +1060,14 @@ class TestTrendCommand:
 
     def test_trend_invalid_metric(self, mocker):
         """Should show error for invalid metric."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric 'invalid'"))
         result = runner.invoke(app, ["trend", "invalid"])
         assert result.exit_code == 1
 
     def test_trend_processes_metric(self, mocker):
         """Should format integer values for process count."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_trend",
             return_value=[
@@ -1047,7 +1079,7 @@ class TestTrendCommand:
 
     def test_trend_single_datapoint(self, mocker):
         """Should not show change with only one data point."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_trend",
             return_value=[
@@ -1059,7 +1091,7 @@ class TestTrendCommand:
 
     def test_trend_json_with_data(self, mocker):
         """Should output JSON array when --json is passed."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch(
             "surfmon.cli.query_trend",
             return_value=[
@@ -1075,7 +1107,7 @@ class TestTrendCommand:
 
     def test_trend_json_empty(self, mocker):
         """Should output empty JSON array when no data."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_trend", return_value=[])
         result = runner.invoke(app, ["trend", "memory", "--json"])
         assert result.exit_code == 0
@@ -1083,13 +1115,29 @@ class TestTrendCommand:
 
     def test_trend_json_error(self, mocker):
         """Should output JSON error object when ValueError is raised in --json mode."""
-        mocker.patch("surfmon.cli.get_db")
+        mocker.patch("surfmon.cli.open_db")
         mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric: 'bogus'"))
         result = runner.invoke(app, ["trend", "bogus", "--json"])
         assert result.exit_code == 1
         data = json.loads(result.output)
         assert "error" in data
         assert "Unknown metric" in data["error"]
+
+    def test_trend_closes_db(self, mocker):
+        """Should use open_db context manager to ensure DB is closed."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        runner.invoke(app, ["trend", "memory"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
+
+    def test_trend_closes_db_on_error(self, mocker):
+        """Should use open_db context manager even when query raises."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
+        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("bad"))
+        runner.invoke(app, ["trend", "invalid"])
+        mock_open.return_value.__enter__.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
 
 
 class TestTrendHelpers:
@@ -1121,25 +1169,25 @@ class TestStoreToDbHelper:
     """Tests for the _store_to_db helper."""
 
     def test_store_to_db_success(self, mocker):
-        """Should call store function with db and target, then close the connection."""
-        mock_db = mocker.patch("surfmon.cli.get_db")
+        """Should call store function with db and target via open_db context manager."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
         mock_fn = MagicMock()
 
         _store_to_db(mock_fn, "arg1")
-        mock_fn.assert_called_once_with(mock_db.return_value, "arg1", target="stable")
-        mock_db.return_value.close.assert_called_once()
+        mock_fn.assert_called_once_with(mock_open.return_value.__enter__.return_value, "arg1", target="stable")
+        mock_open.return_value.__exit__.assert_called_once()
 
     def test_store_to_db_closes_on_store_error(self, mocker):
-        """Should close the DB connection even when the store function raises."""
-        mock_db = mocker.patch("surfmon.cli.get_db")
+        """Should exit open_db context manager even when the store function raises."""
+        mock_open = mocker.patch("surfmon.cli.open_db")
         mock_fn = MagicMock(side_effect=RuntimeError("insert failed"))
 
         _store_to_db(mock_fn, "arg1")
-        mock_db.return_value.close.assert_called_once()
+        mock_open.return_value.__exit__.assert_called_once()
 
     def test_store_to_db_failure(self, mocker):
-        """Should not raise when get_db itself fails."""
-        mocker.patch("surfmon.cli.get_db", side_effect=OSError("disk full"))
+        """Should not raise when open_db itself fails."""
+        mocker.patch("surfmon.cli.open_db", side_effect=OSError("disk full"))
         _store_to_db(MagicMock(), "arg1")
 
     def test_get_target_str_no_target(self, mocker):

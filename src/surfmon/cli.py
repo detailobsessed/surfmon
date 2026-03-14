@@ -16,7 +16,7 @@ import typer
 
 from . import __version__
 from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, get_target_display_name, set_target
-from .db import get_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
+from .db import open_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
 
 if TYPE_CHECKING:
     from sqlite_utils import Database
@@ -164,11 +164,8 @@ class _StoreFn[T](Protocol):
 def _store_to_db[T](store_fn: _StoreFn[T], data: T) -> None:
     """Best-effort DB write — log warning on failure, never crash."""
     try:
-        db = get_db()
-        try:
+        with open_db() as db:
             store_fn(db, data, target=_get_target_str())
-        finally:
-            db.close()
     except Exception as exc:
         print(f"DB write skipped: {exc}", file=sys.stderr)
 
@@ -446,15 +443,15 @@ def history(
     Displays a table of past surfmon invocations with key metrics like
     memory usage, process counts, and issue counts.
     """
-    db = get_db()
-    try:
-        rows = query_history_dicts(db, command=command_filter, limit=limit, since=since)
-    except ValueError as exc:
-        if json_output:
-            _print_json({"error": str(exc)})
+    with open_db() as db:
+        try:
+            rows = query_history_dicts(db, command=command_filter, limit=limit, since=since)
+        except ValueError as exc:
+            if json_output:
+                _print_json({"error": str(exc)})
+                raise typer.Exit(code=1) from exc
+            console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=1) from exc
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
 
     if not rows:
         if json_output:
@@ -516,15 +513,15 @@ def trend(
     Supported metrics: memory, processes, pty, ls-memory, ls-count.
     Use --plot to generate a visual chart.
     """
-    db = get_db()
-    try:
-        data = query_trend(db, metric=metric, since=since)
-    except ValueError as exc:
-        if json_output:
-            _print_json({"error": str(exc)})
+    with open_db() as db:
+        try:
+            data = query_trend(db, metric=metric, since=since)
+        except ValueError as exc:
+            if json_output:
+                _print_json({"error": str(exc)})
+                raise typer.Exit(code=1) from exc
+            console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=1) from exc
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
 
     if not data:
         if json_output:
@@ -1232,12 +1229,12 @@ def analyze(
     Reads from the surfmon database. Use --since to control the time window.
     Detects: memory leaks, process count changes, performance degradation.
     """
-    db = get_db()
-    try:
-        reports = query_analyze_sessions(db, since=since)
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+    with open_db() as db:
+        try:
+            reports = query_analyze_sessions(db, since=since)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
 
     if not reports:
         console.print(f"[yellow]No check sessions found in the last {since}.[/yellow]")
