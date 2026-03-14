@@ -23,6 +23,7 @@ from surfmon.monitor import (
     _get_windsurf_uptime,
     _group_entries_by_pid,
     _is_orphaned_workspace,
+    _is_stale_workspace,
     _parse_lsof_line,
     _resolve_workspace_path,
     check_log_issues,
@@ -1959,6 +1960,194 @@ class TestCaptureLsSnapshot:
 
         assert snapshot.entries[0].memory_mb == 500.0
         assert snapshot.entries[1].memory_mb == 100.0
+
+
+class TestIsStaleWorkspace:
+    """Tests for _is_stale_workspace helper."""
+
+    def test_stale_when_path_exists_but_not_in_active_set(self, mocker):
+        """Should return True when workspace exists on disk but isn't active."""
+        mocker.patch(
+            "surfmon.monitor._resolve_workspace_path",
+            return_value=Path("/Users/test/my-project"),
+        )
+        cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
+
+        active_paths: set[str] = {"/some/other/workspace"}
+        assert _is_stale_workspace(cmdline, active_paths) is True
+
+    def test_not_stale_when_path_in_active_set(self, mocker):
+        """Should return False when workspace is in the active set."""
+        mocker.patch(
+            "surfmon.monitor._resolve_workspace_path",
+            return_value=Path("/Users/test/my-project"),
+        )
+        cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
+
+        active_paths: set[str] = {str(Path("/Users/test/my-project"))}
+        assert _is_stale_workspace(cmdline, active_paths) is False
+
+    def test_not_stale_when_no_workspace_id(self):
+        """Should return False for processes without --workspace_id."""
+        cmdline = "node pyright --stdio"
+        active_paths: set[str] = {"/some/workspace"}
+        assert _is_stale_workspace(cmdline, active_paths) is False
+
+    def test_not_stale_when_path_does_not_exist(self):
+        """Should return False when workspace doesn't exist (orphan, not stale)."""
+        cmdline = "language_server_macos_arm --workspace_id file_Users_nobody_nonexistent"
+        active_paths: set[str] = {"/some/workspace"}
+        assert _is_stale_workspace(cmdline, active_paths) is False
+
+
+class TestCaptureLsSnapshotStaleDetection:
+    """Tests for stale LS detection in capture_ls_snapshot."""
+
+    def test_detects_stale_workspace(self, mocker):
+        """Should detect LS for workspace that exists but isn't open in IDE."""
+        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+
+        mocker.patch(
+            "surfmon.monitor._resolve_workspace_path",
+            return_value=Path("/Users/test/my-project"),
+        )
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+            ),
+        ]
+
+        active_workspaces = [
+            WorkspaceInfo(id="ws1", path="/some/other/workspace", exists=True),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces)
+
+        assert snapshot.stale_count == 1
+        assert snapshot.orphaned_count == 0
+        assert len(snapshot.issues) == 1
+        assert "closed workspace" in snapshot.issues[0]
+        assert snapshot.entries[0].stale is True
+        assert snapshot.entries[0].orphaned is False
+
+    def test_not_stale_when_workspace_active(self, mocker):
+        """Should not flag LS as stale when workspace is in active set."""
+        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+
+        mocker.patch(
+            "surfmon.monitor._resolve_workspace_path",
+            return_value=Path("/Users/test/my-project"),
+        )
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+            ),
+        ]
+
+        active_workspaces = [
+            WorkspaceInfo(id="ws1", path=str(Path("/Users/test/my-project")), exists=True),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces)
+
+        assert snapshot.stale_count == 0
+        assert snapshot.orphaned_count == 0
+        assert len(snapshot.issues) == 0
+        assert snapshot.entries[0].stale is False
+
+    def test_no_stale_detection_without_active_workspaces(self):
+        """Should skip stale detection when active_workspaces is None."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_nobody_nonexistent_project --database_dir /tmp/db",
+            ),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.stale_count == 0
+        assert snapshot.entries[0].stale is False
+
+    def test_orphaned_takes_priority_over_stale(self):
+        """Should flag as orphaned, not stale, when workspace doesn't exist."""
+        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_nobody_nonexistent_project --database_dir /tmp/db",
+            ),
+        ]
+
+        active_workspaces = [
+            WorkspaceInfo(id="ws1", path="/some/active/workspace", exists=True),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces)
+
+        assert snapshot.orphaned_count == 1
+        assert snapshot.stale_count == 0
+        assert snapshot.entries[0].orphaned is True
+        assert snapshot.entries[0].stale is False
+        assert "CRITICAL" in snapshot.issues[0]
+
+    def test_no_stale_detection_with_empty_active_workspaces(self, mocker):
+        """Should skip stale detection when active_workspaces list is empty."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        mocker.patch(
+            "surfmon.monitor._resolve_workspace_path",
+            return_value=Path("/Users/test/my-project"),
+        )
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                "language_server_macos_arm",
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+            ),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces=[])
+
+        assert snapshot.stale_count == 0
+        assert snapshot.entries[0].stale is False
 
 
 class TestMaxIssueSeverity:

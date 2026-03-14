@@ -26,6 +26,7 @@ from .monitor import (
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
     LsSnapshot,
+    LsSnapshotEntry,
     MonitoringReport,
     PtyInfo,
     _extract_windsurf_version,
@@ -35,6 +36,7 @@ from .monitor import (
     collect_process_infos,
     format_uptime,
     generate_report,
+    get_active_workspaces,
     is_main_windsurf_process,
     max_issue_severity,
 )
@@ -799,6 +801,15 @@ def pty_snapshot(
         raise typer.Exit(code=130) from None
 
 
+def _ls_entry_status(entry: LsSnapshotEntry) -> str:
+    """Return a Rich-styled status string for a language server entry."""
+    if entry.orphaned:
+        return "[red]ORPHANED[/red]"
+    if entry.stale:
+        return "[yellow]STALE[/yellow]"
+    return "[green]ok[/green]"
+
+
 def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     """Display a language server forensic snapshot to the console."""
     # Summary table
@@ -813,6 +824,8 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
     summary.add_row("Total LS Memory", f"[{mem_color}]{snapshot.total_ls_memory_mb:.1f} MB[/{mem_color}]")
     orphan_color = "red" if snapshot.orphaned_count > 0 else "green"
     summary.add_row("Orphaned", f"[{orphan_color}]{snapshot.orphaned_count}[/{orphan_color}]")
+    stale_color = "yellow" if snapshot.stale_count > 0 else "green"
+    summary.add_row("Stale", f"[{stale_color}]{snapshot.stale_count}[/{stale_color}]")
     if snapshot.windsurf_version:
         summary.add_row("Windsurf Version", snapshot.windsurf_version)
     if snapshot.windsurf_uptime_seconds > 0:
@@ -834,7 +847,7 @@ def _display_ls_snapshot(snapshot: LsSnapshot) -> None:
 
         for entry in snapshot.entries:
             runtime = format_uptime(entry.runtime_seconds)
-            status = "[red]ORPHANED[/red]" if entry.orphaned else "[green]ok[/green]"
+            status = _ls_entry_status(entry)
             if entry.memory_mb > LS_PROC_MEM_CRITICAL_MB:
                 mem_style = "red"
             elif entry.memory_mb > LS_PROC_MEM_WARNING_MB:
@@ -881,7 +894,8 @@ def ls_snapshot(
             proc_infos = collect_process_infos()
             version = _extract_windsurf_version(proc_infos)
             uptime = _get_windsurf_uptime(proc_infos)
-            snapshot = capture_ls_snapshot(proc_infos, version, uptime)
+            active_workspaces = get_active_workspaces()
+            snapshot = capture_ls_snapshot(proc_infos, version, uptime, active_workspaces)
 
         _store_to_db(store_ls_snapshot, snapshot)
 

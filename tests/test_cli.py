@@ -834,6 +834,7 @@ class TestLsSnapshotCommand:
             total_ls_count=2,
             total_ls_memory_mb=450.0,
             orphaned_count=0,
+            stale_count=0,
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
@@ -897,6 +898,7 @@ class TestLsSnapshotCommand:
             total_ls_count=1,
             total_ls_memory_mb=300.0,
             orphaned_count=1,
+            stale_count=0,
             entries=[],
             issues=["✖  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
         )
@@ -919,6 +921,7 @@ class TestLsSnapshotCommand:
             total_ls_count=1,
             total_ls_memory_mb=300.0,
             orphaned_count=0,
+            stale_count=0,
             entries=[],
             issues=["⚠  High memory usage detected"],
         )
@@ -945,6 +948,7 @@ class TestLsSnapshotDisplay:
             total_ls_count=1,
             total_ls_memory_mb=2000.0,
             orphaned_count=1,
+            stale_count=0,
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
@@ -982,6 +986,7 @@ class TestLsSnapshotDisplay:
             total_ls_count=1,
             total_ls_memory_mb=600.0,
             orphaned_count=0,
+            stale_count=0,
             entries=[
                 LsSnapshotEntry(
                     pid=3000,

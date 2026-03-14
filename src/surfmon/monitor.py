@@ -129,6 +129,7 @@ class LsSnapshotEntry:
     runtime_seconds: float
     workspace: str
     orphaned: bool
+    stale: bool = False
 
 
 @dataclass
@@ -141,6 +142,7 @@ class LsSnapshot:
     total_ls_count: int
     total_ls_memory_mb: float
     orphaned_count: int
+    stale_count: int
     entries: list[LsSnapshotEntry]
     issues: list[str]
 
@@ -419,6 +421,11 @@ def _extract_workspace_id(cmdline: str) -> str | None:
 def _format_workspace_short(workspace_id: str) -> str:
     """Resolve a workspace_id and format it as a short display path."""
     resolved = _resolve_workspace_path(workspace_id)
+    return _format_workspace_display(workspace_id, resolved)
+
+
+def _format_workspace_display(workspace_id: str, resolved: Path | None) -> str:
+    """Format a workspace_id as a short display path using a pre-resolved path."""
     if resolved is not None:
         parts = resolved.parts
         return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else str(resolved)
@@ -449,25 +456,62 @@ def _is_orphaned_workspace(cmdline: str) -> bool:
     return _resolve_workspace_path(workspace_id) is None
 
 
-def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, windsurf_uptime: float) -> LsSnapshot:
+def _is_stale_workspace(cmdline: str, active_ws_paths: set[str]) -> bool:
+    """Check if a language server is for a workspace not currently open in the IDE.
+
+    Returns True when the workspace exists on disk (not orphaned) but does
+    not appear in the set of active Windsurf workspace paths.
+    Returns False when active_ws_paths is empty (cannot determine staleness).
+    """
+    if not active_ws_paths:
+        return False
+    workspace_id = _extract_workspace_id(cmdline)
+    if not workspace_id:
+        return False
+    resolved = _resolve_workspace_path(workspace_id)
+    if resolved is None:
+        return False
+    return str(resolved) not in active_ws_paths
+
+
+def capture_ls_snapshot(
+    proc_infos: list[ProcessInfo],
+    windsurf_version: str,
+    windsurf_uptime: float,
+    active_workspaces: list[WorkspaceInfo] | None = None,
+) -> LsSnapshot:
     """Capture a forensic snapshot of all language server processes.
 
     Returns structured data about every language server: memory, CPU,
-    workspace mapping, and whether it's orphaned (indexing deleted workspace).
+    workspace mapping, orphaned status (indexing deleted workspace), and
+    stale status (workspace exists but not open in the IDE).
     """
     lang_servers = find_language_servers(proc_infos)
+    active_ws_paths = {ws.path for ws in active_workspaces} if active_workspaces else set()
 
     entries = []
     issues = []
     total_memory = 0.0
     orphaned_count = 0
+    stale_count = 0
 
     for ls in lang_servers:
         # Use original cmdline for detection (before enhancement)
         original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
         language = _detect_language(original_proc.cmdline)
-        workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
-        orphaned = _is_orphaned_workspace(original_proc.cmdline)
+
+        # Resolve workspace path once — avoids redundant filesystem walks
+        # for display formatting, orphan detection, and stale detection.
+        workspace_id = _extract_workspace_id(original_proc.cmdline)
+        resolved_path = _resolve_workspace_path(workspace_id) if workspace_id else None
+
+        if workspace_id:
+            workspace = _format_workspace_display(workspace_id, resolved_path)
+        else:
+            workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
+
+        orphaned = workspace_id is not None and resolved_path is None
+        stale = not orphaned and bool(active_ws_paths) and resolved_path is not None and str(resolved_path) not in active_ws_paths
 
         entry = LsSnapshotEntry(
             pid=ls.pid,
@@ -480,6 +524,7 @@ def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, wi
             runtime_seconds=ls.runtime_seconds,
             workspace=workspace,
             orphaned=orphaned,
+            stale=stale,
         )
         entries.append(entry)
         total_memory += ls.memory_mb
@@ -488,6 +533,12 @@ def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, wi
             orphaned_count += 1
             issues.append(
                 f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
+                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+            )
+        elif stale:
+            stale_count += 1
+            issues.append(
+                f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
                 f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
             )
 
@@ -501,6 +552,7 @@ def capture_ls_snapshot(proc_infos: list[ProcessInfo], windsurf_version: str, wi
         total_ls_count=len(entries),
         total_ls_memory_mb=total_memory,
         orphaned_count=orphaned_count,
+        stale_count=stale_count,
         entries=entries,
         issues=issues,
     )
