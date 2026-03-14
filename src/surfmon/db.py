@@ -7,6 +7,7 @@ enabling trending, cross-session analysis, and advanced reporting.
 
 import json
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +18,8 @@ from sqlite_utils.db import NotFoundError, Table
 from . import __version__
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from .monitor import LsSnapshot, MonitoringReport, PtyInfo
 
 DB_DIR = Path.home() / ".surfmon"
@@ -47,6 +50,16 @@ def get_db(db_path: Path | None = None) -> Database:
     db = Database(path)
     _ensure_schema(db)
     return db
+
+
+@contextmanager
+def open_db(db_path: Path | None = None) -> Iterator[Database]:
+    """Context manager that opens the surfmon DB and guarantees close on exit."""
+    db = get_db(db_path)
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def _get_schema_version(db: Database) -> int:

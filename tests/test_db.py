@@ -15,6 +15,7 @@ from surfmon.db import (
     _parse_since,
     _set_schema_version,
     get_db,
+    open_db,
     query_analyze_sessions,
     query_history,
     query_history_dicts,
@@ -637,3 +638,22 @@ class TestQueryAnalyzeSessions:
         store_check(db, report)
         sessions = query_analyze_sessions(db)
         assert sessions == []
+
+
+class TestOpenDb:
+    """Tests for the open_db context manager."""
+
+    def test_closes_db_on_exit(self, tmp_path):
+        """Should close the database connection when exiting the context."""
+        with open_db(tmp_path / "test.db") as db:
+            db.execute("SELECT 1")  # connection works inside context
+        with pytest.raises(Exception, match="closed"):
+            db.execute("SELECT 1")  # connection closed after context
+
+    def test_closes_db_on_exception(self, tmp_path):
+        """Should close the database connection even when an exception is raised."""
+        msg = "boom"
+        with pytest.raises(RuntimeError, match=msg), open_db(tmp_path / "test.db") as db:
+            raise RuntimeError(msg)
+        with pytest.raises(Exception, match="closed"):
+            db.execute("SELECT 1")
