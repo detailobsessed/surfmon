@@ -29,6 +29,7 @@ def mock_generate_report(mocker):
     mock_report.mcp_servers_enabled = []
     mock_report.windsurf_processes = []
     mock_report.pty_info = None
+    mock_report.ls_snapshot = None
     return mocker.patch("surfmon.cli.generate_report", return_value=mock_report)
 
 
@@ -434,6 +435,7 @@ class TestCreateSummaryTable:
         prev_report.total_windsurf_memory_mb = 800.0
         prev_report.total_windsurf_cpu_percent = 8.0
         prev_report.pty_info = None
+        prev_report.ls_snapshot = None
 
         table = create_summary_table(report, prev_report)
         assert table is not None
@@ -503,6 +505,7 @@ class TestCreateSummaryTableChanges:
         prev_report.total_windsurf_cpu_percent = 10.0
         prev_report.language_servers = []
         prev_report.pty_info = None
+        prev_report.ls_snapshot = None
 
         table = create_summary_table(report, prev_report)
         assert table is not None
@@ -523,6 +526,7 @@ class TestCreateSummaryTableChanges:
         prev_report.total_windsurf_cpu_percent = 25.0
         prev_report.language_servers = [MagicMock(), MagicMock()]
         prev_report.pty_info = None
+        prev_report.ls_snapshot = None
 
         table = create_summary_table(report, prev_report)
         assert table is not None
@@ -544,6 +548,7 @@ class TestCreateSummaryTableChanges:
         prev_report.language_servers = []
         prev_report.pty_info = MagicMock()
         prev_report.pty_info.windsurf_pty_count = 50
+        prev_report.ls_snapshot = None
 
         table = create_summary_table(report, prev_report)
         assert table is not None

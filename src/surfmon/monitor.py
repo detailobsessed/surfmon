@@ -166,6 +166,7 @@ class MonitoringReport:
     windsurf_version: str = ""
     windsurf_uptime_seconds: float = 0.0
     pty_info: PtyInfo | None = None
+    ls_snapshot: LsSnapshot | None = None
 
 
 def is_main_windsurf_process(name: str, exe: str, app_name: str) -> bool:
@@ -1216,6 +1217,17 @@ def generate_report() -> MonitoringReport:
     log_issues.extend(pty_info.issues)
 
     language_servers = find_language_servers(proc_infos)
+    active_workspaces = get_active_workspaces()
+    windsurf_version = _extract_windsurf_version(proc_infos)
+    windsurf_uptime = _get_windsurf_uptime(proc_infos)
+
+    ls_snapshot = capture_ls_snapshot(
+        proc_infos,
+        windsurf_version,
+        windsurf_uptime,
+        active_workspaces=active_workspaces,
+    )
+    log_issues.extend(ls_snapshot.issues)
 
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),
@@ -1228,11 +1240,12 @@ def generate_report() -> MonitoringReport:
         mcp_servers_enabled=get_mcp_config(),
         extensions_count=count_extensions(),
         log_issues=log_issues,
-        active_workspaces=get_active_workspaces(),
+        active_workspaces=active_workspaces,
         windsurf_launches_today=count_windsurf_launches_today(),
-        windsurf_version=_extract_windsurf_version(proc_infos),
-        windsurf_uptime_seconds=_get_windsurf_uptime(proc_infos),
+        windsurf_version=windsurf_version,
+        windsurf_uptime_seconds=windsurf_uptime,
         pty_info=pty_info,
+        ls_snapshot=ls_snapshot,
     )
 
 
