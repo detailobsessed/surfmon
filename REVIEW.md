@@ -38,7 +38,7 @@ uv run pytest --testmon      # run only tests affected by changes
 PRs run these jobs (all must pass via the `ci-pass` gate):
 
 | Job | What it does |
-|-----|-------------|
+| --- | --- |
 | **changes** | Path filter — skips quality/tests if only non-source files changed |
 | **links** | Lychee link checker on all markdown/HTML |
 | **prek** | Full pre-commit suite (ruff, ruff-format, ty, gitleaks, shellcheck, actionlint, typos, markdownlint, ast-grep) |
