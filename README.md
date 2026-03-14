@@ -183,6 +183,8 @@ The `--target` flag is required for `check`, `watch`, and `cleanup`. Commands th
 
 ## Exit Codes
 
+These apply to the `check` and `ls-snapshot` commands:
+
 - `0` — No issues detected
 - `1` — Warnings only (non-critical, e.g. extension errors)
 - `2` — Critical issues present (e.g. orphaned workspaces, OOM, PTY exhaustion)
