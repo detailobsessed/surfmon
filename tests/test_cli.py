@@ -931,7 +931,7 @@ class TestLsSnapshotCommand:
             stale_count=0,
             entries=[],
             orphan_issues=[],
-            stale_issues=["\u26a0  High memory usage detected"],
+            stale_issues=["\u26a0  language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"],
         )
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")

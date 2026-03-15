@@ -146,11 +146,10 @@ class LsSnapshot:
     entries: list[LsSnapshotEntry]
     orphan_issues: list[str]
     stale_issues: list[str]
+    issues: list[str] = field(init=False)
 
-    @property
-    def issues(self) -> list[str]:
-        """All issues combined (orphan + stale)."""
-        return self.orphan_issues + self.stale_issues
+    def __post_init__(self) -> None:
+        self.issues = self.orphan_issues + self.stale_issues
 
 
 @dataclass
@@ -481,6 +480,26 @@ def _is_stale_workspace(cmdline: str, active_ws_paths: set[str]) -> bool:
     return str(resolved) not in active_ws_paths
 
 
+def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> str:
+    """Build a detailed orphan-workspace issue string.
+
+    Includes database directory size and cleanup command when the
+    ``--database_dir`` flag is present in the process command line.
+    """
+    msg = (
+        f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
+        f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+    )
+    db_match = re.search(r"--database_dir\s+(\S+)", cmdline)
+    if db_match:
+        db_path = Path(db_match.group(1))
+        db_size_mb = 0
+        if db_path.exists():
+            db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
+        msg += f", {db_size_mb:.0f} MB disk) - Fix: Close Windsurf, run: rm -rf {db_path}"
+    return msg
+
+
 def capture_ls_snapshot(
     proc_infos: list[ProcessInfo],
     windsurf_version: str,
@@ -537,8 +556,7 @@ def capture_ls_snapshot(
 
         if orphaned:
             orphan_issues.append(
-                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
-                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+                _format_orphan_issue(ls, workspace, original_proc.cmdline)
             )
         elif stale:
             stale_issues.append(
