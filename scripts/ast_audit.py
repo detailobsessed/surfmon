@@ -28,10 +28,20 @@ MIN_DUP_STRING_LEN = 10
 MIN_DUP_STRING_COUNT = 3
 
 
+def _is_elif(parent: ast.AST, child: ast.AST) -> bool:
+    """Return True if child is an elif branch (sole If in parent's orelse)."""
+    if not isinstance(parent, ast.If) or not isinstance(child, ast.If):
+        return False
+    return parent.orelse == [child]
+
+
 def _max_depth(node: ast.AST, current: int = 0) -> int:
     children_depths = []
     for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.If | ast.For | ast.While | ast.With | ast.Try | ast.ExceptHandler):
+        if _is_elif(node, child):
+            # elif is flat, not nested — keep same depth
+            children_depths.append(_max_depth(child, current))
+        elif isinstance(child, ast.If | ast.For | ast.While | ast.With | ast.Try | ast.ExceptHandler):
             children_depths.append(_max_depth(child, current + 1))
         else:
             children_depths.append(_max_depth(child, current))
