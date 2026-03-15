@@ -261,37 +261,39 @@ def get_system_info() -> SystemInfo:
     )
 
 
+_LS_KEYWORD_LABELS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("gopls",), "Go Language Server"),
+    (("pyright", "pylance"), "Python Language Server"),
+    (("rust-analyzer",), "Rust Language Server"),
+)
+
+
 def _enhance_language_server_cmdline(p: ProcessInfo) -> str | None:
     """Build an enhanced cmdline description for a language server process."""
     cmdline = p.cmdline
     cmdline_lower = cmdline.lower()
-    enhanced = None
 
     # Extract workspace ID for Codeium language server
     workspace_id = _extract_workspace_id(cmdline)
     if workspace_id:
-        workspace_short = _format_workspace_short(workspace_id)
-        enhanced = f"{p.name} [workspace: {workspace_short}]"
+        return f"{p.name} [workspace: {_format_workspace_short(workspace_id)}]"
 
     # Extract language for JDT LS
-    elif "jdtls" in cmdline_lower or "eclipse.jdt" in cmdline_lower:
+    if "jdtls" in cmdline_lower or "eclipse.jdt" in cmdline_lower:
         data_match = re.search(r"-data\s+(\S+)", cmdline)
         project = data_match.group(1).split("/")[-1] if data_match else None
-        enhanced = f"{p.name} [Java: {project}]" if project else f"{p.name} [Java Language Server]"
+        return f"{p.name} [Java: {project}]" if project else f"{p.name} [Java Language Server]"
 
-    # Other language servers - identify by keyword
-    elif "gopls" in cmdline_lower:
-        enhanced = f"{p.name} [Go Language Server]"
-    elif "pyright" in cmdline_lower or "pylance" in cmdline_lower:
-        enhanced = f"{p.name} [Python Language Server]"
-    elif "rust-analyzer" in cmdline_lower:
-        enhanced = f"{p.name} [Rust Language Server]"
+    # Simple keyword → label lookup
+    for keywords, label in _LS_KEYWORD_LABELS:
+        if any(kw in cmdline_lower for kw in keywords):
+            return f"{p.name} [{label}]"
 
     # Truncate long cmdlines if no enhancement found
-    elif len(cmdline) > CMDLINE_TRUNCATE_LEN:
-        enhanced = cmdline[:CMDLINE_TRUNCATE_LEN] + "..."
+    if len(cmdline) > CMDLINE_TRUNCATE_LEN:
+        return cmdline[:CMDLINE_TRUNCATE_LEN] + "..."
 
-    return enhanced
+    return None
 
 
 def find_language_servers(processes: list[ProcessInfo]) -> list[ProcessInfo]:

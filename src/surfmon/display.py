@@ -389,9 +389,8 @@ def _ls_mem_style(memory_mb: float) -> str:
     return "green"
 
 
-def display_ls_snapshot(snapshot: LsSnapshot) -> None:
-    """Display a language server forensic snapshot to the console."""
-    # Summary table
+def _ls_summary_table(snapshot: LsSnapshot) -> None:
+    """Print the LS snapshot summary KV table."""
     summary = make_kv_table("Language Server Snapshot")
     summary.add_row("Language Servers", str(snapshot.total_ls_count))
     if snapshot.total_ls_memory_mb > LS_TOTAL_MEM_CRITICAL_MB:
@@ -412,37 +411,43 @@ def display_ls_snapshot(snapshot: LsSnapshot) -> None:
     console.print(summary)
     console.print()
 
-    # Per-LS detail table
-    if snapshot.entries:
-        detail = make_table("Language Server Processes")
-        detail.add_column("PID", style="dim")
-        detail.add_column("Language", style="cyan")
-        detail.add_column("Memory", justify="right", style="yellow")
-        detail.add_column("CPU %", justify="right")
-        detail.add_column("Threads", justify="right", style="dim")
-        detail.add_column("Runtime", style="dim")
-        detail.add_column("Workspace", ratio=2)
-        detail.add_column("Status")
 
-        for entry in snapshot.entries:
-            runtime = format_uptime(entry.runtime_seconds)
-            status = _ls_entry_status(entry)
-            mem_style = _ls_mem_style(entry.memory_mb)
-            detail.add_row(
-                str(entry.pid),
-                entry.language,
-                f"[{mem_style}]{entry.memory_mb:.1f} MB[/{mem_style}]",
-                f"{entry.cpu_percent:.1f}",
-                str(entry.num_threads),
-                runtime,
-                entry.workspace or "[dim]—[/dim]",
-                status,
-            )
+def _ls_detail_table(snapshot: LsSnapshot) -> None:
+    """Print the per-LS process detail table."""
+    if not snapshot.entries:
+        return
+    detail = make_table("Language Server Processes")
+    detail.add_column("PID", style="dim")
+    detail.add_column("Language", style="cyan")
+    detail.add_column("Memory", justify="right", style="yellow")
+    detail.add_column("CPU %", justify="right")
+    detail.add_column("Threads", justify="right", style="dim")
+    detail.add_column("Runtime", style="dim")
+    detail.add_column("Workspace", ratio=2)
+    detail.add_column("Status")
 
-        console.print(detail)
-        console.print()
+    for entry in snapshot.entries:
+        mem_style = _ls_mem_style(entry.memory_mb)
+        detail.add_row(
+            str(entry.pid),
+            entry.language,
+            f"[{mem_style}]{entry.memory_mb:.1f} MB[/{mem_style}]",
+            f"{entry.cpu_percent:.1f}",
+            str(entry.num_threads),
+            format_uptime(entry.runtime_seconds),
+            entry.workspace or "[dim]—[/dim]",
+            _ls_entry_status(entry),
+        )
 
-    # Issues
+    console.print(detail)
+    console.print()
+
+
+def display_ls_snapshot(snapshot: LsSnapshot) -> None:
+    """Display a language server forensic snapshot to the console."""
+    _ls_summary_table(snapshot)
+    _ls_detail_table(snapshot)
+
     if snapshot.issues:
         console.print(make_panel("[red]Issues Detected[/red]", title="⚠ Issues"))
         for issue in snapshot.issues:

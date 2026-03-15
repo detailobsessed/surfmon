@@ -3,7 +3,7 @@
 import contextlib
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import psutil
@@ -285,13 +285,22 @@ def get_active_workspaces() -> list[WorkspaceInfo]:
     return list(active.values())
 
 
+def _parse_log_dir_date(name: str) -> date | None:
+    """Parse a log directory name (e.g. '20260204T151929') into a date, or None."""
+    if "T" not in name:
+        return None
+    try:
+        return datetime.strptime(name.split("T", maxsplit=1)[0], "%Y%m%d").replace(tzinfo=UTC).date()
+    except ValueError, IndexError:
+        return None
+
+
 def count_windsurf_launches_today() -> int:
     """Count how many times Windsurf was launched today.
 
     Counts unique log directories created today.
     """
     log_base = get_paths().logs_dir
-
     if not log_base.exists():
         return 0
 
@@ -302,19 +311,9 @@ def count_windsurf_launches_today() -> int:
         for log_dir in log_base.iterdir():
             if not log_dir.is_dir():
                 continue
-
-            # Log directories are named with timestamp: 20260204T151929
-            try:
-                # Parse directory name to get date
-                dir_name = log_dir.name
-                if "T" in dir_name:
-                    date_str = dir_name.split("T")[0]  # Get YYYYMMDD part
-                    dir_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=UTC).date()
-
-                    if dir_date == today:
-                        launches += 1
-            except ValueError, IndexError:
-                continue
+            dir_date = _parse_log_dir_date(log_dir.name)
+            if dir_date == today:
+                launches += 1
     except OSError:
         pass  # Can't read logs directory
 
