@@ -257,6 +257,17 @@ def _add_pty_row(table: Table, report: MonitoringReport, prev_report: Monitoring
     )
 
 
+def _add_ls_snapshot_rows(table: Table, report: MonitoringReport) -> None:
+    """Add orphaned/stale sub-rows when ls_snapshot is available."""
+    if report.ls_snapshot is None:
+        return
+    snap = report.ls_snapshot
+    orphan_color = "red" if snap.orphaned_count > 0 else "green"
+    table.add_row("  Orphaned", f"[{orphan_color}]{snap.orphaned_count}[/{orphan_color}]", "")
+    stale_color = "yellow" if snap.stale_count > 0 else "green"
+    table.add_row("  Stale", f"[{stale_color}]{snap.stale_count}[/{stale_color}]", "")
+
+
 def _format_elapsed(seconds: float) -> str:
     """Format elapsed seconds as H:MM:SS or M:SS."""
     total = int(seconds)
@@ -319,6 +330,8 @@ def create_summary_table(
     # Language servers
     ls_change = _format_change(len(report.language_servers) - len(prev_report.language_servers)) if prev_report else ""
     table.add_row("Lang Servers", str(len(report.language_servers)), ls_change)
+
+    _add_ls_snapshot_rows(table, report)
 
     # PTYs
     _add_pty_row(table, report, prev_report)

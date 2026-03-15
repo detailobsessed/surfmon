@@ -166,6 +166,7 @@ class MonitoringReport:
     windsurf_version: str = ""
     windsurf_uptime_seconds: float = 0.0
     pty_info: PtyInfo | None = None
+    ls_snapshot: LsSnapshot | None = None
 
 
 def is_main_windsurf_process(name: str, exe: str, app_name: str) -> bool:
@@ -1057,9 +1058,21 @@ def check_log_issues() -> list[str]:
     return issues
 
 
-def _parse_workspace_from_log_line(line: str) -> WorkspaceInfo | None:
-    """Parse a workspace load event from a log line, or return None."""
-    if "Window will load" not in line or "workspaceUri" not in line:
+def _parse_workspace_event(line: str) -> tuple[str, WorkspaceInfo] | None:
+    """Parse a workspace load or close event from a log line.
+
+    Returns a (event_type, WorkspaceInfo) tuple where event_type is
+    ``"load"`` or ``"close"``, or ``None`` if the line is not a
+    workspace event.
+    """
+    if "workspaceUri" not in line:
+        return None
+
+    if "Window will load" in line:
+        event_type = "load"
+    elif "Window will close" in line:
+        event_type = "close"
+    else:
         return None
 
     id_match = re.search(r'"id":"([^"]+)"', line)
@@ -1068,44 +1081,53 @@ def _parse_workspace_from_log_line(line: str) -> WorkspaceInfo | None:
         return None
 
     time_match = re.match(r"^([^ ]+\s+[^ ]+)", line)
-    return WorkspaceInfo(
+    ws = WorkspaceInfo(
         id=id_match.group(1),
         path=path_match.group(1),
         exists=Path(path_match.group(1)).exists(),
         loaded_at=time_match.group(1) if time_match else None,
     )
+    return (event_type, ws)
 
 
 def get_active_workspaces() -> list[WorkspaceInfo]:
     """Detect currently loaded workspaces from logs and storage.
 
+    Parses both ``Window will load`` and ``Window will close`` events
+    from the latest log session to build an accurate active set.
+
     Returns:
         List of WorkspaceInfo with ID, path, existence status, and load time.
     """
-    workspaces: list[WorkspaceInfo] = []
+    active: dict[str, WorkspaceInfo] = {}
     log_base = get_paths().logs_dir
 
     if not log_base.exists():
-        return workspaces
+        return []
 
     log_dirs = sorted(log_base.iterdir(), reverse=True)
     if not log_dirs:
-        return workspaces
+        return []
 
     main_log = log_dirs[0] / "main.log"
     if not main_log.exists():
-        return workspaces
+        return []
 
     try:
         with main_log.open(encoding="utf-8") as f:
             for line in f:
-                ws = _parse_workspace_from_log_line(line)
-                if ws and not any(w.id == ws.id for w in workspaces):
-                    workspaces.append(ws)
+                event = _parse_workspace_event(line)
+                if event is None:
+                    continue
+                event_type, ws = event
+                if event_type == "load":
+                    active[ws.id] = ws
+                else:
+                    active.pop(ws.id, None)
     except OSError, UnicodeDecodeError:
         pass  # Can't read or parse main.log for workspaces
 
-    return workspaces
+    return list(active.values())
 
 
 def count_windsurf_launches_today() -> int:
@@ -1195,6 +1217,19 @@ def generate_report() -> MonitoringReport:
     log_issues.extend(pty_info.issues)
 
     language_servers = find_language_servers(proc_infos)
+    active_workspaces = get_active_workspaces()
+    windsurf_version = _extract_windsurf_version(proc_infos)
+    windsurf_uptime = _get_windsurf_uptime(proc_infos)
+
+    ls_snapshot = capture_ls_snapshot(
+        proc_infos,
+        windsurf_version,
+        windsurf_uptime,
+        active_workspaces=active_workspaces,
+    )
+    # Only add stale-workspace issues from the snapshot — orphan detection
+    # is already handled by check_log_issues() → check_orphaned_workspaces().
+    log_issues.extend(issue for issue in ls_snapshot.issues if "still running for closed workspace" in issue)
 
     return MonitoringReport(
         timestamp=datetime.now(tz=UTC).isoformat(),
@@ -1207,11 +1242,12 @@ def generate_report() -> MonitoringReport:
         mcp_servers_enabled=get_mcp_config(),
         extensions_count=count_extensions(),
         log_issues=log_issues,
-        active_workspaces=get_active_workspaces(),
+        active_workspaces=active_workspaces,
         windsurf_launches_today=count_windsurf_launches_today(),
-        windsurf_version=_extract_windsurf_version(proc_infos),
-        windsurf_uptime_seconds=_get_windsurf_uptime(proc_infos),
+        windsurf_version=windsurf_version,
+        windsurf_uptime_seconds=windsurf_uptime,
         pty_info=pty_info,
+        ls_snapshot=ls_snapshot,
     )
 
 
