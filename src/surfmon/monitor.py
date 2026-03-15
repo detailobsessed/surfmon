@@ -555,9 +555,7 @@ def capture_ls_snapshot(
         total_memory += ls.memory_mb
 
         if orphaned:
-            orphan_issues.append(
-                _format_orphan_issue(ls, workspace, original_proc.cmdline)
-            )
+            orphan_issues.append(_format_orphan_issue(ls, workspace, original_proc.cmdline))
         elif stale:
             stale_issues.append(
                 f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
