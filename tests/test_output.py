@@ -187,7 +187,9 @@ class TestSaveReportMarkdown:
         assert "server1" in content
 
     def test_save_report_markdown_with_language_servers(self, mock_report, tmp_path):
-        """Should include language servers in markdown."""
+        """Should include language servers table in markdown via ls_snapshot."""
+        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+
         ls = MagicMock()
         ls.pid = 1234
         ls.name = "python-lsp"
@@ -196,8 +198,37 @@ class TestSaveReportMarkdown:
         ls.cmdline = "python -m pylsp"
         mock_report.language_servers = [ls]
 
+        entry = LsSnapshotEntry(
+            pid=1234,
+            name="python-lsp",
+            language="Python",
+            memory_mb=100.0,
+            memory_percent=0.3,
+            cpu_percent=5.0,
+            num_threads=4,
+            runtime_seconds=600.0,
+            workspace="/home/user/project",
+            orphaned=False,
+            stale=False,
+        )
+        mock_report.ls_snapshot = LsSnapshot(
+            timestamp="2025-01-01T12:00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=100.0,
+            orphaned_count=0,
+            stale_count=0,
+            entries=[entry],
+            orphan_issues=[],
+            stale_issues=[],
+        )
+
         output_path = tmp_path / "report.md"
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")
-        assert "Language Servers" in content
+        assert "## Language Servers" in content
+        assert "python-lsp" not in content  # table uses entry.language, not name
+        assert "Python" in content
+        assert "/home/user/project" in content
