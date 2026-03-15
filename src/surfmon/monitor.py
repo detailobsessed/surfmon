@@ -481,6 +481,61 @@ def _is_stale_workspace(cmdline: str, active_ws_paths: set[str]) -> bool:
     return str(resolved) not in active_ws_paths
 
 
+def _build_ls_entry(
+    ls: ProcessInfo,
+    proc_infos: list[ProcessInfo],
+    active_ws_paths: set[str],
+) -> tuple[LsSnapshotEntry, str | None]:
+    """Build a single LsSnapshotEntry with optional issue string.
+
+    Returns (entry, issue_string) where issue_string is None when healthy.
+    """
+    # Use original cmdline for detection (before enhancement)
+    original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
+    language = _detect_language(original_proc.cmdline)
+
+    # Resolve workspace path once — avoids redundant filesystem walks
+    # for display formatting, orphan detection, and stale detection.
+    workspace_id = _extract_workspace_id(original_proc.cmdline)
+    resolved_path = _resolve_workspace_path(workspace_id) if workspace_id else None
+
+    if workspace_id:
+        workspace = _format_workspace_display(workspace_id, resolved_path)
+    else:
+        workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
+
+    orphaned = workspace_id is not None and resolved_path is None
+    stale = not orphaned and bool(active_ws_paths) and resolved_path is not None and str(resolved_path) not in active_ws_paths
+
+    entry = LsSnapshotEntry(
+        pid=ls.pid,
+        name=ls.name,
+        language=language,
+        memory_mb=ls.memory_mb,
+        memory_percent=ls.memory_percent,
+        cpu_percent=ls.cpu_percent,
+        num_threads=ls.num_threads,
+        runtime_seconds=ls.runtime_seconds,
+        workspace=workspace,
+        orphaned=orphaned,
+        stale=stale,
+    )
+
+    issue = None
+    if orphaned:
+        issue = (
+            f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
+            f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+        )
+    elif stale:
+        issue = (
+            f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
+            f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+        )
+
+    return entry, issue
+
+
 def capture_ls_snapshot(
     proc_infos: list[ProcessInfo],
     windsurf_version: str,
@@ -502,49 +557,14 @@ def capture_ls_snapshot(
     total_memory = 0.0
 
     for ls in lang_servers:
-        # Use original cmdline for detection (before enhancement)
-        original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
-        language = _detect_language(original_proc.cmdline)
-
-        # Resolve workspace path once — avoids redundant filesystem walks
-        # for display formatting, orphan detection, and stale detection.
-        workspace_id = _extract_workspace_id(original_proc.cmdline)
-        resolved_path = _resolve_workspace_path(workspace_id) if workspace_id else None
-
-        if workspace_id:
-            workspace = _format_workspace_display(workspace_id, resolved_path)
-        else:
-            workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
-
-        orphaned = workspace_id is not None and resolved_path is None
-        stale = not orphaned and bool(active_ws_paths) and resolved_path is not None and str(resolved_path) not in active_ws_paths
-
-        entry = LsSnapshotEntry(
-            pid=ls.pid,
-            name=ls.name,
-            language=language,
-            memory_mb=ls.memory_mb,
-            memory_percent=ls.memory_percent,
-            cpu_percent=ls.cpu_percent,
-            num_threads=ls.num_threads,
-            runtime_seconds=ls.runtime_seconds,
-            workspace=workspace,
-            orphaned=orphaned,
-            stale=stale,
-        )
+        entry, issue = _build_ls_entry(ls, proc_infos, active_ws_paths)
         entries.append(entry)
-        total_memory += ls.memory_mb
+        total_memory += entry.memory_mb
 
-        if orphaned:
-            orphan_issues.append(
-                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
-                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
-            )
-        elif stale:
-            stale_issues.append(
-                f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
-                f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
-            )
+        if issue and ISSUE_CRITICAL_PREFIX in issue:
+            orphan_issues.append(issue)
+        elif issue:
+            stale_issues.append(issue)
 
     # Sort by memory descending for easy triage
     entries.sort(key=lambda e: e.memory_mb, reverse=True)
