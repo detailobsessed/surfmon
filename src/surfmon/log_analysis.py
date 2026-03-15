@@ -56,13 +56,17 @@ def _read_log_tail(log_path: Path, tail_bytes: int) -> str | None:
         return None
 
 
-def _check_orphaned_crashpad_handlers() -> list[str]:
-    """Check for orphaned crashpad handler processes."""
+def _scan_crashpad_processes(app_name: str) -> tuple[bool, list[tuple[int, float]]]:
+    """Scan running processes for crashpad handlers and main Windsurf.
+
+    Returns:
+        Tuple of (main_windsurf_found, orphaned) where orphaned is a list
+        of (pid, age_days) tuples for crashpad handler processes.
+    """
     from surfmon.monitor import is_main_windsurf_process  # noqa: PLC0415 — circular import
 
-    orphaned = []
+    orphaned: list[tuple[int, float]] = []
     main_windsurf_found = False
-    app_name = get_paths().app_name
 
     for proc in psutil.process_iter(["pid", "name", "cmdline", "exe", "create_time"]):
         try:
@@ -84,7 +88,14 @@ def _check_orphaned_crashpad_handlers() -> list[str]:
         except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
-    if main_windsurf_found or not orphaned:
+    return main_windsurf_found, orphaned
+
+
+def _check_orphaned_crashpad_handlers() -> list[str]:
+    """Check for orphaned crashpad handler processes."""
+    main_found, orphaned = _scan_crashpad_processes(get_paths().app_name)
+
+    if main_found or not orphaned:
         return []
 
     pids = [str(pid) for pid, _ in orphaned]

@@ -212,22 +212,8 @@ def _add_ls_snapshot_rows(table: Table, report: MonitoringReport) -> None:
     table.add_row("  Stale", f"[{stale_color}]{snap.stale_count}[/{stale_color}]", "")
 
 
-def create_summary_table(
-    report: MonitoringReport,
-    prev_report: MonitoringReport | None = None,
-    session_start: float | None = None,
-) -> Table:
-    """Create a live summary table for watch mode."""
-    now = datetime.now(tz=UTC).astimezone().strftime("%H:%M:%S")
-    elapsed = f" (elapsed {_format_elapsed(time.time() - session_start)})" if session_start is not None else ""
-    table = make_kv_table(f"Windsurf Monitor - {now}{elapsed}")
-    table.add_column("Change", style="yellow", ratio=1)
-
-    # Process count
-    proc_change = _format_change(report.process_count - prev_report.process_count) if prev_report else ""
-    table.add_row("Processes", str(report.process_count), proc_change)
-
-    # Memory
+def _add_memory_row(table: Table, report: MonitoringReport, prev_report: MonitoringReport | None) -> None:
+    """Add memory usage row to the summary table."""
     mem_gb = report.total_windsurf_memory_mb / MB_PER_GB
     mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
     mem_str = f"{mem_gb:.2f} GB ({mem_pct:.1f}%)"
@@ -240,7 +226,9 @@ def create_summary_table(
     mem_color = "red" if mem_pct > WINDSURF_MEM_PERCENT_CRITICAL else "yellow" if mem_pct > WINDSURF_MEM_PERCENT_WARNING else "green"
     table.add_row("Memory", f"[{mem_color}]{mem_str}[/{mem_color}]", mem_change)
 
-    # CPU
+
+def _add_cpu_row(table: Table, report: MonitoringReport, prev_report: MonitoringReport | None) -> None:
+    """Add CPU usage row to the summary table."""
     cpu_change = ""
     if prev_report:
         cpu_change = _format_change(
@@ -263,13 +251,30 @@ def create_summary_table(
         cpu_change,
     )
 
+
+def create_summary_table(
+    report: MonitoringReport,
+    prev_report: MonitoringReport | None = None,
+    session_start: float | None = None,
+) -> Table:
+    """Create a live summary table for watch mode."""
+    now = datetime.now(tz=UTC).astimezone().strftime("%H:%M:%S")
+    elapsed = f" (elapsed {_format_elapsed(time.time() - session_start)})" if session_start is not None else ""
+    table = make_kv_table(f"Windsurf Monitor - {now}{elapsed}")
+    table.add_column("Change", style="yellow", ratio=1)
+
+    # Process count
+    proc_change = _format_change(report.process_count - prev_report.process_count) if prev_report else ""
+    table.add_row("Processes", str(report.process_count), proc_change)
+
+    _add_memory_row(table, report, prev_report)
+    _add_cpu_row(table, report, prev_report)
+
     # Language servers
     ls_change = _format_change(len(report.language_servers) - len(prev_report.language_servers)) if prev_report else ""
     table.add_row("Lang Servers", str(len(report.language_servers)), ls_change)
 
     _add_ls_snapshot_rows(table, report)
-
-    # PTYs
     _add_pty_row(table, report, prev_report)
 
     # Issues
