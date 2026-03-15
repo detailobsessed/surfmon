@@ -1247,6 +1247,58 @@ class TestOrphanedWorkspaceDetection:
         assert "CRITICAL" in result
 
 
+class TestFormatOrphanIssue:
+    """Tests for _format_orphan_issue helper."""
+
+    def test_without_database_dir(self):
+        """Should produce a simple message when --database_dir is absent."""
+        from surfmon.monitor import ProcessInfo, _format_orphan_issue
+
+        ls = ProcessInfo(1234, "language_server_macos_arm", 2.0, 300.0, 0.9, 8, 3600.0, "language_server_macos_arm --stdio")
+        result = _format_orphan_issue(ls, "/Users/nobody/project", "language_server_macos_arm --stdio")
+
+        assert "CRITICAL" in result
+        assert "(PID 1234)" in result
+        assert "'/Users/nobody/project'" in result
+        assert "300 MB RAM" in result
+        assert "rm -rf" not in result
+        assert "disk)" not in result
+
+    def test_with_database_dir_not_existing(self, tmp_path):
+        """Should include disk info (0 MB) and rm -rf command even when dir doesn't exist."""
+        from surfmon.monitor import ProcessInfo, _format_orphan_issue
+
+        db_dir = tmp_path / "nonexistent_db_xyz"
+        cmdline = f"ls --database_dir {db_dir}"
+        ls = ProcessInfo(5678, "language_server_macos_arm", 2.0, 800.0, 2.5, 8, 3500.0, cmdline)
+        result = _format_orphan_issue(ls, "/Users/nobody/gone", cmdline)
+
+        assert "CRITICAL" in result
+        assert "(PID 5678)" in result
+        assert "800 MB RAM" in result
+        assert "0 MB disk)" in result
+        assert f"rm -rf {db_dir}" in result
+        # Verify balanced parentheses in the consuming clause
+        assert "(consuming 800 MB RAM, 0 MB disk)" in result
+
+    def test_with_database_dir_existing(self, tmp_path):
+        """Should calculate actual disk size when database dir exists."""
+        from surfmon.monitor import ProcessInfo, _format_orphan_issue
+
+        db_dir = tmp_path / "db"
+        db_dir.mkdir()
+        (db_dir / "index.db").write_text("x" * 1024, encoding="utf-8")
+
+        cmdline = f"ls --database_dir {db_dir}"
+        ls = ProcessInfo(9999, "language_server_macos_arm", 2.0, 500.0, 1.0, 8, 3600.0, cmdline)
+        result = _format_orphan_issue(ls, "/Users/nobody/old", cmdline)
+
+        assert "CRITICAL" in result
+        assert "consuming 500 MB RAM" in result
+        assert f"rm -rf {db_dir}" in result
+        assert "disk)" in result
+
+
 class TestWorkspaceParsingEdgeCases:
     """Tests for _parse_workspace_event edge cases."""
 

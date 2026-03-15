@@ -95,7 +95,7 @@ def _make_report(  # noqa: PLR0913
     )
 
 
-def _make_ls_snapshot(timestamp=None, entries=None, issues=None):
+def _make_ls_snapshot(timestamp=None, entries=None, orphan_issues=None, stale_issues=None):
     return LsSnapshot(
         timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
         windsurf_version="1.9577.1024",
@@ -119,7 +119,8 @@ def _make_ls_snapshot(timestamp=None, entries=None, issues=None):
                 orphaned=False,
             ),
         ],
-        issues=issues or [],
+        orphan_issues=orphan_issues or [],
+        stale_issues=stale_issues or [],
     )
 
 
@@ -367,7 +368,7 @@ class TestStoreLsSnapshot:
         assert rows[0]["orphaned"] == 1
 
     def test_stores_issues(self, db):
-        snapshot = _make_ls_snapshot(issues=["⚠ High memory usage"])
+        snapshot = _make_ls_snapshot(stale_issues=["⚠ High memory usage"])
         session_id = store_ls_snapshot(db, snapshot)
 
         rows = list(db["issues"].rows_where("session_id = ?", [session_id]))

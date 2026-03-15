@@ -866,7 +866,8 @@ class TestLsSnapshotCommand:
                     orphaned=False,
                 ),
             ],
-            issues=[],
+            orphan_issues=[],
+            stale_issues=[],
         )
 
         mocker.patch("surfmon.cli.collect_process_infos", return_value=mock_proc_infos)
@@ -905,7 +906,8 @@ class TestLsSnapshotCommand:
             orphaned_count=1,
             stale_count=0,
             entries=[],
-            issues=["✖  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
+            orphan_issues=["\u2716  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
+            stale_issues=[],
         )
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
@@ -928,7 +930,8 @@ class TestLsSnapshotCommand:
             orphaned_count=0,
             stale_count=0,
             entries=[],
-            issues=["⚠  High memory usage detected"],
+            orphan_issues=[],
+            stale_issues=["\u26a0  language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"],
         )
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
         mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
@@ -968,7 +971,8 @@ class TestLsSnapshotDisplay:
                     orphaned=True,
                 ),
             ],
-            issues=["\u2716  CRITICAL: language_server_macos_arm indexing non-existent workspace"],
+            orphan_issues=["\u2716  CRITICAL: language_server_macos_arm indexing non-existent workspace"],
+            stale_issues=[],
         )
 
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
@@ -1006,7 +1010,8 @@ class TestLsSnapshotDisplay:
                     orphaned=False,
                 ),
             ],
-            issues=[],
+            orphan_issues=[],
+            stale_issues=[],
         )
 
         mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
