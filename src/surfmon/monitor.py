@@ -402,6 +402,26 @@ def _build_ls_entry(
     return entry, issue
 
 
+def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> str:
+    """Build a detailed orphan-workspace issue string.
+
+    Includes database directory size and cleanup command when the
+    ``--database_dir`` flag is present in the process command line.
+    """
+    prefix = f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}'"
+    db_match = re.search(r"--database_dir\s+(\S+)", cmdline)
+    if db_match:
+        db_path = Path(db_match.group(1))
+        db_size_mb = 0
+        try:
+            if db_path.exists():
+                db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
+        except OSError:
+            pass
+        return f"{prefix} (consuming {ls.memory_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - Fix: Close Windsurf, run: rm -rf {db_path}"
+    return f"{prefix} — consuming {ls.memory_mb:.0f} MB RAM"
+
+
 def capture_ls_snapshot(
     proc_infos: list[ProcessInfo],
     windsurf_version: str,

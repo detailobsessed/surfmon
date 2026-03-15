@@ -283,6 +283,22 @@ def store_check(db: Database, report: MonitoringReport, target: str = "") -> str
     if report.pty_info:
         _store_pty_data(db, session_id, report.pty_info)
 
+    if report.ls_snapshot:
+        for entry in report.ls_snapshot.entries:
+            Table(db, "ls_entries").insert({
+                "session_id": session_id,
+                "pid": entry.pid,
+                "name": entry.name,
+                "language": entry.language,
+                "memory_mb": entry.memory_mb,
+                "cpu_percent": entry.cpu_percent,
+                "num_threads": entry.num_threads,
+                "runtime_s": entry.runtime_seconds,
+                "workspace": entry.workspace,
+                "orphaned": int(entry.orphaned),
+                "stale": int(entry.stale),
+            })
+
     for issue_msg in report.log_issues:
         Table(db, "issues").insert({
             "session_id": session_id,
@@ -468,13 +484,13 @@ _TREND_QUERIES: dict[str, tuple[str, str | None, str | None]] = {
         None,
     ),
     "ls-memory": (
-        ("SELECT s.timestamp, COALESCE(SUM(l.memory_mb), 0) AS value FROM sessions s LEFT JOIN ls_entries l ON l.session_id = s.id"),
-        "ls-snapshot",
+        ("SELECT s.timestamp, COALESCE(SUM(l.memory_mb), 0) AS value FROM sessions s JOIN ls_entries l ON l.session_id = s.id"),
+        None,
         "GROUP BY s.id",
     ),
     "ls-count": (
-        ("SELECT s.timestamp, COUNT(l.id) AS value FROM sessions s LEFT JOIN ls_entries l ON l.session_id = s.id"),
-        "ls-snapshot",
+        ("SELECT s.timestamp, COUNT(l.id) AS value FROM sessions s JOIN ls_entries l ON l.session_id = s.id"),
+        None,
         "GROUP BY s.id",
     ),
 }
