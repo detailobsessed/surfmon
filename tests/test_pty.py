@@ -13,13 +13,17 @@ from surfmon.monitor import (
     check_pty_leak,
 )
 
+_P_SUBPROCESS_RUN = "surfmon.pty.subprocess.run"
+_WINDSURF_NAME = "Windsurf"
+_LSOF_HEADER = "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME"
+
 
 class TestCheckPtyLeak:
     """Tests for check_pty_leak."""
 
     def test_returns_pty_info(self, mocker):
         """Should return PtyInfo with counts."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         # Mock sysctl
         sysctl_result = Mock()
@@ -28,7 +32,7 @@ class TestCheckPtyLeak:
 
         # Mock lsof - simulate Windsurf holding many PTYs
         lsof_lines = [
-            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            _LSOF_HEADER,
             *[f"Windsurf  75486 ismar   {32 + i}u   CHR   15,{i}      0t0  605 /dev/ptmx" for i in range(504)],
             "preview   50510 ismar   55u   CHR   15,5 0t222204  605 /dev/ptmx",
         ]
@@ -48,7 +52,7 @@ class TestCheckPtyLeak:
 
     def test_handles_sysctl_failure(self, mocker):
         """Should use default limit when sysctl fails."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 1
@@ -66,7 +70,7 @@ class TestCheckPtyLeak:
 
     def test_handles_lsof_failure(self, mocker):
         """Should return zero counts when lsof fails."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -87,7 +91,7 @@ class TestCheckPtyLeak:
         """Should handle subprocess timeout gracefully."""
         import subprocess
 
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="lsof", timeout=10)
 
         result = check_pty_leak()
@@ -97,7 +101,7 @@ class TestCheckPtyLeak:
 
     def test_no_windsurf_ptys(self, mocker):
         """Should correctly count zero Windsurf PTYs when only other apps use them."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -233,7 +237,7 @@ class TestGetSystemPtyLimit:
 
     def test_returns_limit_from_sysctl(self, mocker):
         """Should return the parsed sysctl value."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
         result_mock = Mock()
         result_mock.returncode = 0
         result_mock.stdout = "1024\n"
@@ -243,7 +247,7 @@ class TestGetSystemPtyLimit:
 
     def test_returns_default_on_failure(self, mocker):
         """Should return 511 when sysctl fails."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
         result_mock = Mock()
         result_mock.returncode = 1
         result_mock.stdout = ""
@@ -257,14 +261,14 @@ class TestCheckPtyLeakForensic:
 
     def test_populates_per_process_detail(self, mocker):
         """Should populate per_process with per-PID breakdown."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
         sysctl_result.stdout = "511\n"
 
         lsof_lines = [
-            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            _LSOF_HEADER,
             "Windsurf  1000 ismar   33u   CHR   15,0      0t0  605 /dev/ptmx",
             "Windsurf  1000 ismar   34u   CHR   15,1 0t100000  605 /dev/ptmx",
             "Windsurf  2000 ismar   10u   CHR   15,2      0t0  605 /dev/ptmx",
@@ -305,7 +309,7 @@ class TestCheckPtyLeakForensic:
 
     def test_extracts_version_and_uptime(self, mocker):
         """Should extract version and uptime when process list is provided."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -336,7 +340,7 @@ class TestCheckPtyLeakForensic:
 
     def test_backwards_compatible_without_processes(self, mocker):
         """Should work without process list (backwards-compatible)."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -357,14 +361,14 @@ class TestCheckPtyLeakForensic:
 
     def test_fd_detail_captures_offset(self, mocker):
         """Should capture offset values for active/idle FD classification."""
-        mock_run = mocker.patch("surfmon.pty.subprocess.run")
+        mock_run = mocker.patch(_P_SUBPROCESS_RUN)
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
         sysctl_result.stdout = "511\n"
 
         lsof_lines = [
-            "COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME",
+            _LSOF_HEADER,
             "Windsurf  1000 ismar   33u   CHR   15,0      0t0  605 /dev/ptmx",
             "Windsurf  1000 ismar   34u   CHR   15,1 0t999999  605 /dev/ptmx",
         ]

@@ -48,6 +48,8 @@ _WINDSURF_NAME = "Windsurf"
 _LS_BINARY = "language_server_macos_arm"
 _TEST_VERSION = "2.5.0"
 _TEST_WS_PATH = "/Users/test/my-project"
+_LS_CMDLINE = "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db"
+_WARN_EXT_ERRORS = "\u26a0  Extension errors: some.ext (3)"
 
 
 class TestGetWindsurfProcesses:
@@ -62,8 +64,8 @@ class TestGetWindsurfProcesses:
         proc1.info = {
             "pid": 1,
             "name": "Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+            "cmdline": [_WINDSURF_EXE],
+            "exe": _WINDSURF_EXE,
         }
         proc1.name.return_value = "Windsurf"
         proc1.pid = 1
@@ -125,7 +127,7 @@ class TestGetWindsurfProcesses:
         proc_ls = Mock()
         proc_ls.info = {
             "pid": 100,
-            "name": "language_server_macos_arm",
+            "name": _LS_BINARY,
             "cmdline": [
                 "/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm",
                 "--workspace_id",
@@ -133,7 +135,7 @@ class TestGetWindsurfProcesses:
             ],
             "exe": "/Applications/Windsurf.app/Contents/Resources/app/extensions/windsurf/bin/language_server_macos_arm",
         }
-        proc_ls.name.return_value = "language_server_macos_arm"
+        proc_ls.name.return_value = _LS_BINARY
         proc_ls.pid = 100
 
         mock_proc_iter.return_value = [proc_ls]
@@ -150,8 +152,8 @@ class TestGetWindsurfProcesses:
         proc1.info = {
             "pid": 1,
             "name": "Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+            "cmdline": [_WINDSURF_EXE],
+            "exe": _WINDSURF_EXE,
         }
         proc1.name.return_value = "Windsurf"
 
@@ -171,8 +173,8 @@ class TestGetWindsurfProcesses:
         proc1.info = {
             "pid": 1,
             "name": "Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+            "cmdline": [_WINDSURF_EXE],
+            "exe": _WINDSURF_EXE,
         }
         proc1.name.return_value = "Windsurf"
 
@@ -295,7 +297,7 @@ class TestFindLanguageServers:
         procs = [
             ProcessInfo(
                 1,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 0,
                 100,
                 0,
@@ -417,7 +419,7 @@ class TestGenerateReport:
         mock_procs.return_value = [mock_process]
         mock_mcp.return_value = ["server1", "server2"]
         mock_ext_count.return_value = 33
-        mock_issues.return_value = ["issue1"]
+        mock_issues.return_value = [_WARN_EXT_ERRORS]
         proc_info = ProcessInfo(1234, "Windsurf", 5.0, 100.0, 1.5, 10, 100.0, "cmd")
         mock_proc_info.return_value = proc_info
         mock_pty.return_value = PtyInfo(windsurf_pty_count=5, system_pty_limit=511, system_pty_used=10)
@@ -553,11 +555,7 @@ class TestPtyLeakIssueDetection:
             system_pty_limit=511,
             system_pty_used=509,
             issues=[
-                (
-                    "\u2716  CRITICAL: Windsurf processes are holding 504 PTYs "
-                    "(system: 509/511, 100% used) "
-                    "- Fix: Restart all Windsurf instances to release leaked PTYs"
-                )
+                "\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)",
             ],
         )
 
@@ -591,11 +589,7 @@ class TestPtyLeakIssueDetection:
             system_pty_limit=511,
             system_pty_used=100,
             issues=[
-                (
-                    "\u26a0  Windsurf PTY leak detected: 75 PTYs held "
-                    "(system: 100/511) "
-                    "- Monitor closely, restart all Windsurf instances if it keeps growing"
-                )
+                "\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)",
             ],
         )
 
@@ -643,8 +637,8 @@ class TestSurfmonProcessExclusion:
         proc1.info = {
             "pid": 1,
             "name": "Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+            "cmdline": [_WINDSURF_EXE],
+            "exe": _WINDSURF_EXE,
         }
         proc1.name.return_value = "Windsurf"
         proc1.pid = 1
@@ -765,7 +759,7 @@ class TestExtractWindsurfVersion:
                 memory_percent=1.0,
                 num_threads=10,
                 runtime_seconds=3600.0,
-                cmdline="/Applications/Windsurf.app/Contents/MacOS/Windsurf",
+                cmdline=_WINDSURF_EXE,
             ),
         ]
         assert not _extract_windsurf_version(procs)
@@ -864,7 +858,7 @@ class TestCaptureLsSnapshot:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
@@ -925,13 +919,13 @@ class TestCaptureLsSnapshotStaleDetection:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
                 8,
                 3500.0,
-                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+                _LS_CMDLINE,
             ),
         ]
 
@@ -960,13 +954,13 @@ class TestCaptureLsSnapshotStaleDetection:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
                 8,
                 3500.0,
-                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+                _LS_CMDLINE,
             ),
         ]
 
@@ -988,7 +982,7 @@ class TestCaptureLsSnapshotStaleDetection:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
@@ -1010,7 +1004,7 @@ class TestCaptureLsSnapshotStaleDetection:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
@@ -1044,13 +1038,13 @@ class TestCaptureLsSnapshotStaleDetection:
         proc_infos = [
             ProcessInfo(
                 2000,
-                "language_server_macos_arm",
+                _LS_BINARY,
                 10.0,
                 800.0,
                 2.5,
                 8,
                 3500.0,
-                "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db",
+                _LS_CMDLINE,
             ),
         ]
 
@@ -1067,22 +1061,22 @@ class TestMaxIssueSeverity:
         assert max_issue_severity([]) == EXIT_OK
 
     def test_warning_only_returns_warning(self):
-        assert max_issue_severity(["\u26a0  Extension errors: some.ext (3)"]) == EXIT_WARNING
+        assert max_issue_severity([_WARN_EXT_ERRORS]) == EXIT_WARNING
 
     def test_critical_only_returns_critical(self):
         assert max_issue_severity(["\u2716  CRITICAL: Orphaned workspace"]) == EXIT_CRITICAL
 
     def test_mixed_returns_critical(self):
         issues = [
-            "\u26a0  Extension errors: some.ext (3)",
+            _WARN_EXT_ERRORS,
             "\u2716  CRITICAL: Orphaned workspace",
         ]
         assert max_issue_severity(issues) == EXIT_CRITICAL
 
     def test_multiple_warnings_returns_warning(self):
         issues = [
-            "\u26a0  Extension errors: some.ext (3)",
-            "\u26a0  2 orphaned crash handler(s) (oldest: 1.5 days, PIDs: 123)",
+            _WARN_EXT_ERRORS,
+            _WARN_EXT_ERRORS,
         ]
         assert max_issue_severity(issues) == EXIT_WARNING
 

@@ -6,6 +6,8 @@ import pytest
 
 from surfmon.output import display_report, save_report_markdown
 
+_P_CONSOLE = "surfmon.output.console"
+
 
 @pytest.fixture
 def mock_report():
@@ -42,13 +44,13 @@ class TestDisplayReport:
 
     def test_display_report_basic(self, mock_report, mocker):
         """Should display report without errors."""
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         assert mock_console.print.called
 
     def test_display_report_verbose(self, mock_report, mocker):
         """Should display verbose report."""
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -57,7 +59,7 @@ class TestDisplayReport:
         from rich.table import Table
 
         mock_report.process_count = 0
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         table_titles = [
             arg.args[0].title
@@ -75,7 +77,7 @@ class TestDisplayReport:
         mock_report.extensions_count = 0
         mock_report.mcp_servers_enabled = []
         mock_report.active_workspaces = []
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         table_titles = [
             arg.args[0].title
@@ -88,7 +90,7 @@ class TestDisplayReport:
     def test_display_report_with_issues(self, mock_report, mocker):
         """Should display issues when present."""
         mock_report.log_issues = ["Issue 1", "Issue 2"]
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         assert mock_console.print.called
 
@@ -102,7 +104,7 @@ class TestDisplayReport:
         ls.cmdline = "python -m pylsp"
         mock_report.language_servers = [ls]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -115,7 +117,7 @@ class TestDisplayReport:
         ws.loaded_at = "12:00:00"
         mock_report.active_workspaces = [ws]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -134,7 +136,7 @@ class TestDisplayReportWithProcesses:
         proc.runtime_seconds = 3600.0
         mock_report.windsurf_processes = [proc]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -149,7 +151,7 @@ class TestDisplayReportWithProcesses:
         proc.runtime_seconds = 7200.0
         mock_report.windsurf_processes = [proc]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 

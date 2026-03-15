@@ -33,6 +33,12 @@ from surfmon.monitor import (
     SystemInfo,
 )
 
+_W_SESSION_ID = "session_id = ?"
+_W_ID = "id = ?"
+_TS_10 = "2025-01-01T10:00:00+00:00"
+_TS_11 = "2025-01-01T11:00:00+00:00"
+_TS_OLD = "2020-01-01T00:00:00+00:00"
+
 
 @pytest.fixture
 def db(tmp_path):
@@ -278,7 +284,7 @@ class TestStoreCheck:
         session_id = store_check(db, report, target="next")
 
         assert session_id
-        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        session = next(db["sessions"].rows_where(_W_ID, [session_id]))
         assert session["command"] == "check"
         assert session["windsurf_target"] == "next"
 
@@ -287,14 +293,14 @@ class TestStoreCheck:
         report = _make_report(processes=procs)
         session_id = store_check(db, report)
 
-        rows = list(db["processes"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["processes"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 3
 
     def test_stores_system_snapshot(self, db):
         report = _make_report()
         session_id = store_check(db, report)
 
-        rows = list(db["system_snapshots"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["system_snapshots"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["total_memory_gb"] == 96.0
 
@@ -303,7 +309,7 @@ class TestStoreCheck:
         report = _make_report(pty_info=pty)
         session_id = store_check(db, report)
 
-        rows = list(db["pty_snapshots"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["pty_snapshots"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["windsurf_pty_count"] == 25
 
@@ -311,14 +317,14 @@ class TestStoreCheck:
         report = _make_report(issues=["⚠ Memory leak detected", "Critical failure"])
         session_id = store_check(db, report)
 
-        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 2
 
     def test_stores_version_and_uptime(self, db):
         report = _make_report(windsurf_version="1.9577.1024+next.abc", windsurf_uptime_seconds=7200.0)
         session_id = store_check(db, report)
 
-        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        session = next(db["sessions"].rows_where(_W_ID, [session_id]))
         assert session["windsurf_version"] == "1.9577.1024+next.abc"
         assert session["windsurf_uptime_s"] == 7200.0
 
@@ -326,7 +332,7 @@ class TestStoreCheck:
         report = _make_report(pty_info=None)
         session_id = store_check(db, report)
 
-        rows = list(db["pty_snapshots"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["pty_snapshots"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 0
 
 
@@ -335,7 +341,7 @@ class TestStoreLsSnapshot:
         snapshot = _make_ls_snapshot()
         session_id = store_ls_snapshot(db, snapshot, target="stable")
 
-        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        session = next(db["sessions"].rows_where(_W_ID, [session_id]))
         assert session["command"] == "ls-snapshot"
         assert session["windsurf_version"] == "1.9577.1024"
 
@@ -343,7 +349,7 @@ class TestStoreLsSnapshot:
         snapshot = _make_ls_snapshot()
         session_id = store_ls_snapshot(db, snapshot)
 
-        rows = list(db["ls_entries"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["ls_entries"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["language"] == "python"
         assert rows[0]["orphaned"] == 0
@@ -364,14 +370,14 @@ class TestStoreLsSnapshot:
         snapshot = _make_ls_snapshot(entries=[entry])
         session_id = store_ls_snapshot(db, snapshot)
 
-        rows = list(db["ls_entries"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["ls_entries"].rows_where(_W_SESSION_ID, [session_id]))
         assert rows[0]["orphaned"] == 1
 
     def test_stores_issues(self, db):
         snapshot = _make_ls_snapshot(stale_issues=["⚠ High memory usage"])
         session_id = store_ls_snapshot(db, snapshot)
 
-        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["severity"] == "warning"
 
@@ -381,7 +387,7 @@ class TestStorePtySnapshot:
         pty = _make_pty_info()
         session_id = store_pty_snapshot(db, pty, target="insiders")
 
-        session = next(db["sessions"].rows_where("id = ?", [session_id]))
+        session = next(db["sessions"].rows_where(_W_ID, [session_id]))
         assert session["command"] == "pty-snapshot"
         assert session["windsurf_target"] == "insiders"
 
@@ -389,7 +395,7 @@ class TestStorePtySnapshot:
         pty = _make_pty_info()
         session_id = store_pty_snapshot(db, pty)
 
-        rows = list(db["pty_per_process"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["pty_per_process"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["pty_count"] == 20
 
@@ -398,7 +404,7 @@ class TestStorePtySnapshot:
         pty.issues = ["\u26a0  Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)"]
         session_id = store_pty_snapshot(db, pty)
 
-        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 1
         assert rows[0]["severity"] == "warning"
         assert "PTY leak" in rows[0]["message"]
@@ -407,7 +413,7 @@ class TestStorePtySnapshot:
         pty = _make_pty_info()
         session_id = store_pty_snapshot(db, pty)
 
-        rows = list(db["issues"].rows_where("session_id = ?", [session_id]))
+        rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
         assert len(rows) == 0
 
 
@@ -416,13 +422,13 @@ class TestQueryHistory:
         assert query_history(db) == []
 
     def test_returns_recent_sessions(self, db):
-        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
-        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_10))
+        store_check(db, _make_report(timestamp=_TS_11))
 
         rows = query_history(db)
         assert len(rows) == 2
         # Most recent first
-        assert rows[0][1] == "2025-01-01T11:00:00+00:00"
+        assert rows[0][1] == _TS_11
 
     def test_filter_by_command(self, db):
         store_check(db, _make_report())
@@ -439,7 +445,7 @@ class TestQueryHistory:
         assert len(rows) == 3
 
     def test_since_filter(self, db):
-        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_OLD))
         store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
 
         rows = query_history(db, since="1h")
@@ -459,8 +465,8 @@ class TestQueryTrend:
         assert query_trend(db, metric="memory") == []
 
     def test_memory_trend(self, db):
-        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
-        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_10))
+        store_check(db, _make_report(timestamp=_TS_11))
 
         data = query_trend(db, metric="memory")
         assert len(data) == 2
@@ -468,7 +474,7 @@ class TestQueryTrend:
         assert "value" in data[0]
 
     def test_process_count_trend(self, db):
-        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_10))
         data = query_trend(db, metric="processes")
         assert len(data) == 1
 
@@ -496,7 +502,7 @@ class TestQueryTrend:
             query_trend(db, metric="invalid")
 
     def test_since_filter(self, db):
-        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_OLD))
         store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
 
         data = query_trend(db, metric="memory", since="1h")
@@ -550,8 +556,8 @@ class TestQueryAnalyzeSessions:
         assert query_analyze_sessions(db) == []
 
     def test_basic_roundtrip(self, db):
-        store_check(db, _make_report(timestamp="2025-01-01T10:00:00+00:00"))
-        store_check(db, _make_report(timestamp="2025-01-01T11:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_10))
+        store_check(db, _make_report(timestamp=_TS_11))
 
         sessions = query_analyze_sessions(db)
         assert len(sessions) == 2
@@ -640,7 +646,7 @@ class TestQueryAnalyzeSessions:
         assert session["pty_info"]["windsurf_pty_count"] == 25
 
     def test_since_filter_excludes_old_sessions(self, db):
-        store_check(db, _make_report(timestamp="2020-01-01T00:00:00+00:00"))
+        store_check(db, _make_report(timestamp=_TS_OLD))
         store_check(db, _make_report(timestamp=datetime.now(tz=UTC).isoformat()))
         sessions = query_analyze_sessions(db, since="1h")
         assert len(sessions) == 1

@@ -13,6 +13,14 @@ from surfmon.monitor import (
     get_active_workspaces,
 )
 
+_P_RESOLVE_WS = "surfmon.workspaces._resolve_workspace_path"
+_P_GET_PATHS = "surfmon.workspaces.get_paths"
+_TEST_WS_PATH = "/Users/test/my-project"
+_APP_SUPPORT = "Application Support"
+_MAIN_LOG = "main.log"
+_LOG_TS_1 = "20260204T123456"
+_LOG_TS_2 = "20260314T120000"
+
 
 def _patch_fs(monkeypatch, dirs, files=()):
     """Patch Path.is_dir and Path.exists for deterministic resolver tests."""
@@ -51,7 +59,7 @@ class TestGetActiveWorkspaces:
 
     def test_parses_workspace_from_main_log(self, tmp_path, monkeypatch):
         """Should parse workspace load events from main.log."""
-        log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204T123456"
+        log_dir = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs" / _LOG_TS_1
         log_dir.mkdir(parents=True)
 
         # Create the workspace file
@@ -59,7 +67,7 @@ class TestGetActiveWorkspaces:
         workspace_file.touch()
         workspace_path = str(workspace_file)
 
-        main_log = log_dir / "main.log"
+        main_log = log_dir / _MAIN_LOG
         log_content = (
             f"2026-02-04 12:34:56.789 [info] WindsurfWindowsMainManager: "
             f'Window will load {{"windowId":1,"workspaceUri":{{"id":"abc123",'
@@ -79,9 +87,9 @@ class TestGetActiveWorkspaces:
 
     def test_detects_non_existent_workspace(self, tmp_path, monkeypatch):
         """Should detect when workspace path doesn't exist."""
-        log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204T123456"
+        log_dir = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs" / _LOG_TS_1
         log_dir.mkdir(parents=True)
-        main_log = log_dir / "main.log"
+        main_log = log_dir / _MAIN_LOG
         log_content = (
             "2026-02-04 12:34:56.789 [info] WindsurfWindowsMainManager: "
             'Window will load {"windowId":1,"workspaceUri":{"id":"xyz789",'
@@ -112,7 +120,7 @@ class TestCountWindsurfLaunchesToday:
         """Should count only log directories from today."""
         from datetime import UTC, datetime, timedelta
 
-        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
         # Create log directories for today (UTC, matching production code)
@@ -217,7 +225,7 @@ class TestWorkspaceParsingEdgeCases:
 
     def test_empty_log_dirs(self, tmp_path, monkeypatch):
         """Should return empty list when log dir exists but has no subdirs."""
-        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -228,7 +236,7 @@ class TestWorkspaceParsingEdgeCases:
 
     def test_no_main_log(self, tmp_path, monkeypatch):
         """Should return empty list when log subdir exists but has no main.log."""
-        log_dir = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs" / "20260204T123456"
+        log_dir = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs" / _LOG_TS_1
         log_dir.mkdir(parents=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -243,7 +251,7 @@ class TestLaunchCountOSError:
 
     def test_handles_os_error_reading_logs(self, tmp_path, monkeypatch, mocker):
         """Should return 0 when logs directory can't be read."""
-        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -261,7 +269,7 @@ class TestLaunchCountEdgeCases:
         """Should skip non-directory entries in logs folder."""
         from datetime import UTC, datetime
 
-        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
         today_str = datetime.now(tz=UTC).strftime("%Y%m%d")
@@ -279,7 +287,7 @@ class TestLaunchCountEdgeCases:
         """Should skip directories with malformed names."""
         from datetime import UTC, datetime
 
-        log_base = tmp_path / "Library" / "Application Support" / "Windsurf" / "logs"
+        log_base = tmp_path / "Library" / _APP_SUPPORT / "Windsurf" / "logs"
         log_base.mkdir(parents=True)
 
         today_str = datetime.now(tz=UTC).strftime("%Y%m%d")
@@ -409,8 +417,8 @@ class TestIsStaleWorkspace:
     def test_stale_when_path_exists_but_not_in_active_set(self, mocker):
         """Should return True when workspace exists on disk but isn't active."""
         mocker.patch(
-            "surfmon.workspaces._resolve_workspace_path",
-            return_value=Path("/Users/test/my-project"),
+            _P_RESOLVE_WS,
+            return_value=Path(_TEST_WS_PATH),
         )
         cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
 
@@ -420,12 +428,12 @@ class TestIsStaleWorkspace:
     def test_not_stale_when_path_in_active_set(self, mocker):
         """Should return False when workspace is in the active set."""
         mocker.patch(
-            "surfmon.workspaces._resolve_workspace_path",
-            return_value=Path("/Users/test/my-project"),
+            _P_RESOLVE_WS,
+            return_value=Path(_TEST_WS_PATH),
         )
         cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
 
-        active_paths: set[str] = {str(Path("/Users/test/my-project"))}
+        active_paths: set[str] = {str(Path(_TEST_WS_PATH))}
         assert _is_stale_workspace(cmdline, active_paths) is False
 
     def test_not_stale_when_no_workspace_id(self):
@@ -450,7 +458,7 @@ class TestParseWorkspaceEvent:
         event_type, ws = result
         assert event_type == "load"
         assert ws.id == "abc123"
-        assert ws.path == "/Users/test/my-project"
+        assert ws.path == _TEST_WS_PATH
 
     def test_parse_close_event(self):
         result = _parse_workspace_event(CLOSE_LINE)
@@ -458,7 +466,7 @@ class TestParseWorkspaceEvent:
         event_type, ws = result
         assert event_type == "close"
         assert ws.id == "abc123"
-        assert ws.path == "/Users/test/my-project"
+        assert ws.path == _TEST_WS_PATH
 
     def test_returns_none_for_unrelated_line(self):
         assert _parse_workspace_event("[info] Something else happened") is None
@@ -486,28 +494,28 @@ class TestGetActiveWorkspacesCloseEvents:
 
     def test_close_removes_workspace_from_active_set(self, tmp_path, mocker):
         """A workspace that is loaded then closed should not appear in results."""
-        log_dir = tmp_path / "20260314T120000"
+        log_dir = tmp_path / _LOG_TS_2
         log_dir.mkdir()
-        main_log = log_dir / "main.log"
+        main_log = log_dir / _MAIN_LOG
         main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
+        mocker.patch(_P_GET_PATHS, return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 0
 
     def test_load_after_close_re_adds_workspace(self, tmp_path, mocker):
         """A workspace closed then re-loaded should appear in results."""
-        log_dir = tmp_path / "20260314T120000"
+        log_dir = tmp_path / _LOG_TS_2
         log_dir.mkdir()
-        main_log = log_dir / "main.log"
+        main_log = log_dir / _MAIN_LOG
         main_log.write_text(f"{LOAD_LINE}\n{CLOSE_LINE}\n{LOAD_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
+        mocker.patch(_P_GET_PATHS, return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1
@@ -521,14 +529,14 @@ class TestGetActiveWorkspacesCloseEvents:
             '"fsPath":"/Users/test/other-project","external":"file:///Users/test/other-project",'
             '"path":"/Users/test/other-project","scheme":"file"}}}'
         )
-        log_dir = tmp_path / "20260314T120000"
+        log_dir = tmp_path / _LOG_TS_2
         log_dir.mkdir()
-        main_log = log_dir / "main.log"
+        main_log = log_dir / _MAIN_LOG
         main_log.write_text(f"{LOAD_LINE}\n{other_load}\n{CLOSE_LINE}\n", encoding="utf-8")
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
+        mocker.patch(_P_GET_PATHS, return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1
