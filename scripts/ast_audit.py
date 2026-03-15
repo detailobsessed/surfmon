@@ -102,9 +102,26 @@ def _analyze_file(filepath: Path, rel: str, results: dict[str, list[dict]]) -> N
 
 
 def _collect_duplicate_strings(tree: ast.Module, rel: str, results: dict[str, list[dict]]) -> None:
+    # Pre-collect IDs of docstring nodes to exclude from magic-string detection.
+    docstring_ids: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module)
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+        ):
+            expr_val = node.body[0].value
+            if isinstance(expr_val, ast.Constant) and isinstance(expr_val.value, str):
+                docstring_ids.add(id(expr_val))
+
     strings: dict[str, list[int]] = defaultdict(list)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > MIN_DUP_STRING_LEN:
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and len(node.value) >= MIN_DUP_STRING_LEN
+            and id(node) not in docstring_ids
+        ):
             strings[node.value].append(node.lineno)
     for s, locs in strings.items():
         if len(locs) >= MIN_DUP_STRING_COUNT:
