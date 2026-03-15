@@ -164,6 +164,18 @@ def is_main_windsurf_process(name: str, exe: str, app_name: str) -> bool:
     )
 
 
+def _filter_orphaned_crashpad(procs: list[psutil.Process]) -> list[psutil.Process]:
+    """Remove orphaned crashpad handlers from a process list."""
+    filtered = []
+    for p in procs:
+        try:
+            if "crashpad" not in p.name().lower():
+                filtered.append(p)
+        except psutil.NoSuchProcess, psutil.AccessDenied:
+            pass
+    return filtered
+
+
 def get_windsurf_processes() -> list[psutil.Process]:
     """Find all Windsurf-related processes.
 
@@ -172,43 +184,33 @@ def get_windsurf_processes() -> list[psutil.Process]:
     - Unrelated processes that happen to contain "windsurf" in their path
     - Orphaned crashpad handlers when the main Windsurf process isn't running
     """
-    paths = get_paths()
-    app_name = paths.app_name  # e.g., "Windsurf.app" or "Windsurf - Next.app"
+    app_name = get_paths().app_name
+    my_pid = os.getpid()
 
     windsurf_procs = []
     main_windsurf_found = False
 
-    # First pass: find all potential Windsurf processes and check for main process
     for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
         try:
-            name = proc.info["name"] or ""
-            cmdline = " ".join(proc.info["cmdline"] or [])
-            exe = proc.info["exe"] or ""
-
-            # Skip the monitoring tool itself
-            if proc.pid == os.getpid():
+            if proc.info["pid"] == my_pid:
                 continue
 
-            # Only match processes from the configured Windsurf app
-            if app_name in exe or app_name in cmdline:
-                windsurf_procs.append(proc)
+            name = proc.info["name"] or ""
+            exe = proc.info["exe"] or ""
+            cmdline = " ".join(proc.info["cmdline"] or [])
 
-                if is_main_windsurf_process(name, exe, app_name):
-                    main_windsurf_found = True
+            if app_name not in exe and app_name not in cmdline:
+                continue
+
+            windsurf_procs.append(proc)
+            if is_main_windsurf_process(name, exe, app_name):
+                main_windsurf_found = True
 
         except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
-    # If no main Windsurf process found, filter out crashpad handlers (they're orphaned)
     if not main_windsurf_found:
-        filtered_procs = []
-        for p in windsurf_procs:
-            try:
-                if "crashpad" not in p.name().lower():
-                    filtered_procs.append(p)
-            except psutil.NoSuchProcess, psutil.AccessDenied:
-                pass  # Process terminated, skip it
-        windsurf_procs = filtered_procs
+        windsurf_procs = _filter_orphaned_crashpad(windsurf_procs)
 
     return windsurf_procs
 

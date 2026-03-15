@@ -76,6 +76,17 @@ WINDSURF_PATHS = {
 _state: dict[str, WindsurfTarget | None] = {"target_override": None}
 
 
+_TARGET_PRIORITY = (WindsurfTarget.NEXT, WindsurfTarget.INSIDERS, WindsurfTarget.STABLE)
+
+
+def _select_preferred_target(running: set[WindsurfTarget]) -> WindsurfTarget | None:
+    """Pick the highest-priority target from a set of running targets."""
+    for target in _TARGET_PRIORITY:
+        if target in running:
+            return target
+    return None
+
+
 def _detect_running_target() -> WindsurfTarget | None:
     """Auto-detect which Windsurf installation is currently running.
 
@@ -102,14 +113,7 @@ def _detect_running_target() -> WindsurfTarget | None:
         except psutil.NoSuchProcess, psutil.AccessDenied:
             pass
 
-    if not running:
-        return None
-    # Prefer NEXT if both are running (it's the active development channel)
-    if WindsurfTarget.NEXT in running:
-        return WindsurfTarget.NEXT
-    if WindsurfTarget.INSIDERS in running:
-        return WindsurfTarget.INSIDERS
-    return WindsurfTarget.STABLE
+    return _select_preferred_target(running)
 
 
 class TargetNotSetError(Exception):
