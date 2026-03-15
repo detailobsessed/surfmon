@@ -38,6 +38,9 @@ _W_ID = "id = ?"
 _TS_10 = "2025-01-01T10:00:00+00:00"
 _TS_11 = "2025-01-01T11:00:00+00:00"
 _TS_OLD = "2020-01-01T00:00:00+00:00"
+_WS_VERSION = "1.9577.1024"
+_LS_BINARY = "language_server_macos_arm"
+_SQL_PING = "SELECT 1"
 
 
 @pytest.fixture
@@ -60,7 +63,7 @@ def _make_system_info():
     )
 
 
-def _make_process(pid=1234, name="language_server_macos_arm", memory_mb=500.0):
+def _make_process(pid=1234, name=_LS_BINARY, memory_mb=500.0):
     return ProcessInfo(
         pid=pid,
         name=name,
@@ -104,7 +107,7 @@ def _make_report(  # noqa: PLR0913
 def _make_ls_snapshot(timestamp=None, entries=None, orphan_issues=None, stale_issues=None):
     return LsSnapshot(
         timestamp=timestamp or datetime.now(tz=UTC).isoformat(),
-        windsurf_version="1.9577.1024",
+        windsurf_version=_WS_VERSION,
         windsurf_uptime_seconds=7200.0,
         total_ls_count=2,
         total_ls_memory_mb=800.0,
@@ -114,7 +117,7 @@ def _make_ls_snapshot(timestamp=None, entries=None, orphan_issues=None, stale_is
         or [
             LsSnapshotEntry(
                 pid=5678,
-                name="language_server_macos_arm",
+                name=_LS_BINARY,
                 language="python",
                 memory_mb=400.0,
                 memory_percent=1.2,
@@ -138,7 +141,7 @@ def _make_pty_info():
         per_process=[
             PtyProcessDetail(pid=1234, name="Windsurf", pty_count=20, fds=["33u", "34u"]),
         ],
-        windsurf_version="1.9577.1024",
+        windsurf_version=_WS_VERSION,
         windsurf_uptime_seconds=7200.0,
     )
 
@@ -343,7 +346,7 @@ class TestStoreLsSnapshot:
 
         session = next(db["sessions"].rows_where(_W_ID, [session_id]))
         assert session["command"] == "ls-snapshot"
-        assert session["windsurf_version"] == "1.9577.1024"
+        assert session["windsurf_version"] == _WS_VERSION
 
     def test_stores_entries(self, db):
         snapshot = _make_ls_snapshot()
@@ -595,7 +598,7 @@ class TestQueryAnalyzeSessions:
         assert len(session["issues"]) == 2
 
     def test_ls_count_codeium(self, db):
-        proc = _make_process(name="language_server_macos_arm", memory_mb=500.0)
+        proc = _make_process(name=_LS_BINARY, memory_mb=500.0)
         store_check(db, _make_report(processes=[proc]))
         session = query_analyze_sessions(db)[0]
         assert session["lang_servers"] == 1
@@ -676,9 +679,9 @@ class TestOpenDb:
     def test_closes_db_on_exit(self, tmp_path):
         """Should close the database connection when exiting the context."""
         with open_db(tmp_path / "test.db") as db:
-            db.execute("SELECT 1")  # connection works inside context
+            db.execute(_SQL_PING)  # connection works inside context
         with pytest.raises(Exception, match="closed"):
-            db.execute("SELECT 1")  # connection closed after context
+            db.execute(_SQL_PING)  # connection closed after context
 
     def test_closes_db_on_exception(self, tmp_path):
         """Should close the database connection even when an exception is raised."""
@@ -686,4 +689,4 @@ class TestOpenDb:
         with pytest.raises(RuntimeError, match=msg), open_db(tmp_path / "test.db") as db:
             raise RuntimeError(msg)
         with pytest.raises(Exception, match="closed"):
-            db.execute("SELECT 1")
+            db.execute(_SQL_PING)

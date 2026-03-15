@@ -7,6 +7,7 @@ import pytest
 from surfmon.output import display_report, save_report_markdown
 
 _P_CONSOLE = "surfmon.output.console"
+_REPORT_MD = "report.md"
 
 
 @pytest.fixture
@@ -161,7 +162,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown(self, mock_report, tmp_path):
         """Should save report as markdown file."""
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         assert output_path.exists()
@@ -172,7 +173,7 @@ class TestSaveReportMarkdown:
     def test_save_report_markdown_with_issues(self, mock_report, tmp_path):
         """Should include issues in markdown."""
         mock_report.log_issues = ["Critical issue"]
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")
@@ -181,7 +182,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown_with_mcp_servers(self, mock_report, tmp_path):
         """Should include MCP servers in markdown."""
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")
@@ -198,7 +199,7 @@ class TestSaveReportMarkdown:
         ls.cmdline = "python -m pylsp"
         mock_report.language_servers = [ls]
 
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")

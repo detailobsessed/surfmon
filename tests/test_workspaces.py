@@ -20,6 +20,10 @@ _APP_SUPPORT = "Application Support"
 _MAIN_LOG = "main.log"
 _LOG_TS_1 = "20260204T123456"
 _LOG_TS_2 = "20260314T120000"
+_DEV_HOME = "/Users/dev"
+_DEV_REPOS = "/Users/dev/repos"
+_COPIER_UV = "/Users/dev/repos/copier-uv-bleeding"
+_FS_BASE = ["/", "/Users", _DEV_HOME, _DEV_REPOS]
 
 
 def _patch_fs(monkeypatch, dirs, files=()):
@@ -308,20 +312,20 @@ class TestResolveWorkspacePath:
 
     def test_simple_path_no_hyphens(self, monkeypatch):
         """All-slash decode works when path has no hyphens or dots."""
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/myproject"])
+        _patch_fs(monkeypatch, [*_FS_BASE, f"{_DEV_REPOS}/myproject"])
         assert _resolve_workspace_path("file_Users_dev_repos_myproject") == Path("/Users/dev/repos/myproject")
 
     def test_hyphenated_directory(self, monkeypatch):
         """Hyphens in directory names are correctly resolved."""
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier-uv-bleeding"])
+        _patch_fs(monkeypatch, [*_FS_BASE, _COPIER_UV])
         assert _resolve_workspace_path("file_Users_dev_repos_copier_uv_bleeding") == Path("/Users/dev/repos/copier-uv-bleeding")
 
     def test_dotted_file(self, monkeypatch):
         """Dots in filenames are correctly resolved."""
         _patch_fs(
             monkeypatch,
-            ["/", "/Users", "/Users/dev", "/Users/dev/repos"],
-            files=["/Users/dev/repos/project.code-workspace"],
+            _FS_BASE,
+            files=[f"{_DEV_REPOS}/project.code-workspace"],
         )
         assert _resolve_workspace_path("file_Users_dev_repos_project_code_workspace") == Path("/Users/dev/repos/project.code-workspace")
 
@@ -329,26 +333,26 @@ class TestResolveWorkspacePath:
         """Correct resolution when a prefix also exists as a directory."""
         _patch_fs(
             monkeypatch,
-            ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier", "/Users/dev/repos/copier-uv-bleeding"],
+            [*_FS_BASE, f"{_DEV_REPOS}/copier", _COPIER_UV],
         )
         assert _resolve_workspace_path("file_Users_dev_repos_copier_uv_bleeding") == Path("/Users/dev/repos/copier-uv-bleeding")
 
     def test_truly_orphaned_returns_none(self, monkeypatch):
         """Returns None for workspace_ids that don't resolve to any real path."""
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos"])
+        _patch_fs(monkeypatch, _FS_BASE)
         assert _resolve_workspace_path("file_Users_dev_repos_nonexistent_path") is None
 
     def test_mixed_dot_and_hyphen(self, monkeypatch):
         """Handles names with both dots and hyphens."""
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/my-app.v2"])
+        _patch_fs(monkeypatch, [*_FS_BASE, f"{_DEV_REPOS}/my-app.v2"])
         assert _resolve_workspace_path("file_Users_dev_repos_my_app_v2") == Path("/Users/dev/repos/my-app.v2")
 
     def test_code_workspace_with_real_parent_dir(self, monkeypatch):
         """surfmon.code-workspace resolves even though surfmon/ is a real dir."""
         _patch_fs(
             monkeypatch,
-            ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/surfmon"],
-            files=["/Users/dev/repos/surfmon.code-workspace"],
+            [*_FS_BASE, f"{_DEV_REPOS}/surfmon"],
+            files=[f"{_DEV_REPOS}/surfmon.code-workspace"],
         )
         assert _resolve_workspace_path("file_Users_dev_repos_surfmon_code_workspace") == Path("/Users/dev/repos/surfmon.code-workspace")
 
@@ -374,7 +378,7 @@ class TestExtractWorkspaceFromCmdline:
         assert not _extract_workspace_from_cmdline("gopls serve")
 
     def test_resolved_hyphenated_path(self, monkeypatch):
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/copier-uv-bleeding"])
+        _patch_fs(monkeypatch, [*_FS_BASE, _COPIER_UV])
         cmdline = "ls --workspace_id file_Users_dev_repos_copier_uv_bleeding --x"
         result = _extract_workspace_from_cmdline(cmdline)
         assert "copier-uv-bleeding" in result
@@ -406,7 +410,7 @@ class TestIsOrphanedWorkspace:
         assert _is_orphaned_workspace(cmdline) is True
 
     def test_not_orphaned_with_hyphenated_path(self, monkeypatch):
-        _patch_fs(monkeypatch, ["/", "/Users", "/Users/dev", "/Users/dev/repos", "/Users/dev/repos/my-project"])
+        _patch_fs(monkeypatch, [*_FS_BASE, f"{_DEV_REPOS}/my-project"])
         cmdline = "language_server --workspace_id file_Users_dev_repos_my_project --other"
         assert _is_orphaned_workspace(cmdline) is False
 

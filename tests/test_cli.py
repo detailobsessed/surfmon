@@ -34,6 +34,7 @@ _WARN_EXT_ERRORS = "\u26a0  Extension errors: some.ext (3)"
 _LS_BINARY = "language_server_macos_arm"
 _TS_LS = "2025-06-01T12:00:00+00:00"
 _TS_TREND_10 = "2025-01-01T10:00:00"
+_TS_TREND_10_TZ = "2025-01-01T10:00:00+00:00"
 _TS_TREND_11 = "2025-01-01T11:00:00"
 _TS_TREND_12 = "2025-01-01T12:00:00"
 
@@ -839,7 +840,7 @@ class TestLsSnapshotCommand:
             ),
             ProcessInfo(
                 pid=2000,
-                name="language_server_macos_arm",
+                name=_LS_BINARY,
                 cpu_percent=10.0,
                 memory_mb=300.0,
                 memory_percent=0.9,
@@ -870,7 +871,7 @@ class TestLsSnapshotCommand:
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
-                    name="language_server_macos_arm",
+                    name=_LS_BINARY,
                     language="Codeium",
                     memory_mb=300.0,
                     memory_percent=0.9,
@@ -987,7 +988,7 @@ class TestLsSnapshotDisplay:
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
-                    name="language_server_macos_arm",
+                    name=_LS_BINARY,
                     language="Codeium",
                     memory_mb=2000.0,
                     memory_percent=6.0,
@@ -1097,7 +1098,7 @@ class TestHistoryCommand:
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
@@ -1132,7 +1133,7 @@ class TestHistoryCommand:
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
@@ -1159,7 +1160,7 @@ class TestHistoryCommand:
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
