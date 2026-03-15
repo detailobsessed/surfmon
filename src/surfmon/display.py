@@ -9,9 +9,6 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
-
 from ._constants import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
@@ -130,7 +127,7 @@ def _format_history_row(row: dict) -> tuple[str, ...]:
         _fmt_or_dash(row["ls_count"]),
         _fmt_gb(row["ls_memory_mb"]),
         _fmt_styled_count(row["orphaned_count"]),
-        _fmt_or_dash(row["pty_count"]) if row["pty_count"] is not None else "—",
+        str(row["pty_count"]) if row["pty_count"] is not None else "—",
         _fmt_styled_count(row["issue_count"], good_color="green"),
     )
 
@@ -592,6 +589,7 @@ def display_trend_summary(values: list[float], unit: str) -> None:
 
 def _plot_memory_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 1: Memory charts (total, top 5 processes, system pressure)."""
+    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
     # Total Memory Usage
     ax = axes[0, 0]
     windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
@@ -641,6 +639,7 @@ def _plot_memory_charts(axes: Any, timestamps: list, reports: list[dict]) -> Non
 
 def _plot_pty_chart(ax: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot PTY usage with Windsurf count and system percentage."""
+    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
     ax2 = ax.twinx()
 
     pty_infos = [r.get("pty_info") or {} for r in reports]
@@ -680,6 +679,7 @@ def _plot_pty_chart(ax: Any, timestamps: list, reports: list[dict]) -> None:
 
 def _plot_row2_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 2: Process types, PTY usage, language servers & extensions."""
+    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
     # Process Count by Type
     ax = axes[1, 0]
     proc_types: dict[str, list[int]] = defaultdict(list)
@@ -727,6 +727,7 @@ def _plot_row2_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
 
 def _plot_row3_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 3: Thread count, average memory per process, issues over time."""
+    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
     # Thread Count
     ax = axes[2, 0]
     total_threads = [sum(p["num_threads"] for p in r["windsurf_processes"]) for r in reports]
@@ -759,6 +760,8 @@ def _plot_row3_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
 
 def generate_analysis_plots(reports: list[dict], output: Any) -> None:
     """Generate 3x3 matplotlib analysis plots."""
+    import matplotlib.pyplot as plt  # noqa: PLC0415 — lazy import, heavy library (~1s)
+
     fig, axes = plt.subplots(3, 3, figsize=(18, 14))
     fig.suptitle("Windsurf Performance Analysis", fontsize=18, y=0.995)
 

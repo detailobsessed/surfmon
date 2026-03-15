@@ -10,8 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Protocol
 
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
 import psutil
 import typer
 
@@ -373,6 +371,9 @@ def _format_trend_value(metric: str, value: float) -> str:
 
 def _generate_trend_plot(metric: str, data: list[dict], unit: str, output: Path | None) -> None:
     """Generate a matplotlib trend chart."""
+    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.pyplot as plt  # noqa: PLC0415 — lazy import, heavy library (~1s)
+
     raw_timestamps = [datetime.fromisoformat(p["timestamp"]) for p in data]
     x_values = mdates.date2num(raw_timestamps)
     values = [p["value"] for p in data]
