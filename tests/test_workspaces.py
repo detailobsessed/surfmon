@@ -3,9 +3,6 @@
 from pathlib import Path
 from unittest.mock import Mock
 
-import pytest
-
-from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
     _extract_workspace_from_cmdline,
     _is_orphaned_workspace,
@@ -15,14 +12,6 @@ from surfmon.monitor import (
     count_windsurf_launches_today,
     get_active_workspaces,
 )
-
-
-@pytest.fixture(autouse=True)
-def reset_config_target():
-    """Reset config target to STABLE before each test to ensure consistent behavior."""
-    set_target(WindsurfTarget.STABLE)
-    yield
-    reset_target()
 
 
 def _patch_fs(monkeypatch, dirs, files=()):

@@ -7,7 +7,6 @@ from unittest.mock import Mock
 import psutil
 import pytest
 
-from surfmon.config import WindsurfTarget, reset_target, set_target
 from surfmon.monitor import (
     EXIT_CRITICAL,
     EXIT_OK,
@@ -27,47 +26,6 @@ from surfmon.monitor import (
     max_issue_severity,
     save_report_json,
 )
-
-
-@pytest.fixture(autouse=True)
-def reset_config_target():
-    """Reset config target to STABLE before each test to ensure consistent behavior."""
-    set_target(WindsurfTarget.STABLE)
-    yield
-    reset_target()
-
-
-@pytest.fixture
-def mock_process():
-    """Create a mock psutil.Process."""
-    proc = Mock(spec=psutil.Process)
-    proc.pid = 1234
-    proc.name.return_value = "Windsurf Helper"
-    proc.cmdline.return_value = ["/path/to/windsurf", "--arg"]
-    proc.cpu_percent.return_value = 5.0
-    proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)  # 100 MB
-    proc.memory_percent.return_value = 1.5
-    proc.num_threads.return_value = 10
-    proc.create_time.return_value = 1000.0
-    # Make oneshot() a context manager
-    proc.oneshot.return_value.__enter__ = Mock(return_value=proc)
-    proc.oneshot.return_value.__exit__ = Mock(return_value=False)
-    return proc
-
-
-@pytest.fixture
-def mock_system_info():
-    """Create mock system info."""
-    mem = Mock()
-    mem.total = 32 * 1024 * 1024 * 1024  # 32 GB
-    mem.available = 16 * 1024 * 1024 * 1024  # 16 GB
-    mem.percent = 50.0
-
-    swap = Mock()
-    swap.total = 4 * 1024 * 1024 * 1024  # 4 GB
-    swap.used = 1 * 1024 * 1024 * 1024  # 1 GB
-
-    return mem, swap
 
 
 class TestGetWindsurfProcesses:

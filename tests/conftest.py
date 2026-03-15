@@ -2,8 +2,9 @@
 
 import json
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
+import psutil
 import pytest
 
 from surfmon.config import WindsurfTarget, reset_target, set_target
@@ -21,6 +22,39 @@ def _default_target():
 def _mock_db_writes(monkeypatch):
     """Prevent CLI commands from opening real DB connections during tests."""
     monkeypatch.setattr("surfmon.cli._store_to_db", lambda *_args, **_kwargs: None)
+
+
+@pytest.fixture
+def mock_process():
+    """Create a mock psutil.Process."""
+    proc = Mock(spec=psutil.Process)
+    proc.pid = 1234
+    proc.name.return_value = "Windsurf Helper"
+    proc.cmdline.return_value = ["/path/to/windsurf", "--arg"]
+    proc.cpu_percent.return_value = 5.0
+    proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)  # 100 MB
+    proc.memory_percent.return_value = 1.5
+    proc.num_threads.return_value = 10
+    proc.create_time.return_value = 1000.0
+    # Make oneshot() a context manager
+    proc.oneshot.return_value.__enter__ = Mock(return_value=proc)
+    proc.oneshot.return_value.__exit__ = Mock(return_value=False)
+    return proc
+
+
+@pytest.fixture
+def mock_system_info():
+    """Create mock system info."""
+    mem = Mock()
+    mem.total = 32 * 1024 * 1024 * 1024  # 32 GB
+    mem.available = 16 * 1024 * 1024 * 1024  # 16 GB
+    mem.percent = 50.0
+
+    swap = Mock()
+    swap.total = 4 * 1024 * 1024 * 1024  # 4 GB
+    swap.used = 1 * 1024 * 1024 * 1024  # 1 GB
+
+    return mem, swap
 
 
 @pytest.fixture
