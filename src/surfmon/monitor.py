@@ -176,6 +176,13 @@ def _filter_orphaned_crashpad(procs: list[psutil.Process]) -> list[psutil.Proces
     return filtered
 
 
+def _matches_windsurf_app(info: dict, app_name: str) -> bool:
+    """Return True if a process info dict belongs to the Windsurf app."""
+    exe = info["exe"] or ""
+    cmdline = " ".join(info["cmdline"] or [])
+    return app_name in exe or app_name in cmdline
+
+
 def get_windsurf_processes() -> list[psutil.Process]:
     """Find all Windsurf-related processes.
 
@@ -194,16 +201,11 @@ def get_windsurf_processes() -> list[psutil.Process]:
         try:
             if proc.info["pid"] == my_pid:
                 continue
-
-            name = proc.info["name"] or ""
-            exe = proc.info["exe"] or ""
-            cmdline = " ".join(proc.info["cmdline"] or [])
-
-            if app_name not in exe and app_name not in cmdline:
+            if not _matches_windsurf_app(proc.info, app_name):
                 continue
 
             windsurf_procs.append(proc)
-            if is_main_windsurf_process(name, exe, app_name):
+            if is_main_windsurf_process(proc.info["name"] or "", proc.info["exe"] or "", app_name):
                 main_windsurf_found = True
 
         except psutil.NoSuchProcess, psutil.AccessDenied:
