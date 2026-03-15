@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING, Any
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
-from .monitor import (
+from ._constants import (
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
+)
+from .monitor import (
     format_uptime,
 )
 from .output import (

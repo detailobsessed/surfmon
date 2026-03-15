@@ -26,15 +26,15 @@ __all__ = [
     "style_issue",
 ]
 
-from .config import get_paths, get_target_display_name
-from .monitor import (
+from ._constants import (
     ISSUE_CRITICAL_PREFIX,
     ISSUE_WARNING_PREFIX,
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
-    format_uptime,
 )
+from .config import get_paths, get_target_display_name
+from .monitor import format_uptime
 
 if TYPE_CHECKING:
     from pathlib import Path

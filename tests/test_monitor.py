@@ -907,7 +907,7 @@ class TestCheckPtyLeak:
 
     def test_returns_pty_info(self, mocker):
         """Should return PtyInfo with counts."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         # Mock sysctl
         sysctl_result = Mock()
@@ -936,7 +936,7 @@ class TestCheckPtyLeak:
 
     def test_handles_sysctl_failure(self, mocker):
         """Should use default limit when sysctl fails."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 1
@@ -954,7 +954,7 @@ class TestCheckPtyLeak:
 
     def test_handles_lsof_failure(self, mocker):
         """Should return zero counts when lsof fails."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -975,7 +975,7 @@ class TestCheckPtyLeak:
         """Should handle subprocess timeout gracefully."""
         import subprocess
 
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="lsof", timeout=10)
 
         result = check_pty_leak()
@@ -985,7 +985,7 @@ class TestCheckPtyLeak:
 
     def test_no_windsurf_ptys(self, mocker):
         """Should correctly count zero Windsurf PTYs when only other apps use them."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -1590,7 +1590,7 @@ class TestGetSystemPtyLimit:
 
     def test_returns_limit_from_sysctl(self, mocker):
         """Should return the parsed sysctl value."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
         result_mock = Mock()
         result_mock.returncode = 0
         result_mock.stdout = "1024\n"
@@ -1600,7 +1600,7 @@ class TestGetSystemPtyLimit:
 
     def test_returns_default_on_failure(self, mocker):
         """Should return 511 when sysctl fails."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
         result_mock = Mock()
         result_mock.returncode = 1
         result_mock.stdout = ""
@@ -1614,7 +1614,7 @@ class TestCheckPtyLeakForensic:
 
     def test_populates_per_process_detail(self, mocker):
         """Should populate per_process with per-PID breakdown."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -1662,7 +1662,7 @@ class TestCheckPtyLeakForensic:
 
     def test_extracts_version_and_uptime(self, mocker):
         """Should extract version and uptime when process list is provided."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -1693,7 +1693,7 @@ class TestCheckPtyLeakForensic:
 
     def test_backwards_compatible_without_processes(self, mocker):
         """Should work without process list (backwards-compatible)."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
@@ -1714,7 +1714,7 @@ class TestCheckPtyLeakForensic:
 
     def test_fd_detail_captures_offset(self, mocker):
         """Should capture offset values for active/idle FD classification."""
-        mock_run = mocker.patch("surfmon.monitor.subprocess.run")
+        mock_run = mocker.patch("surfmon.pty.subprocess.run")
 
         sysctl_result = Mock()
         sysctl_result.returncode = 0
