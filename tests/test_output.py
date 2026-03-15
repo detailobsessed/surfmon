@@ -127,11 +127,7 @@ class TestDisplayReport:
         # Verify the LS snapshot table was rendered (console.print called with a Table)
         from rich.table import Table
 
-        table_args = [
-            call.args[0]
-            for call in mock_console.print.call_args_list
-            if call.args and isinstance(call.args[0], Table)
-        ]
+        table_args = [call.args[0] for call in mock_console.print.call_args_list if call.args and isinstance(call.args[0], Table)]
         ls_tables = [t for t in table_args if t.title and "Language Servers" in t.title]
         assert ls_tables, "Expected a 'Language Servers' table to be printed"
 
