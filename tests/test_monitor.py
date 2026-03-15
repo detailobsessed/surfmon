@@ -27,14 +27,36 @@ from surfmon.monitor import (
     save_report_json,
 )
 
+# ---------------------------------------------------------------------------
+# Shared test constants — eliminates repeated magic strings
+# ---------------------------------------------------------------------------
+_P_PROC_ITER = "surfmon.monitor.psutil.process_iter"
+_P_GETPID = "surfmon.monitor.os.getpid"
+_P_SYS_INFO = "surfmon.monitor.get_system_info"
+_P_WS_PROCS = "surfmon.monitor.get_windsurf_processes"
+_P_MCP_CFG = "surfmon.monitor.get_mcp_config"
+_P_EXT_COUNT = "surfmon.monitor.count_extensions"
+_P_LOG_ISSUES = "surfmon.monitor.check_log_issues"
+_P_PROC_INFO = "surfmon.monitor.get_process_info"
+_P_PTY_LEAK = "surfmon.monitor.check_pty_leak"
+_P_ACTIVE_WS = "surfmon.monitor.get_active_workspaces"
+_P_LAUNCHES = "surfmon.monitor.count_windsurf_launches_today"
+_P_RESOLVE_WS = "surfmon.monitor._resolve_workspace_path"
+
+_WINDSURF_EXE = "/Applications/Windsurf.app/Contents/MacOS/Windsurf"
+_WINDSURF_NAME = "Windsurf"
+_LS_BINARY = "language_server_macos_arm"
+_TEST_VERSION = "2.5.0"
+_TEST_WS_PATH = "/Users/test/my-project"
+
 
 class TestGetWindsurfProcesses:
     """Tests for get_windsurf_processes."""
 
     def test_finds_windsurf_processes(self, mocker):
         """Should find processes from Windsurf.app and exclude monitoring tool."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
-        mocker.patch("surfmon.monitor.os.getpid", return_value=3)
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
+        mocker.patch(_P_GETPID, return_value=3)
         # Setup mocks
         proc1 = Mock()
         proc1.info = {
@@ -97,8 +119,8 @@ class TestGetWindsurfProcesses:
         the cmdline string, which falsely excluded any LS whose --workspace_id
         contained the word 'surfmon'.
         """
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
-        mocker.patch("surfmon.monitor.os.getpid", return_value=99999)
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
+        mocker.patch(_P_GETPID, return_value=99999)
 
         proc_ls = Mock()
         proc_ls.info = {
@@ -123,7 +145,7 @@ class TestGetWindsurfProcesses:
 
     def test_handles_access_denied(self, mocker):
         """Should handle AccessDenied exceptions."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
         proc1 = Mock()
         proc1.info = {
             "pid": 1,
@@ -144,7 +166,7 @@ class TestGetWindsurfProcesses:
 
     def test_handles_no_such_process(self, mocker):
         """Should handle NoSuchProcess exceptions."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
         proc1 = Mock()
         proc1.info = {
             "pid": 1,
@@ -165,7 +187,7 @@ class TestGetWindsurfProcesses:
 
     def test_filters_orphaned_crashpad_handlers(self, mocker):
         """Should filter out orphaned crashpad handlers when main Windsurf process is not running."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
         # Only crashpad handlers, no main Windsurf process
         proc1 = Mock()
         crashpad_exe = (
@@ -381,15 +403,15 @@ class TestGenerateReport:
     def test_generates_complete_report(self, mock_process, mocker):
         """Should generate a complete monitoring report."""
         # Setup mocks
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_proc_info = mocker.patch(_P_PROC_INFO)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
         mock_procs.return_value = [mock_process]
@@ -509,15 +531,15 @@ class TestPtyLeakIssueDetection:
 
     def test_critical_pty_leak_generates_issue(self, mock_process, mocker):
         """Should generate CRITICAL issue when PTY count >= 200."""
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_proc_info = mocker.patch(_P_PROC_INFO)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
         mock_procs.return_value = [mock_process]
@@ -547,15 +569,15 @@ class TestPtyLeakIssueDetection:
 
     def test_warning_pty_leak_generates_issue(self, mock_process, mocker):
         """Should generate warning issue when PTY count >= 50 but < 200."""
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_proc_info = mocker.patch(_P_PROC_INFO)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
         mock_procs.return_value = [mock_process]
@@ -584,15 +606,15 @@ class TestPtyLeakIssueDetection:
 
     def test_low_pty_count_no_issue(self, mock_process, mocker):
         """Should not generate issue when PTY count is low."""
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_proc_info = mocker.patch("surfmon.monitor.get_process_info")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_proc_info = mocker.patch(_P_PROC_INFO)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
         mock_procs.return_value = [mock_process]
@@ -613,8 +635,8 @@ class TestSurfmonProcessExclusion:
 
     def test_excludes_surfmon_process_by_pid(self, mocker):
         """Should exclude surfmon by PID match, not by cmdline string."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
-        mocker.patch("surfmon.monitor.os.getpid", return_value=2)
+        mock_proc_iter = mocker.patch(_P_PROC_ITER)
+        mocker.patch(_P_GETPID, return_value=2)
 
         # Windsurf process
         proc1 = Mock()
@@ -653,14 +675,14 @@ class TestCPUSamplingExceptions:
 
     def test_handles_nosuchprocess_during_cpu_init(self, mocker):
         """Should handle NoSuchProcess during initial CPU sampling."""
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
         mocker.patch("surfmon.monitor.time.sleep")
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
@@ -676,7 +698,7 @@ class TestCPUSamplingExceptions:
         mock_procs.return_value = [proc]
 
         # get_process_info will also fail since proc is gone
-        mocker.patch("surfmon.monitor.get_process_info", return_value=None)
+        mocker.patch(_P_PROC_INFO, return_value=None)
 
         report = generate_report()
 
@@ -684,14 +706,14 @@ class TestCPUSamplingExceptions:
 
     def test_handles_nosuchprocess_during_cpu_final(self, mocker):
         """Should handle NoSuchProcess during final CPU sampling."""
-        mock_sys_info = mocker.patch("surfmon.monitor.get_system_info")
-        mock_procs = mocker.patch("surfmon.monitor.get_windsurf_processes")
-        mock_mcp = mocker.patch("surfmon.monitor.get_mcp_config")
-        mock_ext_count = mocker.patch("surfmon.monitor.count_extensions")
-        mock_issues = mocker.patch("surfmon.monitor.check_log_issues")
-        mock_pty = mocker.patch("surfmon.monitor.check_pty_leak")
-        mocker.patch("surfmon.monitor.get_active_workspaces", return_value=[])
-        mocker.patch("surfmon.monitor.count_windsurf_launches_today", return_value=0)
+        mock_sys_info = mocker.patch(_P_SYS_INFO)
+        mock_procs = mocker.patch(_P_WS_PROCS)
+        mock_mcp = mocker.patch(_P_MCP_CFG)
+        mock_ext_count = mocker.patch(_P_EXT_COUNT)
+        mock_issues = mocker.patch(_P_LOG_ISSUES)
+        mock_pty = mocker.patch(_P_PTY_LEAK)
+        mocker.patch(_P_ACTIVE_WS, return_value=[])
+        mocker.patch(_P_LAUNCHES, return_value=0)
         mocker.patch("surfmon.monitor.time.sleep")
 
         mock_sys_info.return_value = SystemInfo(32, 16, 50, 10, 4, 1)
@@ -706,7 +728,7 @@ class TestCPUSamplingExceptions:
         proc.cpu_percent.side_effect = [0.0, psutil.NoSuchProcess(pid=999)]
         mock_procs.return_value = [proc]
 
-        mocker.patch("surfmon.monitor.get_process_info", return_value=None)
+        mocker.patch(_P_PROC_INFO, return_value=None)
 
         report = generate_report()
 
@@ -896,8 +918,8 @@ class TestCaptureLsSnapshotStaleDetection:
         from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
 
         mocker.patch(
-            "surfmon.monitor._resolve_workspace_path",
-            return_value=Path("/Users/test/my-project"),
+            _P_RESOLVE_WS,
+            return_value=Path(_TEST_WS_PATH),
         )
 
         proc_infos = [
@@ -931,8 +953,8 @@ class TestCaptureLsSnapshotStaleDetection:
         from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
 
         mocker.patch(
-            "surfmon.monitor._resolve_workspace_path",
-            return_value=Path("/Users/test/my-project"),
+            _P_RESOLVE_WS,
+            return_value=Path(_TEST_WS_PATH),
         )
 
         proc_infos = [
@@ -949,7 +971,7 @@ class TestCaptureLsSnapshotStaleDetection:
         ]
 
         active_workspaces = [
-            WorkspaceInfo(id="ws1", path=str(Path("/Users/test/my-project")), exists=True),
+            WorkspaceInfo(id="ws1", path=str(Path(_TEST_WS_PATH)), exists=True),
         ]
 
         snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0, active_workspaces)
@@ -1015,8 +1037,8 @@ class TestCaptureLsSnapshotStaleDetection:
         from surfmon.monitor import ProcessInfo, capture_ls_snapshot
 
         mocker.patch(
-            "surfmon.monitor._resolve_workspace_path",
-            return_value=Path("/Users/test/my-project"),
+            _P_RESOLVE_WS,
+            return_value=Path(_TEST_WS_PATH),
         )
 
         proc_infos = [
