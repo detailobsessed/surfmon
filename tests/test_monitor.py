@@ -16,9 +16,11 @@ from surfmon.monitor import (
     SystemInfo,
     _extract_windsurf_version,
     _get_windsurf_uptime,
+    _parse_workspace_event,
     count_extensions,
     find_language_servers,
     generate_report,
+    get_active_workspaces,
     get_mcp_config,
     get_process_info,
     get_system_info,
@@ -1173,7 +1175,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 0
@@ -1187,7 +1189,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1
@@ -1208,7 +1210,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1

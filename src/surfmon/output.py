@@ -292,7 +292,7 @@ def _display_ls_snapshot_table(snapshot: LsSnapshot) -> None:
         ls_table.add_row(
             str(entry.pid),
             entry.language,
-            entry.workspace,
+            entry.workspace or "[dim]—[/dim]",
             f"[{mem_style}]{entry.memory_mb:.0f} MB[/{mem_style}]",
             f"[{cpu_style}]{entry.cpu_percent:.1f}[/{cpu_style}]",
             _ls_entry_status_rich(entry),

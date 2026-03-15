@@ -4,14 +4,11 @@ import json
 import os
 import re
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import psutil
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from surfmon._constants import (
     CMDLINE_TRUNCATE_LEN,
@@ -116,11 +113,10 @@ class LsSnapshot:
     entries: list[LsSnapshotEntry]
     orphan_issues: list[str]
     stale_issues: list[str]
+    issues: list[str] = field(init=False)
 
-    @property
-    def issues(self) -> list[str]:
-        """All issues combined (orphan + stale)."""
-        return self.orphan_issues + self.stale_issues
+    def __post_init__(self) -> None:
+        self.issues = self.orphan_issues + self.stale_issues
 
 
 @dataclass
@@ -389,10 +385,7 @@ def _build_ls_entry(
 
     issue = None
     if orphaned:
-        issue = (
-            f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace "
-            f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
-        )
+        issue = _format_orphan_issue(ls, workspace, original_proc.cmdline)
     elif stale:
         issue = (
             f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
@@ -427,6 +420,7 @@ def capture_ls_snapshot(
     windsurf_version: str,
     windsurf_uptime: float,
     active_workspaces: list[WorkspaceInfo] | None = None,
+    lang_servers: list[ProcessInfo] | None = None,
 ) -> LsSnapshot:
     """Capture a forensic snapshot of all language server processes.
 
@@ -434,7 +428,8 @@ def capture_ls_snapshot(
     workspace mapping, orphaned status (indexing deleted workspace), and
     stale status (workspace exists but not open in the IDE).
     """
-    lang_servers = find_language_servers(proc_infos)
+    if lang_servers is None:
+        lang_servers = find_language_servers(proc_infos)
     active_ws_paths = {ws.path for ws in active_workspaces} if active_workspaces else set()
 
     entries = []
@@ -594,6 +589,7 @@ def generate_report() -> MonitoringReport:
         windsurf_version,
         windsurf_uptime,
         active_workspaces=active_workspaces,
+        lang_servers=language_servers,
     )
     log_issues.extend(ls_snapshot.issues)
 

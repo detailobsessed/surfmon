@@ -959,7 +959,7 @@ class TestLsSnapshotCommand:
             stale_count=0,
             entries=[],
             orphan_issues=[],
-            stale_issues=["\u26a0  High memory usage detected"],
+            stale_issues=["\u26a0  language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
