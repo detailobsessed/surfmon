@@ -1965,7 +1965,7 @@ class TestIsStaleWorkspace:
     def test_stale_when_path_exists_but_not_in_active_set(self, mocker):
         """Should return True when workspace exists on disk but isn't active."""
         mocker.patch(
-            "surfmon.monitor._resolve_workspace_path",
+            "surfmon.workspaces._resolve_workspace_path",
             return_value=Path("/Users/test/my-project"),
         )
         cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
@@ -1976,7 +1976,7 @@ class TestIsStaleWorkspace:
     def test_not_stale_when_path_in_active_set(self, mocker):
         """Should return False when workspace is in the active set."""
         mocker.patch(
-            "surfmon.monitor._resolve_workspace_path",
+            "surfmon.workspaces._resolve_workspace_path",
             return_value=Path("/Users/test/my-project"),
         )
         cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
@@ -2266,7 +2266,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 0
@@ -2280,7 +2280,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1
@@ -2301,7 +2301,7 @@ class TestGetActiveWorkspacesCloseEvents:
 
         paths_mock = Mock()
         paths_mock.logs_dir = tmp_path
-        mocker.patch("surfmon.monitor.get_paths", return_value=paths_mock)
+        mocker.patch("surfmon.workspaces.get_paths", return_value=paths_mock)
 
         result = get_active_workspaces()
         assert len(result) == 1

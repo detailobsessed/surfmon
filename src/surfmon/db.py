@@ -98,11 +98,9 @@ def _migration_001_add_stale_column(db: Database) -> None:
 _MIGRATIONS: list = [_migration_001_add_stale_column]
 
 
-def _ensure_schema(db: Database) -> None:
-    """Create tables if they don't exist, then run pending migrations."""
-    # Capture state before CREATE TABLE blocks modify it.
-    # Legacy DBs (pre-migration-framework) have tables but no _meta table.
-    is_legacy = "sessions" in db.table_names() and "_meta" not in db.table_names()
+def _create_tables(db: Database) -> None:
+    """Create core tables if they don't already exist."""
+    session_fk = [("session_id", "sessions", "id")]
 
     if "sessions" not in db.table_names():
         Table(db, "sessions").create(
@@ -130,7 +128,7 @@ def _ensure_schema(db: Database) -> None:
                 "swap_used_gb": float,
             },
             pk="session_id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "processes" not in db.table_names():
@@ -148,7 +146,7 @@ def _ensure_schema(db: Database) -> None:
                 "cmdline": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "ls_entries" not in db.table_names():
@@ -168,7 +166,7 @@ def _ensure_schema(db: Database) -> None:
                 "stale": int,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "pty_snapshots" not in db.table_names():
@@ -180,7 +178,7 @@ def _ensure_schema(db: Database) -> None:
                 "system_pty_used": int,
             },
             pk="session_id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "pty_per_process" not in db.table_names():
@@ -194,7 +192,7 @@ def _ensure_schema(db: Database) -> None:
                 "fds": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "issues" not in db.table_names():
@@ -206,8 +204,17 @@ def _ensure_schema(db: Database) -> None:
                 "message": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
+
+
+def _ensure_schema(db: Database) -> None:
+    """Create tables if they don't exist, then run pending migrations."""
+    # Capture state before CREATE TABLE blocks modify it.
+    # Legacy DBs (pre-migration-framework) have tables but no _meta table.
+    is_legacy = "sessions" in db.table_names() and "_meta" not in db.table_names()
+
+    _create_tables(db)
 
     # Fresh DB: CREATE TABLE blocks above always reflect the latest schema,
     # so just stamp the version and skip migrations entirely.
