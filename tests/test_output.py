@@ -93,18 +93,47 @@ class TestDisplayReport:
         assert mock_console.print.called
 
     def test_display_report_with_language_servers(self, mock_report, mocker):
-        """Should display language servers when present."""
-        ls = MagicMock()
-        ls.pid = 1234
-        ls.name = "python-lsp"
-        ls.memory_mb = 100.0
-        ls.cpu_percent = 5.0
-        ls.cmdline = "python -m pylsp"
-        mock_report.language_servers = [ls]
+        """Should display language servers table via ls_snapshot."""
+        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+
+        entry = LsSnapshotEntry(
+            pid=1234,
+            name="python-lsp",
+            language="Python",
+            memory_mb=100.0,
+            memory_percent=0.3,
+            cpu_percent=5.0,
+            num_threads=4,
+            runtime_seconds=600.0,
+            workspace="/home/user/project",
+            orphaned=False,
+            stale=False,
+        )
+        mock_report.ls_snapshot = LsSnapshot(
+            timestamp="2025-01-01T12:00:00",
+            windsurf_version="2.5.0",
+            windsurf_uptime_seconds=3600.0,
+            total_ls_count=1,
+            total_ls_memory_mb=100.0,
+            orphaned_count=0,
+            stale_count=0,
+            entries=[entry],
+            orphan_issues=[],
+            stale_issues=[],
+        )
 
         mock_console = mocker.patch("surfmon.output.console")
         display_report(mock_report, verbose=True)
-        assert mock_console.print.called
+        # Verify the LS snapshot table was rendered (console.print called with a Table)
+        from rich.table import Table
+
+        table_args = [
+            call.args[0]
+            for call in mock_console.print.call_args_list
+            if call.args and isinstance(call.args[0], Table)
+        ]
+        ls_tables = [t for t in table_args if t.title and "Language Servers" in t.title]
+        assert ls_tables, "Expected a 'Language Servers' table to be printed"
 
     def test_display_report_with_workspaces(self, mock_report, mocker):
         """Should display active workspaces when present."""

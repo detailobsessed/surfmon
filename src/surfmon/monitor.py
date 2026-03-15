@@ -494,8 +494,11 @@ def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> str:
     if db_match:
         db_path = Path(db_match.group(1))
         db_size_mb = 0
-        if db_path.exists():
-            db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
+        try:
+            if db_path.exists():
+                db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
+        except OSError:
+            pass
         return (
             f"{prefix} (consuming {ls.memory_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
             f"Fix: Close Windsurf, run: rm -rf {db_path}"
