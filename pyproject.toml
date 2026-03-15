@@ -168,6 +168,9 @@ ignore = [
 "scripts/**" = [
     "T201",       # Scripts naturally print output
 ]
+"scripts/ast_audit.py" = [
+    "E501",       # Embedded CSS/JS strings exceed line length
+]
 "docs/hooks/**" = [
     "T201",       # Hooks may print diagnostics
 ]
