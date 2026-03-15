@@ -459,7 +459,7 @@ class TestFormatElapsed:
     )
     def test_format_elapsed(self, seconds, expected):
         """Should format seconds as M:SS or H:MM:SS."""
-        from surfmon.cli import _format_elapsed
+        from surfmon.display import _format_elapsed
 
         assert _format_elapsed(seconds) == expected
 

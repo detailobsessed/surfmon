@@ -75,26 +75,26 @@ class TestProcessNameSimplification:
 
     def test_helper_with_gpu_type(self):
         """'Windsurf Helper (GPU)' → 'Windsurf Helper GPU'."""
-        from surfmon.cli import simplify_process_name
+        from surfmon.display import simplify_process_name
 
         assert simplify_process_name("Windsurf Helper (GPU)") == "Windsurf Helper GPU"
 
     def test_helper_with_renderer_type(self):
         """'Windsurf Helper (Renderer)' → 'Windsurf Helper Renderer'."""
-        from surfmon.cli import simplify_process_name
+        from surfmon.display import simplify_process_name
 
         assert simplify_process_name("Windsurf Helper (Renderer)") == "Windsurf Helper Renderer"
 
     def test_helper_without_parens_unchanged(self):
         """'Windsurf Helper' should not be mangled."""
-        from surfmon.cli import simplify_process_name
+        from surfmon.display import simplify_process_name
 
         result = simplify_process_name("Windsurf Helper")
         assert result == "Windsurf Helper"
 
     def test_non_helper_unchanged(self):
         """Non-helper names pass through unchanged."""
-        from surfmon.cli import simplify_process_name
+        from surfmon.display import simplify_process_name
 
         assert simplify_process_name("Windsurf") == "Windsurf"
         assert simplify_process_name("Electron") == "Electron"
@@ -109,7 +109,7 @@ class TestProcessMemoryHistory:
 
     def test_late_process_has_leading_zeros(self):
         """Process appearing only in report 3 should have [0, 0, value]."""
-        from surfmon.cli import build_process_memory_history
+        from surfmon.display import build_process_memory_history
 
         reports = [
             {"windsurf_processes": [{"name": "Windsurf", "memory_mb": 500}]},
@@ -127,7 +127,7 @@ class TestProcessMemoryHistory:
 
     def test_all_histories_match_report_count(self):
         """Every process history length should equal number of reports."""
-        from surfmon.cli import build_process_memory_history
+        from surfmon.display import build_process_memory_history
 
         reports = [
             {"windsurf_processes": [{"name": "A", "memory_mb": 100}]},
@@ -146,7 +146,7 @@ class TestProcessMemoryHistory:
 
     def test_consistent_process_tracked_correctly(self):
         """Process present in all reports should have correct values throughout."""
-        from surfmon.cli import build_process_memory_history
+        from surfmon.display import build_process_memory_history
 
         reports = [
             {"windsurf_processes": [{"name": "Windsurf", "memory_mb": 500}]},
@@ -159,7 +159,7 @@ class TestProcessMemoryHistory:
 
     def test_disappearing_process_gets_trailing_zeros(self):
         """Process that stops appearing should get trailing zeros."""
-        from surfmon.cli import build_process_memory_history
+        from surfmon.display import build_process_memory_history
 
         reports = [
             {
