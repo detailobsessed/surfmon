@@ -94,6 +94,65 @@ def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
     return process_mem_history
 
 
+def _fmt_gb(mb: float | None) -> str:
+    """Format nullable megabytes as 'X.XX GB' or '—'."""
+    if not mb:
+        return "—"
+    return f"{mb / MB_PER_GB:.2f} GB"
+
+
+def _fmt_or_dash(value: object) -> str:
+    """Format a nullable value as a string, using '—' for falsy values."""
+    return str(value) if value else "—"
+
+
+def _fmt_styled_count(count: int | None, bad_color: str = "red", good_color: str = "") -> str:
+    """Style a count: bad_color when positive, good_color otherwise, '—' when None."""
+    if count is None:
+        return "—"
+    if count > 0 and bad_color:
+        return f"[{bad_color}]{count}[/{bad_color}]"
+    if good_color:
+        return f"[{good_color}]{count}[/{good_color}]"
+    return _fmt_or_dash(count)
+
+
+def _format_history_row(row: dict) -> tuple[str, ...]:
+    """Format a single history row into display strings for the table."""
+    return (
+        row["timestamp"][:19] if row["timestamp"] else "",
+        row["command"] or "",
+        row["windsurf_version"] or "",
+        _fmt_gb(row["total_memory_mb"]),
+        _fmt_or_dash(row["process_count"]),
+        _fmt_or_dash(row["ls_count"]),
+        _fmt_gb(row["ls_memory_mb"]),
+        _fmt_styled_count(row["orphaned_count"]),
+        _fmt_or_dash(row["pty_count"]) if row["pty_count"] is not None else "—",
+        _fmt_styled_count(row["issue_count"], good_color="green"),
+    )
+
+
+def display_history_table(rows: list[dict]) -> None:
+    """Display a Rich table of historical monitoring sessions."""
+    table = make_table(f"Recent Sessions ({len(rows)})")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Command", style="cyan")
+    table.add_column("Version", style="dim")
+    table.add_column("Memory", justify="right", style="yellow")
+    table.add_column("Procs", justify="right")
+    table.add_column("LS", justify="right")
+    table.add_column("LS Mem", justify="right", style="yellow")
+    table.add_column("Orphans", justify="right")
+    table.add_column("PTY", justify="right")
+    table.add_column("Issues", justify="right")
+
+    for row in rows:
+        table.add_row(*_format_history_row(row))
+
+    console.print(table)
+
+
 def _format_change(diff: float, threshold: float = 0, fmt: str = "d", suffix: str = "") -> str:
     """Format a numeric diff as a Rich-styled change indicator.
 

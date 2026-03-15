@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Protocol
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -20,11 +20,14 @@ from .config import TargetNotSetError, WindsurfTarget, get_paths, get_target, ge
 from .db import open_db, query_analyze_sessions, query_history_dicts, query_trend, store_check, store_ls_snapshot, store_pty_snapshot
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sqlite_utils import Database
 
 from .display import (
     create_summary_table,
     display_analysis_summary,
+    display_history_table,
     display_ls_snapshot,
     display_pty_snapshot,
     display_trend_summary,
@@ -42,7 +45,6 @@ from .monitor import (
     max_issue_severity,
 )
 from .output import (
-    MB_PER_GB,
     Live,
     console,
     display_report,
@@ -54,6 +56,22 @@ from .output import (
 def _print_json(data: dict | list) -> None:
     """Print data as JSON to stdout for agent/pipe consumption."""
     print(json.dumps(data, indent=2, default=str))
+
+
+def _query_db(query_fn: Callable[..., Any], *, json_output: bool, **kwargs: Any) -> list[dict]:
+    """Run a DB query, handling errors with JSON or Rich output.
+
+    Returns the query result on success, or exits on ValueError.
+    """
+    with open_db() as db:
+        try:
+            return query_fn(db, **kwargs)
+        except ValueError as exc:
+            if json_output:
+                _print_json({"error": str(exc)})
+            else:
+                console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
 
 
 def version_callback(value: bool) -> None:
@@ -276,15 +294,7 @@ def history(
     Displays a table of past surfmon invocations with key metrics like
     memory usage, process counts, and issue counts.
     """
-    with open_db() as db:
-        try:
-            rows = query_history_dicts(db, command=command_filter, limit=limit, since=since)
-        except ValueError as exc:
-            if json_output:
-                _print_json({"error": str(exc)})
-                raise typer.Exit(code=1) from exc
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(code=1) from exc
+    rows = _query_db(query_history_dicts, json_output=json_output, command=command_filter, limit=limit, since=since)
 
     if not rows:
         if json_output:
@@ -298,39 +308,7 @@ def history(
         _print_json(rows)
         return
 
-    table = make_table(f"Recent Sessions ({len(rows)})")
-    table.add_column("Timestamp", style="dim")
-    table.add_column("Command", style="cyan")
-    table.add_column("Version", style="dim")
-    table.add_column("Memory", justify="right", style="yellow")
-    table.add_column("Procs", justify="right")
-    table.add_column("LS", justify="right")
-    table.add_column("LS Mem", justify="right", style="yellow")
-    table.add_column("Orphans", justify="right")
-    table.add_column("PTY", justify="right")
-    table.add_column("Issues", justify="right")
-
-    for row in rows:
-        mem_gb = row["total_memory_mb"] / MB_PER_GB if row["total_memory_mb"] else 0
-        ls_mem_gb = row["ls_memory_mb"] / MB_PER_GB if row["ls_memory_mb"] else 0
-        orphan_style = "red" if row["orphaned_count"] and row["orphaned_count"] > 0 else ""
-        issue_style = "red" if row["issue_count"] and row["issue_count"] > 0 else "green"
-
-        ts = row["timestamp"][:19] if row["timestamp"] else ""
-        table.add_row(
-            ts,
-            row["command"] or "",
-            row["windsurf_version"] or "",
-            f"{mem_gb:.2f} GB" if mem_gb else "—",
-            str(row["process_count"] or "—"),
-            str(row["ls_count"] or "—"),
-            f"{ls_mem_gb:.2f} GB" if ls_mem_gb else "—",
-            f"[{orphan_style}]{row['orphaned_count'] or 0}[/{orphan_style}]" if orphan_style else str(row["orphaned_count"] or "—"),
-            str(row["pty_count"] if row["pty_count"] is not None else "—"),
-            f"[{issue_style}]{row['issue_count']}[/{issue_style}]",
-        )
-
-    console.print(table)
+    display_history_table(rows)
 
 
 @app.command()
@@ -346,15 +324,7 @@ def trend(
     Supported metrics: memory, processes, pty, ls-memory, ls-count.
     Use --plot to generate a visual chart.
     """
-    with open_db() as db:
-        try:
-            data = query_trend(db, metric=metric, since=since)
-        except ValueError as exc:
-            if json_output:
-                _print_json({"error": str(exc)})
-                raise typer.Exit(code=1) from exc
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(code=1) from exc
+    data = _query_db(query_trend, json_output=json_output, metric=metric, since=since)
 
     if not data:
         if json_output:
