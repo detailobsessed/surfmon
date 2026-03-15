@@ -436,7 +436,7 @@ class TestCheckLogIssues:
 
     def test_detects_orphaned_crashpad_with_age_formatting(self, tmp_path, monkeypatch, mocker):
         """Should detect orphaned crashpad handlers with age formatting."""
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch("surfmon.log_analysis.psutil.process_iter")
 
         import time
 
@@ -814,7 +814,7 @@ class TestOrphanedCrashpadAgeFormatting:
         """Should format age in seconds when < 60 seconds."""
         import time
 
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch("surfmon.log_analysis.psutil.process_iter")
 
         proc = Mock()
         proc.info = {
@@ -838,7 +838,7 @@ class TestOrphanedCrashpadAgeFormatting:
         """Should format age in minutes when < 1 hour."""
         import time
 
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch("surfmon.log_analysis.psutil.process_iter")
 
         proc = Mock()
         proc.info = {
@@ -862,7 +862,7 @@ class TestOrphanedCrashpadAgeFormatting:
         """Should format age in days when >= 1 day."""
         import time
 
-        mock_proc_iter = mocker.patch("surfmon.monitor.psutil.process_iter")
+        mock_proc_iter = mocker.patch("surfmon.log_analysis.psutil.process_iter")
 
         proc = Mock()
         proc.info = {
