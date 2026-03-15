@@ -1264,18 +1264,20 @@ class TestFormatOrphanIssue:
         assert "rm -rf" not in result
         assert "disk)" not in result
 
-    def test_with_database_dir_not_existing(self):
+    def test_with_database_dir_not_existing(self, tmp_path):
         """Should include disk info (0 MB) and rm -rf command even when dir doesn't exist."""
         from surfmon.monitor import ProcessInfo, _format_orphan_issue
 
-        ls = ProcessInfo(5678, "language_server_macos_arm", 2.0, 800.0, 2.5, 8, 3500.0, "ls --database_dir /tmp/nonexistent_db_xyz")
-        result = _format_orphan_issue(ls, "/Users/nobody/gone", "ls --database_dir /tmp/nonexistent_db_xyz")
+        db_dir = tmp_path / "nonexistent_db_xyz"
+        cmdline = f"ls --database_dir {db_dir}"
+        ls = ProcessInfo(5678, "language_server_macos_arm", 2.0, 800.0, 2.5, 8, 3500.0, cmdline)
+        result = _format_orphan_issue(ls, "/Users/nobody/gone", cmdline)
 
         assert "CRITICAL" in result
         assert "(PID 5678)" in result
         assert "800 MB RAM" in result
         assert "0 MB disk)" in result
-        assert "rm -rf /tmp/nonexistent_db_xyz" in result
+        assert f"rm -rf {db_dir}" in result
         # Verify balanced parentheses in the consuming clause
         assert "(consuming 800 MB RAM, 0 MB disk)" in result
 
