@@ -81,6 +81,8 @@ def _resolve_workspace_path(workspace_id: str) -> Path | None:
     a path that actually exists.  Returns ``None`` when no valid decoding is
     found (truly orphaned workspace).
     """
+    if not workspace_id.startswith("file_"):
+        return None
     raw = workspace_id.removeprefix("file_")
     segments = raw.split("_")
 

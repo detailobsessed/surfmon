@@ -330,6 +330,14 @@ class TestResolveWorkspacePath:
         assert result is not None
         assert result == Path(_ICLOUD_PROJECT)
 
+    def test_untitled_workspace_returns_none(self):
+        """Untitled (unsaved) workspaces have no filesystem path."""
+        assert _resolve_workspace_path("untitled_1773689340397") is None
+
+    def test_non_file_prefix_returns_none(self):
+        """Workspace IDs without the file_ prefix are not filesystem-based."""
+        assert _resolve_workspace_path("vscode-remote_wsl_project") is None
+
 
 class TestExtractWorkspaceFromCmdline:
     """Tests for _extract_workspace_from_cmdline helper."""
