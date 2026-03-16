@@ -23,9 +23,11 @@ class WorkspaceInfo:
 # Workspace path resolution
 # ---------------------------------------------------------------------------
 
+_MIN_HEX_LEN = 2  # minimum chars for a percent-encoded sequence (e.g. _20 → space)
+
 
 def _try_joiners(base: Path, segments: list[str]) -> Path | None:
-    """Try ``/``, ``-``, and ``.`` for each underscore between *segments*."""
+    """Try ``/``, ``-``, ``.``, ``~``, and percent-decoded chars for each underscore."""
     if len(segments) == 1:
         candidate = base / segments[0]
         return candidate if candidate.exists() else None
@@ -39,12 +41,28 @@ def _try_joiners(base: Path, segments: list[str]) -> Path | None:
         if result is not None:
             return result
 
-    # Option 2/3: underscore was - or . (merge with next segment)
-    for joiner in ("-", "."):
+    # Option 2/3/4: underscore was -, ., or ~ (merge with next segment)
+    for joiner in ("-", ".", "~"):
         merged = [first + joiner + rest[0], *rest[1:]]
         result = _try_joiners(base, merged)
         if result is not None:
             return result
+
+    # Option 5: percent-encoded character (_XX where XX is hex)
+    # Codeium URL-encodes special chars (e.g. space → %20) then replaces % with _,
+    # so _20 in the workspace_id represents a literal space in the path.
+    if len(rest[0]) >= _MIN_HEX_LEN:
+        hex_prefix = rest[0][:_MIN_HEX_LEN]
+        try:
+            decoded_char = chr(int(hex_prefix, 16))
+        except ValueError:
+            decoded_char = ""
+        if decoded_char and decoded_char.isprintable():
+            suffix = rest[0][_MIN_HEX_LEN:]
+            merged = [first + decoded_char + suffix, *rest[1:]]
+            result = _try_joiners(base, merged)
+            if result is not None:
+                return result
 
     return None
 
@@ -52,14 +70,16 @@ def _try_joiners(base: Path, segments: list[str]) -> Path | None:
 def _resolve_workspace_path(workspace_id: str) -> Path | None:
     """Resolve a Codeium workspace_id to an existing filesystem path.
 
-    Codeium encodes ``/``, ``-``, and ``.`` as ``_`` in its ``--workspace_id``
-    argument.  A naïve ``replace("_", "/")`` produces false paths for any
-    directory whose name contains hyphens or dots (e.g. ``copier-uv-bleeding``
-    becomes ``copier/uv/bleeding``).
+    Codeium encodes ``/``, ``-``, ``.``, and ``~`` as ``_`` in its
+    ``--workspace_id`` argument, and URL-encodes other special characters
+    (e.g. space → ``%20``) with ``%`` also replaced by ``_`` (so space
+    becomes ``_20``).  A naïve ``replace("_", "/")`` produces false paths
+    for any directory whose name contains hyphens, dots, tildes, or spaces.
 
-    This function walks the filesystem, trying ``/``, ``-``, and ``.`` for each
-    encoded underscore until it finds a path that actually exists.  Returns
-    ``None`` when no valid decoding is found (truly orphaned workspace).
+    This function walks the filesystem, trying ``/``, ``-``, ``.``, ``~``,
+    and percent-decoded characters for each encoded underscore until it finds
+    a path that actually exists.  Returns ``None`` when no valid decoding is
+    found (truly orphaned workspace).
     """
     raw = workspace_id.removeprefix("file_")
     segments = raw.split("_")
