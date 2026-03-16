@@ -1,76 +1,31 @@
 # Code Review Guide
 
-Quick reference for reviewing surfmon pull requests.
-
-## Local Setup
-
-```bash
-git clone https://github.com/detailobsessed/surfmon.git
-cd surfmon
-uv sync          # installs all deps + dev tools
-prek install     # installs git hooks (commit-msg, pre-commit, pre-push)
-```
-
-Requires **Python 3.14+** and [uv](https://docs.astral.sh/uv/).
-
-## Running Checks
-
-```bash
-poe check        # lint (ruff) + typecheck (ty) in parallel
-poe test         # pytest, excluding slow tests
-poe test-all     # all tests including slow
-poe test-cov     # tests with coverage (fails under 90%)
-poe fix          # auto-fix lint + format
-```
-
-Individual tools:
-
-```bash
-uv run ruff check .          # lint only
-uv run ruff format --check . # format check only
-uv run ty check .            # type check only
-uv run pytest -x -q          # quick test run, stop on first failure
-uv run pytest --testmon      # run only tests affected by changes
-```
-
-## CI Pipeline
-
-PRs run these jobs (all must pass via the `ci-pass` gate):
-
-| Job | What it does |
-| --- | --- |
-| **changes** | Path filter — skips quality/tests if only non-source files changed |
-| **links** | Lychee link checker on all markdown/HTML |
-| **prek** | Full pre-commit suite (ruff, ruff-format, ty, gitleaks, shellcheck, actionlint, typos, markdownlint, ast-grep) |
-| **quality** | Docs build check (zensical) |
-| **tests** | pytest + coverage on Ubuntu, macOS, Windows x {highest, lowest-direct} resolution |
-
-## Pre-commit Hooks (prek)
-
-Hooks run automatically on commit/push. Key hooks:
-
-- **pre-commit**: trailing whitespace, ruff lint+format, ty typecheck, ast-grep structural lint, pytest-testmon (affected tests only)
-- **commit-msg**: conventional commits enforced (`feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `chore`, `perf`, `style`, `build`)
-- **pre-push**: full pytest with coverage (>=90%), docs build check
-
-If a hook modifies files (e.g. ruff auto-fix), re-stage and commit again.
-
 ## What to Look For
 
 ### Architecture
 
 ```
 src/surfmon/
-    cli.py       # Typer CLI commands and display helpers
-    config.py    # Target detection (stable/next/insiders), paths, env config
-    monitor.py   # Core data collection — processes, language servers, MCP, PTYs, issue classification
-    db.py        # SQLite persistence via sqlite-utils
-    output.py    # Rich terminal display (tables, panels, styling) and Markdown export
+    _constants.py    # Shared constants (exit codes, issue prefixes, PTY thresholds)
+    cli.py           # Typer CLI commands — wires data collection to display
+    config.py        # Target detection (stable/next/insiders), paths, env config
+    db.py            # SQLite persistence via sqlite-utils
+    display.py       # Interactive display helpers (watch-mode tables, history, PTY/LS snapshots, plots)
+    log_analysis.py  # Log file parsing and issue detection
+    monitor.py       # Core orchestration — processes, language servers, MCP, snapshot capture, report assembly
+    output.py        # Rich terminal display (tables, panels, styling) and Markdown export
+    pty.py           # PTY leak detection — lsof parsing, PtyInfo dataclass, thresholds
+    workspaces.py    # Active workspace detection — event log parsing, workspace lifecycle
 ```
 
-- **`monitor.py`** owns all data collection, issue string construction, and severity classification. Constants like `ISSUE_CRITICAL_PREFIX` / `ISSUE_WARNING_PREFIX` and helpers like `max_issue_severity()` / `classify_issue_severity()` live here.
-- **`output.py`** owns all Rich terminal rendering. `style_issue()` (per-issue colour markup) and `display_report()` live here.
-- **`cli.py`** wires commands together — imports from both `monitor.py` and `output.py`. Display helpers specific to individual commands (e.g. `_display_ls_snapshot`) live here.
+- **`_constants.py`** is the single source for shared constants (`EXIT_OK/WARNING/CRITICAL`, `ISSUE_CRITICAL_PREFIX`, `ISSUE_WARNING_PREFIX`, PTY thresholds). All other modules import from here — never redefine these.
+- **`monitor.py`** orchestrates data collection and assembles `MonitoringReport` / `LsSnapshot`. Issue string construction and severity helpers (`max_issue_severity`, `classify_issue_severity`) live here.
+- **`pty.py`** owns all PTY logic: `PtyInfo` dataclass (with `severity`/`color` properties), `check_pty_leak`, lsof parsing. Imports `_extract_windsurf_version` / `_get_windsurf_uptime` from `monitor.py` via a deferred import to avoid circular dependency.
+- **`workspaces.py`** owns active workspace detection: event log parsing (`_parse_workspace_event`), lifecycle helpers (`_is_orphaned_workspace`, `_is_stale_workspace`), and `get_active_workspaces`.
+- **`log_analysis.py`** owns log-file issue detection (`check_log_issues`). Imports `is_main_windsurf_process` from `monitor.py` via a deferred import.
+- **`display.py`** owns interactive display: watch-mode summary tables, history table, PTY/LS forensic snapshot display, and matplotlib plot generation. Imports from `monitor.py`, `pty.py`, and `output.py`.
+- **`output.py`** owns all Rich terminal rendering primitives. `style_issue()` and `display_report()` live here. No imports from other surfmon modules.
+- **`cli.py`** wires commands together — imports from `monitor.py`, `display.py`, `output.py`, `db.py`, and `workspaces.py`. Lazy-imports `matplotlib` to avoid slowing CLI startup.
 - **`db.py`** imports `classify_issue_severity` from `monitor.py` for storing issue severity. Uses `sqlite-utils` API — raw `db.execute()` is flagged by ast-grep rules.
 
 ### Conventions
@@ -89,14 +44,17 @@ src/surfmon/
 - Display code double-rendering prefixes (once embedded in the string, once added by display logic)
 - Forgetting to update both JSON and non-JSON paths when changing command behavior
 - Using `db.execute()` instead of the sqlite-utils table API (flagged by ast-grep)
-- Imports: `cli.py` imports from `output.py` but not vice versa (would create circular imports)
+- Imports: always import symbols from their defining module, not from a re-exporting intermediary (e.g. `from surfmon.pty import PtyInfo`, not `from surfmon.monitor import PtyInfo`)
+- `output.py` has no imports from other surfmon modules — keep it that way to avoid circular imports
+- `pty.py` and `log_analysis.py` use deferred imports from `monitor.py` to break circular dependencies — these are covered by `per-file-ignores` for `PLC0415` in `pyproject.toml`
 
 ### Testing
 
-- Tests live in `tests/` with one file per source module
+- Tests live in `tests/` with one file per source module: `test_cli.py`, `test_monitor.py`, `test_display.py`, `test_workspaces.py`, `test_pty.py`, `test_log_analysis.py`, `test_db.py`, `test_output.py`, `test_config.py`, `test_bugfixes.py`
 - `test_cli.py` uses `typer.testing.CliRunner` with mocked `generate_report` / `capture_ls_snapshot`
 - Issue strings in tests must include the prefix markers to match production behavior
 - `pytest-testmon` tracks which tests are affected by changes — use `poe test-affected` for fast feedback
+- Test imports must reference the defining module directly, not monitor.py re-exports
 
 ## PR Checklist
 
