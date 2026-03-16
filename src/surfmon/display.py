@@ -33,7 +33,8 @@ from .output import (
 if TYPE_CHECKING:
     from rich.table import Table
 
-    from .monitor import LsSnapshot, LsSnapshotEntry, MonitoringReport, PtyInfo
+    from .monitor import LsSnapshot, LsSnapshotEntry, MonitoringReport
+    from .pty import PtyInfo
 
 # Language server snapshot thresholds
 LS_TOTAL_MEM_CRITICAL_MB = 1024
