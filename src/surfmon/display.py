@@ -589,7 +589,8 @@ def display_trend_summary(values: list[float], unit: str) -> None:
 
 def _plot_memory_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 1: Memory charts (total, top 5 processes, system pressure)."""
-    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.dates as mdates
+
     # Total Memory Usage
     ax = axes[0, 0]
     windsurf_mem = [r["memory_mb"] / 1024 for r in reports]
@@ -639,7 +640,8 @@ def _plot_memory_charts(axes: Any, timestamps: list, reports: list[dict]) -> Non
 
 def _plot_pty_chart(ax: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot PTY usage with Windsurf count and system percentage."""
-    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.dates as mdates
+
     ax2 = ax.twinx()
 
     pty_infos = [r.get("pty_info") or {} for r in reports]
@@ -679,7 +681,8 @@ def _plot_pty_chart(ax: Any, timestamps: list, reports: list[dict]) -> None:
 
 def _plot_row2_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 2: Process types, PTY usage, language servers & extensions."""
-    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.dates as mdates
+
     # Process Count by Type
     ax = axes[1, 0]
     proc_types: dict[str, list[int]] = defaultdict(list)
@@ -727,7 +730,8 @@ def _plot_row2_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
 
 def _plot_row3_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
     """Plot Row 3: Thread count, average memory per process, issues over time."""
-    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.dates as mdates
+
     # Thread Count
     ax = axes[2, 0]
     total_threads = [sum(p["num_threads"] for p in r["windsurf_processes"]) for r in reports]
@@ -760,7 +764,7 @@ def _plot_row3_charts(axes: Any, timestamps: list, reports: list[dict]) -> None:
 
 def generate_analysis_plots(reports: list[dict], output: Any) -> None:
     """Generate 3x3 matplotlib analysis plots."""
-    import matplotlib.pyplot as plt  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(3, 3, figsize=(18, 14))
     fig.suptitle("Windsurf Performance Analysis", fontsize=18, y=0.995)

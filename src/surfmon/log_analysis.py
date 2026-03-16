@@ -63,7 +63,7 @@ def _scan_crashpad_processes(app_name: str) -> tuple[bool, list[tuple[int, float
         Tuple of (main_windsurf_found, orphaned) where orphaned is a list
         of (pid, age_days) tuples for crashpad handler processes.
     """
-    from surfmon.monitor import is_main_windsurf_process  # noqa: PLC0415 — circular import
+    from surfmon.monitor import is_main_windsurf_process
 
     orphaned: list[tuple[int, float]] = []
     main_windsurf_found = False

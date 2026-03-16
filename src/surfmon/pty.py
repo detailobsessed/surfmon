@@ -214,7 +214,7 @@ def check_pty_leak(windsurf_processes: list | None = None) -> PtyInfo:
     version = ""
     uptime = 0.0
     if windsurf_processes:
-        from surfmon.monitor import _extract_windsurf_version, _get_windsurf_uptime  # noqa: PLC0415 — circular import
+        from surfmon.monitor import _extract_windsurf_version, _get_windsurf_uptime
 
         version = _extract_windsurf_version(windsurf_processes)
         uptime = _get_windsurf_uptime(windsurf_processes)

@@ -164,6 +164,16 @@ ignore = [
 ]
 "src/surfmon/cli.py" = [
     "T201",       # _print_json intentionally prints JSON to stdout for agent/pipe consumption
+    "PLC0415",    # matplotlib lazy imports — heavy library (~1s), intentionally deferred
+]
+"src/surfmon/display.py" = [
+    "PLC0415",    # matplotlib lazy imports — heavy library (~1s), intentionally deferred
+]
+"src/surfmon/pty.py" = [
+    "PLC0415",    # circular import avoidance — monitor.py imports pty.py
+]
+"src/surfmon/log_analysis.py" = [
+    "PLC0415",    # circular import avoidance — monitor.py imports log_analysis.py
 ]
 "scripts/**" = [
     "T201",       # Scripts naturally print output

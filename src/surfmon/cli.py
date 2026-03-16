@@ -371,8 +371,8 @@ def _format_trend_value(metric: str, value: float) -> str:
 
 def _generate_trend_plot(metric: str, data: list[dict], unit: str, output: Path | None) -> None:
     """Generate a matplotlib trend chart."""
-    import matplotlib.dates as mdates  # noqa: PLC0415 — lazy import, heavy library (~1s)
-    import matplotlib.pyplot as plt  # noqa: PLC0415 — lazy import, heavy library (~1s)
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
 
     raw_timestamps = [datetime.fromisoformat(p["timestamp"]) for p in data]
     x_values = mdates.date2num(raw_timestamps)
