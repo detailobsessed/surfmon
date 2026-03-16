@@ -1,5 +1,5 @@
 default_stages = ["pre-commit"]
-minimum_prek_version = "0.3.3"
+minimum_prek_version = "0.3.6"
 # All available: commit-msg, post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-merge-commit, pre-push, pre-rebase, prepare-commit-msg
 default_install_hook_types = ["commit-msg", "post-checkout", "pre-commit", "pre-push"]
 
