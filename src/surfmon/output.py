@@ -26,15 +26,15 @@ __all__ = [
     "style_issue",
 ]
 
-from .config import get_paths, get_target_display_name
-from .monitor import (
+from ._constants import (
     ISSUE_CRITICAL_PREFIX,
     ISSUE_WARNING_PREFIX,
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
-    format_uptime,
 )
+from .config import get_paths, get_target_display_name
+from .monitor import format_uptime
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -120,6 +120,31 @@ def _display_system_table(report: MonitoringReport) -> None:
     console.print()
 
 
+def _threshold_color(value: float, critical: float, warning: float) -> str:
+    """Return 'red', 'yellow', or 'green' based on critical/warning thresholds."""
+    if value > critical:
+        return "red"
+    if value > warning:
+        return "yellow"
+    return "green"
+
+
+def _add_pty_kv_row(table: Table, pty: Any) -> None:
+    """Add a PTY usage row to a KV table."""
+    usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
+    pty_color = (
+        "red"
+        if pty.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT
+        else "yellow"
+        if pty.windsurf_pty_count >= PTY_WARNING_COUNT
+        else "green"
+    )
+    table.add_row(
+        "PTYs Held",
+        f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim](system: {pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
+    )
+
+
 def _display_windsurf_table(report: MonitoringReport) -> None:
     """Display Windsurf resource usage table.
 
@@ -132,25 +157,15 @@ def _display_windsurf_table(report: MonitoringReport) -> None:
         return
 
     ws_table = make_kv_table("Windsurf Resource Usage")
-
     ws_table.add_row("Process Count", str(report.process_count))
 
     mem_gb = report.total_windsurf_memory_mb / MB_PER_GB
     mem_pct = (mem_gb / report.system.total_memory_gb) * 100 if report.system.total_memory_gb > 0 else 0
-    mem_color = "red" if mem_pct > WINDSURF_MEM_PERCENT_CRITICAL else "yellow" if mem_pct > WINDSURF_MEM_PERCENT_WARNING else "green"
+    mem_color = _threshold_color(mem_pct, WINDSURF_MEM_PERCENT_CRITICAL, WINDSURF_MEM_PERCENT_WARNING)
     ws_table.add_row("Total Memory", f"[{mem_color}]{mem_gb:.2f} GB ({mem_pct:.1f}%)[/{mem_color}]")
 
-    cpu_color = (
-        "red"
-        if report.total_windsurf_cpu_percent > CPU_PERCENT_CRITICAL
-        else "yellow"
-        if report.total_windsurf_cpu_percent > CPU_PERCENT_WARNING
-        else "green"
-    )
-    ws_table.add_row(
-        "Total CPU",
-        f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]",
-    )
+    cpu_color = _threshold_color(report.total_windsurf_cpu_percent, CPU_PERCENT_CRITICAL, CPU_PERCENT_WARNING)
+    ws_table.add_row("Total CPU", f"[{cpu_color}]{report.total_windsurf_cpu_percent:.1f}%[/{cpu_color}]")
 
     ws_table.add_row("Extensions", str(report.extensions_count))
     ws_table.add_row("MCP Servers", str(len(report.mcp_servers_enabled)))
@@ -158,21 +173,8 @@ def _display_windsurf_table(report: MonitoringReport) -> None:
     ws_table.add_row("Active Workspaces", str(len(report.active_workspaces)))
     ws_table.add_row("Launches Today", str(report.windsurf_launches_today))
 
-    # PTY usage
     if report.pty_info:
-        pty = report.pty_info
-        usage_pct = (pty.system_pty_used / pty.system_pty_limit) * 100 if pty.system_pty_limit > 0 else 0
-        pty_color = (
-            "red"
-            if pty.windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT
-            else "yellow"
-            if pty.windsurf_pty_count >= PTY_WARNING_COUNT
-            else "green"
-        )
-        ws_table.add_row(
-            "PTYs Held",
-            f"[{pty_color}]{pty.windsurf_pty_count}[/{pty_color}] [dim](system: {pty.system_pty_used}/{pty.system_pty_limit})[/dim]",
-        )
+        _add_pty_kv_row(ws_table, report.pty_info)
 
     console.print(ws_table)
     console.print()
@@ -290,7 +292,7 @@ def _display_ls_snapshot_table(snapshot: LsSnapshot) -> None:
         ls_table.add_row(
             str(entry.pid),
             entry.language,
-            entry.workspace,
+            entry.workspace or "[dim]—[/dim]",
             f"[{mem_style}]{entry.memory_mb:.0f} MB[/{mem_style}]",
             f"[{cpu_style}]{entry.cpu_percent:.1f}[/{cpu_style}]",
             _ls_entry_status_rich(entry),

@@ -98,6 +98,9 @@ select = [
     "I",    # isort — deterministic import ordering
     "FA",   # flake8-future-annotations — `from __future__ import annotations`
 
+    # Complexity
+    "C9",   # mccabe — cyclomatic complexity (max-complexity = 10)
+
     # Code quality — catch bugs and enforce clean patterns
     "A",    # flake8-builtins — prevent shadowing builtins (id, type, list)
     "B",    # flake8-bugbear — common bugs and design issues
@@ -160,11 +163,23 @@ ignore = [
     "S608",   # IN clause built with '?' * N placeholders — not a true injection vector
 ]
 "src/surfmon/cli.py" = [
-    "PLC0415",    # Lazy matplotlib import — heavy library (~1s) only needed for --plot
     "T201",       # _print_json intentionally prints JSON to stdout for agent/pipe consumption
+    "PLC0415",    # matplotlib lazy imports — heavy library (~1s), intentionally deferred
+]
+"src/surfmon/display.py" = [
+    "PLC0415",    # matplotlib lazy imports — heavy library (~1s), intentionally deferred
+]
+"src/surfmon/pty.py" = [
+    "PLC0415",    # circular import avoidance — monitor.py imports pty.py
+]
+"src/surfmon/log_analysis.py" = [
+    "PLC0415",    # circular import avoidance — monitor.py imports log_analysis.py
 ]
 "scripts/**" = [
     "T201",       # Scripts naturally print output
+]
+"scripts/ast_audit.py" = [
+    "E501",       # Embedded CSS/JS strings exceed line length
 ]
 "docs/hooks/**" = [
     "T201",       # Hooks may print diagnostics
@@ -181,6 +196,9 @@ ignore = [
     "RUF069",     # Float equality with mocked exact values is fine
     "PLR0904",    # Test classes naturally have many test methods
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.pylint]
 # All values are pylint defaults — do not inflate to hide violations.

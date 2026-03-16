@@ -10,6 +10,34 @@ from typer.testing import CliRunner
 from surfmon.cli import _get_target_str, _store_to_db, app
 from surfmon.config import reset_target
 
+# ---------------------------------------------------------------------------
+# Shared test constants — eliminates repeated magic strings
+# ---------------------------------------------------------------------------
+_P_OPEN_DB = "surfmon.cli.open_db"
+_P_QUERY_TREND = "surfmon.cli.query_trend"
+_P_COLLECT_PROCS = "surfmon.cli.collect_process_infos"
+_P_QUERY_HIST = "surfmon.cli.query_history_dicts"
+_P_QUERY_ANALYZE = "surfmon.cli.query_analyze_sessions"
+_P_CHECK_PTY = "surfmon.cli.check_pty_leak"
+_P_CAPTURE_LS = "surfmon.cli.capture_ls_snapshot"
+_P_GET_UPTIME = "surfmon.cli._get_windsurf_uptime"
+_P_EXTRACT_VER = "surfmon.cli._extract_windsurf_version"
+_P_PROC_ITER = "surfmon.cli.psutil.process_iter"
+_P_GET_PATHS = "surfmon.cli.get_paths"
+_P_ASDICT = "surfmon.cli.asdict"
+_P_DISPLAY = "surfmon.cli.display_report"
+_P_GEN_REPORT = "surfmon.cli.generate_report"
+
+_CRASHPAD_EXE = "/Applications/Windsurf.app/crashpad_handler"
+_CRIT_ORPHANED_WS = "\u2716  CRITICAL: Orphaned workspace"
+_WARN_EXT_ERRORS = "\u26a0  Extension errors: some.ext (3)"
+_LS_BINARY = "language_server_macos_arm"
+_TS_LS = "2025-06-01T12:00:00+00:00"
+_TS_TREND_10 = "2025-01-01T10:00:00"
+_TS_TREND_10_TZ = "2025-01-01T10:00:00+00:00"
+_TS_TREND_11 = "2025-01-01T11:00:00"
+_TS_TREND_12 = "2025-01-01T12:00:00"
+
 runner = CliRunner()
 
 
@@ -30,13 +58,13 @@ def mock_generate_report(mocker):
     mock_report.windsurf_processes = []
     mock_report.pty_info = None
     mock_report.ls_snapshot = None
-    return mocker.patch("surfmon.cli.generate_report", return_value=mock_report)
+    return mocker.patch(_P_GEN_REPORT, return_value=mock_report)
 
 
 @pytest.fixture
 def mock_display_report(mocker):
     """Mock display_report to avoid terminal output."""
-    return mocker.patch("surfmon.cli.display_report")
+    return mocker.patch(_P_DISPLAY)
 
 
 class TestCheckCommand:
@@ -49,7 +77,7 @@ class TestCheckCommand:
 
     def test_check_json_stdout(self, mock_generate_report, mock_display_report, mocker):
         """Should output JSON to stdout with --json flag."""
-        mocker.patch("surfmon.cli.asdict", return_value={"process_count": 5, "total_windsurf_memory_mb": 1000.0})
+        mocker.patch(_P_ASDICT, return_value={"process_count": 5, "total_windsurf_memory_mb": 1000.0})
 
         result = runner.invoke(app, ["check", "--json"])
 
@@ -60,7 +88,7 @@ class TestCheckCommand:
 
     def test_check_verbose_flag(self, mock_generate_report, mock_display_report, mocker):
         """Should accept verbose flag."""
-        mock_display = mocker.patch("surfmon.cli.display_report")
+        mock_display = mocker.patch(_P_DISPLAY)
         result = runner.invoke(app, ["check", "--verbose"])
 
         assert result.exit_code == 0
@@ -69,7 +97,7 @@ class TestCheckCommand:
 
     def test_check_exits_with_code_2_on_critical_issues(self, mock_generate_report, mock_display_report):
         """Should exit with code 2 when critical issues detected."""
-        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
+        mock_generate_report.return_value.log_issues = [_CRIT_ORPHANED_WS]
 
         result = runner.invoke(app, ["check"])
 
@@ -77,7 +105,7 @@ class TestCheckCommand:
 
     def test_check_exits_with_code_1_on_warnings(self, mock_generate_report, mock_display_report):
         """Should exit with code 1 when only warnings detected."""
-        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
+        mock_generate_report.return_value.log_issues = [_WARN_EXT_ERRORS]
 
         result = runner.invoke(app, ["check"])
 
@@ -85,8 +113,8 @@ class TestCheckCommand:
 
     def test_check_json_exits_with_code_2_on_critical_issues(self, mock_generate_report, mock_display_report, mocker):
         """Should exit with code 2 in JSON mode when critical issues detected."""
-        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
-        mocker.patch("surfmon.cli.asdict", return_value={"log_issues": ["\u2716  CRITICAL: Orphaned workspace"]})
+        mock_generate_report.return_value.log_issues = [_CRIT_ORPHANED_WS]
+        mocker.patch(_P_ASDICT, return_value={"log_issues": [_CRIT_ORPHANED_WS]})
 
         result = runner.invoke(app, ["check", "--json"])
 
@@ -94,8 +122,8 @@ class TestCheckCommand:
 
     def test_check_json_exits_with_code_1_on_warnings(self, mock_generate_report, mock_display_report, mocker):
         """Should exit with code 1 in JSON mode when only warnings detected."""
-        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
-        mocker.patch("surfmon.cli.asdict", return_value={"log_issues": ["\u26a0  Extension errors: some.ext (3)"]})
+        mock_generate_report.return_value.log_issues = [_WARN_EXT_ERRORS]
+        mocker.patch(_P_ASDICT, return_value={"log_issues": [_WARN_EXT_ERRORS]})
 
         result = runner.invoke(app, ["check", "--json"])
 
@@ -112,7 +140,7 @@ class TestCheckCommand:
 
     def test_check_json_hides_watch_tip(self, mock_generate_report, mock_display_report, mocker):
         """Should not show watch tip in --json mode."""
-        mocker.patch("surfmon.cli.asdict", return_value={"process_count": 5})
+        mocker.patch(_P_ASDICT, return_value={"process_count": 5})
 
         result = runner.invoke(app, ["check", "--json"])
 
@@ -121,7 +149,7 @@ class TestCheckCommand:
 
     def test_check_error_hides_watch_tip(self, mock_generate_report, mock_display_report):
         """Should not show watch tip when check exits with error."""
-        mock_generate_report.return_value.log_issues = ["\u2716  CRITICAL: Orphaned workspace"]
+        mock_generate_report.return_value.log_issues = [_CRIT_ORPHANED_WS]
 
         result = runner.invoke(app, ["check"])
 
@@ -130,7 +158,7 @@ class TestCheckCommand:
 
     def test_check_warning_hides_watch_tip(self, mock_generate_report, mock_display_report):
         """Should not show watch tip when check exits with warning."""
-        mock_generate_report.return_value.log_issues = ["\u26a0  Extension errors: some.ext (3)"]
+        mock_generate_report.return_value.log_issues = [_WARN_EXT_ERRORS]
 
         result = runner.invoke(app, ["check"])
 
@@ -140,8 +168,8 @@ class TestCheckCommand:
     def test_check_critical_takes_precedence_over_warnings(self, mock_generate_report, mock_display_report):
         """Should exit with code 2 when both critical and warning issues present."""
         mock_generate_report.return_value.log_issues = [
-            "\u26a0  Extension errors: some.ext (3)",
-            "\u2716  CRITICAL: Orphaned workspace",
+            _WARN_EXT_ERRORS,
+            _CRIT_ORPHANED_WS,
         ]
 
         result = runner.invoke(app, ["check"])
@@ -180,7 +208,7 @@ class TestCleanupCommand:
         """Should warn when Windsurf is running."""
         mock_paths = MagicMock()
         mock_paths.app_name = "Windsurf.app"
-        mocker.patch("surfmon.cli.get_paths", return_value=mock_paths)
+        mocker.patch(_P_GET_PATHS, return_value=mock_paths)
 
         mock_proc = MagicMock()
         mock_proc.info = {
@@ -191,7 +219,7 @@ class TestCleanupCommand:
             "create_time": 1234567890,
         }
 
-        mock_iter = mocker.patch("surfmon.cli.psutil.process_iter")
+        mock_iter = mocker.patch(_P_PROC_ITER)
         mock_iter.return_value = [mock_proc]
         result = runner.invoke(app, ["cleanup"])
         assert result.exit_code == 1
@@ -201,19 +229,19 @@ class TestCleanupCommand:
         """Should handle cancelled cleanup."""
         mock_paths = MagicMock()
         mock_paths.app_name = "Windsurf.app"
-        mocker.patch("surfmon.cli.get_paths", return_value=mock_paths)
+        mocker.patch(_P_GET_PATHS, return_value=mock_paths)
 
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 5678,
             "name": "crashpad_handler",
-            "cmdline": ["/Applications/Windsurf.app/crashpad_handler"],
-            "exe": "/Applications/Windsurf.app/crashpad_handler",
+            "cmdline": [_CRASHPAD_EXE],
+            "exe": _CRASHPAD_EXE,
             "create_time": 1234567890,
         }
         mock_proc.memory_info.return_value.rss = 50 * 1024 * 1024
 
-        mock_iter = mocker.patch("surfmon.cli.psutil.process_iter")
+        mock_iter = mocker.patch(_P_PROC_ITER)
         mock_iter.return_value = [mock_proc]
         result = runner.invoke(app, ["cleanup"], input="n\n")
         assert result.exit_code == 0
@@ -223,20 +251,20 @@ class TestCleanupCommand:
         """Should kill orphans with --force flag."""
         mock_paths = MagicMock()
         mock_paths.app_name = "Windsurf.app"
-        mocker.patch("surfmon.cli.get_paths", return_value=mock_paths)
+        mocker.patch(_P_GET_PATHS, return_value=mock_paths)
 
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 5678,
             "name": "crashpad_handler",
-            "cmdline": ["/Applications/Windsurf.app/crashpad_handler"],
-            "exe": "/Applications/Windsurf.app/crashpad_handler",
+            "cmdline": [_CRASHPAD_EXE],
+            "exe": _CRASHPAD_EXE,
             "create_time": 1234567890,
         }
         mock_proc.pid = 5678
         mock_proc.memory_info.return_value.rss = 50 * 1024 * 1024
 
-        mock_iter = mocker.patch("surfmon.cli.psutil.process_iter")
+        mock_iter = mocker.patch(_P_PROC_ITER)
         mock_iter.return_value = [mock_proc]
         result = runner.invoke(app, ["cleanup", "--force"])
         assert result.exit_code == 0
@@ -252,10 +280,10 @@ class TestAnalyzeCommand:
         """Mock query_analyze_sessions with sample session dicts."""
         from datetime import timedelta
 
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         return mocker.patch(
-            "surfmon.cli.query_analyze_sessions",
+            _P_QUERY_ANALYZE,
             return_value=[
                 {
                     "session_id": i,
@@ -288,32 +316,32 @@ class TestAnalyzeCommand:
 
     def test_analyze_empty_db(self, mocker):
         """Should exit gracefully when no sessions in DB."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_ANALYZE, return_value=[])
         result = runner.invoke(app, ["analyze"])
         assert result.exit_code == 0
         assert "No check sessions" in result.stdout
 
     def test_analyze_invalid_since(self, mocker):
         """Should exit with error on invalid --since value."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("Invalid duration 'xyz'"))
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_ANALYZE, side_effect=ValueError("Invalid duration 'xyz'"))
         result = runner.invoke(app, ["analyze", "--since", "xyz"])
         assert result.exit_code == 1
         assert "Invalid duration" in result.stdout
 
     def test_analyze_closes_db(self, mocker):
         """Should use open_db context manager to ensure DB is closed."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=[])
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_ANALYZE, return_value=[])
         runner.invoke(app, ["analyze"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
 
     def test_analyze_closes_db_on_error(self, mocker):
         """Should use open_db context manager even when query raises."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_analyze_sessions", side_effect=ValueError("bad"))
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_ANALYZE, side_effect=ValueError("bad"))
         runner.invoke(app, ["analyze", "--since", "xyz"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
@@ -459,7 +487,7 @@ class TestFormatElapsed:
     )
     def test_format_elapsed(self, seconds, expected):
         """Should format seconds as M:SS or H:MM:SS."""
-        from surfmon.cli import _format_elapsed
+        from surfmon.display import _format_elapsed
 
         assert _format_elapsed(seconds) == expected
 
@@ -563,21 +591,21 @@ class TestCleanupCommandEdgeCases:
 
         mock_paths = MagicMock()
         mock_paths.app_name = "Windsurf.app"
-        mocker.patch("surfmon.cli.get_paths", return_value=mock_paths)
+        mocker.patch(_P_GET_PATHS, return_value=mock_paths)
 
         mock_proc = MagicMock()
         mock_proc.info = {
             "pid": 5678,
             "name": "crashpad_handler",
-            "cmdline": ["/Applications/Windsurf.app/crashpad_handler"],
-            "exe": "/Applications/Windsurf.app/crashpad_handler",
+            "cmdline": [_CRASHPAD_EXE],
+            "exe": _CRASHPAD_EXE,
             "create_time": 1234567890,
         }
         mock_proc.pid = 5678
         mock_proc.memory_info.return_value.rss = 50 * 1024 * 1024
         mock_proc.kill.side_effect = psutil.AccessDenied(pid=5678)
 
-        mock_iter = mocker.patch("surfmon.cli.psutil.process_iter")
+        mock_iter = mocker.patch(_P_PROC_ITER)
         mock_iter.return_value = [mock_proc]
         result = runner.invoke(app, ["cleanup", "--force"])
         assert result.exit_code == 1
@@ -591,7 +619,7 @@ class TestAnalyzeCommandEdgeCases:
         """Helper: patch query_analyze_sessions with per-session override dicts."""
         from datetime import timedelta
 
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         sessions = [
             {
@@ -615,7 +643,7 @@ class TestAnalyzeCommandEdgeCases:
             }
             for i in range(len(overrides_per_session))
         ]
-        mocker.patch("surfmon.cli.query_analyze_sessions", return_value=sessions)
+        mocker.patch(_P_QUERY_ANALYZE, return_value=sessions)
 
     def test_analyze_memory_leak_detection(self, mocker):
         """Should detect potential memory leak with large memory growth."""
@@ -682,7 +710,7 @@ class TestPtySnapshotCommand:
     @pytest.fixture
     def _mock_pty_data(self, mocker):
         """Mock PTY data collection for pty-snapshot tests."""
-        from surfmon.monitor import PtyFdEntry, PtyInfo, PtyProcessDetail
+        from surfmon.pty import PtyFdEntry, PtyInfo, PtyProcessDetail
 
         mock_pty = PtyInfo(
             windsurf_pty_count=5,
@@ -706,8 +734,8 @@ class TestPtySnapshotCommand:
             windsurf_uptime_seconds=7200.0,
             raw_lsof="COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nWindsurf 1000 ismar 33u CHR 15,0 0t0 605 /dev/ptmx\n",
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
         return mock_pty
 
     @pytest.mark.usefixtures("_mock_pty_data")
@@ -728,7 +756,7 @@ class TestPtySnapshotCommand:
 
     def test_pty_snapshot_exit_code_warning(self, mocker):
         """Should exit 1 when PTY count triggers a warning."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=75,
@@ -736,15 +764,15 @@ class TestPtySnapshotCommand:
             system_pty_used=100,
             issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
 
         result = runner.invoke(app, ["pty-snapshot"])
         assert result.exit_code == 1
 
     def test_pty_snapshot_exit_code_critical(self, mocker):
         """Should exit 2 when PTY count triggers a critical issue."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=504,
@@ -752,15 +780,15 @@ class TestPtySnapshotCommand:
             system_pty_used=509,
             issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
 
         result = runner.invoke(app, ["pty-snapshot"])
         assert result.exit_code == 2
 
     def test_pty_snapshot_json_exit_code_warning(self, mocker):
         """Should exit 1 with --json when PTY count triggers a warning."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=75,
@@ -768,15 +796,15 @@ class TestPtySnapshotCommand:
             system_pty_used=100,
             issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
 
         result = runner.invoke(app, ["pty-snapshot", "--json"])
         assert result.exit_code == 1
 
     def test_pty_snapshot_json_exit_code_critical(self, mocker):
         """Should exit 2 with --json when PTY count triggers a critical issue."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=504,
@@ -784,8 +812,8 @@ class TestPtySnapshotCommand:
             system_pty_used=509,
             issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli.check_pty_leak", return_value=mock_pty)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
 
         result = runner.invoke(app, ["pty-snapshot", "--json"])
         assert result.exit_code == 2
@@ -812,7 +840,7 @@ class TestLsSnapshotCommand:
             ),
             ProcessInfo(
                 pid=2000,
-                name="language_server_macos_arm",
+                name=_LS_BINARY,
                 cpu_percent=10.0,
                 memory_mb=300.0,
                 memory_percent=0.9,
@@ -833,7 +861,7 @@ class TestLsSnapshotCommand:
         ]
 
         mock_snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
+            timestamp=_TS_LS,
             windsurf_version="2.5.0",
             windsurf_uptime_seconds=3600.0,
             total_ls_count=2,
@@ -843,7 +871,7 @@ class TestLsSnapshotCommand:
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
-                    name="language_server_macos_arm",
+                    name=_LS_BINARY,
                     language="Codeium",
                     memory_mb=300.0,
                     memory_percent=0.9,
@@ -870,10 +898,10 @@ class TestLsSnapshotCommand:
             stale_issues=[],
         )
 
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=mock_proc_infos)
-        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
-        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
-        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=mock_snapshot)
+        mocker.patch(_P_COLLECT_PROCS, return_value=mock_proc_infos)
+        mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
+        mocker.patch(_P_GET_UPTIME, return_value=3600.0)
+        mocker.patch(_P_CAPTURE_LS, return_value=mock_snapshot)
         return mock_snapshot
 
     @pytest.mark.usefixtures("_mock_ls_data")
@@ -898,7 +926,7 @@ class TestLsSnapshotCommand:
         from surfmon.monitor import LsSnapshot
 
         snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
+            timestamp=_TS_LS,
             windsurf_version="2.5.0",
             windsurf_uptime_seconds=3600.0,
             total_ls_count=1,
@@ -909,10 +937,10 @@ class TestLsSnapshotCommand:
             orphan_issues=["\u2716  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
             stale_issues=[],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
-        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
-        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
+        mocker.patch(_P_GET_UPTIME, return_value=3600.0)
+        mocker.patch(_P_CAPTURE_LS, return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
         assert result.exit_code == 2
@@ -922,7 +950,7 @@ class TestLsSnapshotCommand:
         from surfmon.monitor import LsSnapshot
 
         snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
+            timestamp=_TS_LS,
             windsurf_version="2.5.0",
             windsurf_uptime_seconds=3600.0,
             total_ls_count=1,
@@ -933,10 +961,10 @@ class TestLsSnapshotCommand:
             orphan_issues=[],
             stale_issues=["\u26a0  language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"],
         )
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
-        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
-        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
+        mocker.patch(_P_GET_UPTIME, return_value=3600.0)
+        mocker.patch(_P_CAPTURE_LS, return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
         assert result.exit_code == 1
@@ -950,7 +978,7 @@ class TestLsSnapshotDisplay:
         from surfmon.monitor import LsSnapshot, LsSnapshotEntry
 
         snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
+            timestamp=_TS_LS,
             windsurf_version="2.5.0",
             windsurf_uptime_seconds=3600.0,
             total_ls_count=1,
@@ -960,7 +988,7 @@ class TestLsSnapshotDisplay:
             entries=[
                 LsSnapshotEntry(
                     pid=2000,
-                    name="language_server_macos_arm",
+                    name=_LS_BINARY,
                     language="Codeium",
                     memory_mb=2000.0,
                     memory_percent=6.0,
@@ -975,10 +1003,10 @@ class TestLsSnapshotDisplay:
             stale_issues=[],
         )
 
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="2.5.0")
-        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=3600.0)
-        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
+        mocker.patch(_P_GET_UPTIME, return_value=3600.0)
+        mocker.patch(_P_CAPTURE_LS, return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
         assert result.exit_code == 2
@@ -989,7 +1017,7 @@ class TestLsSnapshotDisplay:
         from surfmon.monitor import LsSnapshot, LsSnapshotEntry
 
         snapshot = LsSnapshot(
-            timestamp="2025-06-01T12:00:00+00:00",
+            timestamp=_TS_LS,
             windsurf_version="",
             windsurf_uptime_seconds=0.0,
             total_ls_count=1,
@@ -1014,10 +1042,10 @@ class TestLsSnapshotDisplay:
             stale_issues=[],
         )
 
-        mocker.patch("surfmon.cli.collect_process_infos", return_value=[])
-        mocker.patch("surfmon.cli._extract_windsurf_version", return_value="")
-        mocker.patch("surfmon.cli._get_windsurf_uptime", return_value=0.0)
-        mocker.patch("surfmon.cli.capture_ls_snapshot", return_value=snapshot)
+        mocker.patch(_P_COLLECT_PROCS, return_value=[])
+        mocker.patch(_P_EXTRACT_VER, return_value="")
+        mocker.patch(_P_GET_UPTIME, return_value=0.0)
+        mocker.patch(_P_CAPTURE_LS, return_value=snapshot)
 
         result = runner.invoke(app, ["ls-snapshot"])
         assert result.exit_code == 0
@@ -1056,21 +1084,21 @@ class TestHistoryCommand:
 
     def test_history_empty(self, mocker):
         """Should handle empty database gracefully."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_HIST, return_value=[])
         result = runner.invoke(app, ["history"])
         assert result.exit_code == 0
         assert "No sessions found" in result.output
 
     def test_history_with_data(self, mocker):
         """Should display sessions table."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_history_dicts",
+            _P_QUERY_HIST,
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
@@ -1092,20 +1120,20 @@ class TestHistoryCommand:
 
     def test_history_with_command_filter(self, mocker):
         """Should pass command filter to query."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mock_query = mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mock_query = mocker.patch(_P_QUERY_HIST, return_value=[])
         runner.invoke(app, ["history", "--command", "check"])
         mock_query.assert_called_once_with(mock_open.return_value.__enter__.return_value, command="check", limit=20, since=None)
 
     def test_history_with_issues(self, mocker):
         """Should show issue count with styling."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_history_dicts",
+            _P_QUERY_HIST,
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
@@ -1126,13 +1154,13 @@ class TestHistoryCommand:
 
     def test_history_json_with_data(self, mocker):
         """Should output JSON array when --json is passed."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_history_dicts",
+            _P_QUERY_HIST,
             return_value=[
                 {
                     "id": "abc-123",
-                    "timestamp": "2025-01-01T10:00:00+00:00",
+                    "timestamp": _TS_TREND_10_TZ,
                     "command": "check",
                     "windsurf_version": "1.95.0",
                     "windsurf_target": "stable",
@@ -1157,16 +1185,16 @@ class TestHistoryCommand:
 
     def test_history_json_empty(self, mocker):
         """Should output empty JSON array when no data."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_HIST, return_value=[])
         result = runner.invoke(app, ["history", "--json"])
         assert result.exit_code == 0
         assert json.loads(result.output) == []
 
     def test_history_json_error(self, mocker):
         """Should output JSON error object when ValueError is raised in --json mode."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("Invalid duration format: 'xyz'"))
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_HIST, side_effect=ValueError("Invalid duration format: 'xyz'"))
         result = runner.invoke(app, ["history", "--json", "--since", "xyz"])
         assert result.exit_code == 1
         data = json.loads(result.output)
@@ -1175,16 +1203,16 @@ class TestHistoryCommand:
 
     def test_history_closes_db(self, mocker):
         """Should use open_db context manager to ensure DB is closed."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_history_dicts", return_value=[])
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_HIST, return_value=[])
         runner.invoke(app, ["history"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
 
     def test_history_closes_db_on_error(self, mocker):
         """Should use open_db context manager even when query raises."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_history_dicts", side_effect=ValueError("bad"))
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_HIST, side_effect=ValueError("bad"))
         runner.invoke(app, ["history"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
@@ -1195,21 +1223,21 @@ class TestTrendCommand:
 
     def test_trend_empty(self, mocker):
         """Should handle empty data gracefully."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, return_value=[])
         result = runner.invoke(app, ["trend", "memory"])
         assert result.exit_code == 0
         assert "No data found" in result.output
 
     def test_trend_with_data(self, mocker):
         """Should display trend table and summary."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_trend",
+            _P_QUERY_TREND,
             return_value=[
-                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
-                {"timestamp": "2025-01-01T11:00:00", "value": 1800.0},
-                {"timestamp": "2025-01-01T12:00:00", "value": 1600.0},
+                {"timestamp": _TS_TREND_10, "value": 1500.0},
+                {"timestamp": _TS_TREND_11, "value": 1800.0},
+                {"timestamp": _TS_TREND_12, "value": 1600.0},
             ],
         )
         result = runner.invoke(app, ["trend", "memory"])
@@ -1219,18 +1247,18 @@ class TestTrendCommand:
 
     def test_trend_invalid_metric(self, mocker):
         """Should show error for invalid metric."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric 'invalid'"))
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, side_effect=ValueError("Unknown metric 'invalid'"))
         result = runner.invoke(app, ["trend", "invalid"])
         assert result.exit_code == 1
 
     def test_trend_processes_metric(self, mocker):
         """Should format integer values for process count."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_trend",
+            _P_QUERY_TREND,
             return_value=[
-                {"timestamp": "2025-01-01T10:00:00", "value": 5},
+                {"timestamp": _TS_TREND_10, "value": 5},
             ],
         )
         result = runner.invoke(app, ["trend", "processes"])
@@ -1238,11 +1266,11 @@ class TestTrendCommand:
 
     def test_trend_single_datapoint(self, mocker):
         """Should not show change with only one data point."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_trend",
+            _P_QUERY_TREND,
             return_value=[
-                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
+                {"timestamp": _TS_TREND_10, "value": 1500.0},
             ],
         )
         result = runner.invoke(app, ["trend", "memory"])
@@ -1250,12 +1278,12 @@ class TestTrendCommand:
 
     def test_trend_json_with_data(self, mocker):
         """Should output JSON array when --json is passed."""
-        mocker.patch("surfmon.cli.open_db")
+        mocker.patch(_P_OPEN_DB)
         mocker.patch(
-            "surfmon.cli.query_trend",
+            _P_QUERY_TREND,
             return_value=[
-                {"timestamp": "2025-01-01T10:00:00", "value": 1500.0},
-                {"timestamp": "2025-01-01T11:00:00", "value": 1800.0},
+                {"timestamp": _TS_TREND_10, "value": 1500.0},
+                {"timestamp": _TS_TREND_11, "value": 1800.0},
             ],
         )
         result = runner.invoke(app, ["trend", "memory", "--json"])
@@ -1266,16 +1294,16 @@ class TestTrendCommand:
 
     def test_trend_json_empty(self, mocker):
         """Should output empty JSON array when no data."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, return_value=[])
         result = runner.invoke(app, ["trend", "memory", "--json"])
         assert result.exit_code == 0
         assert json.loads(result.output) == []
 
     def test_trend_json_error(self, mocker):
         """Should output JSON error object when ValueError is raised in --json mode."""
-        mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("Unknown metric: 'bogus'"))
+        mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, side_effect=ValueError("Unknown metric: 'bogus'"))
         result = runner.invoke(app, ["trend", "bogus", "--json"])
         assert result.exit_code == 1
         data = json.loads(result.output)
@@ -1284,16 +1312,16 @@ class TestTrendCommand:
 
     def test_trend_closes_db(self, mocker):
         """Should use open_db context manager to ensure DB is closed."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", return_value=[])
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, return_value=[])
         runner.invoke(app, ["trend", "memory"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
 
     def test_trend_closes_db_on_error(self, mocker):
         """Should use open_db context manager even when query raises."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
-        mocker.patch("surfmon.cli.query_trend", side_effect=ValueError("bad"))
+        mock_open = mocker.patch(_P_OPEN_DB)
+        mocker.patch(_P_QUERY_TREND, side_effect=ValueError("bad"))
         runner.invoke(app, ["trend", "invalid"])
         mock_open.return_value.__enter__.assert_called_once()
         mock_open.return_value.__exit__.assert_called_once()
@@ -1329,7 +1357,7 @@ class TestStoreToDbHelper:
 
     def test_store_to_db_success(self, mocker):
         """Should call store function with db and target via open_db context manager."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
+        mock_open = mocker.patch(_P_OPEN_DB)
         mock_fn = MagicMock()
 
         _store_to_db(mock_fn, "arg1")
@@ -1338,7 +1366,7 @@ class TestStoreToDbHelper:
 
     def test_store_to_db_closes_on_store_error(self, mocker):
         """Should exit open_db context manager even when the store function raises."""
-        mock_open = mocker.patch("surfmon.cli.open_db")
+        mock_open = mocker.patch(_P_OPEN_DB)
         mock_fn = MagicMock(side_effect=RuntimeError("insert failed"))
 
         _store_to_db(mock_fn, "arg1")
@@ -1346,7 +1374,7 @@ class TestStoreToDbHelper:
 
     def test_store_to_db_failure(self, mocker):
         """Should not raise when open_db itself fails."""
-        mocker.patch("surfmon.cli.open_db", side_effect=OSError("disk full"))
+        mocker.patch(_P_OPEN_DB, side_effect=OSError("disk full"))
         _store_to_db(MagicMock(), "arg1")
 
     def test_get_target_str_no_target(self, mocker):

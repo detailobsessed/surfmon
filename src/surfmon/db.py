@@ -98,11 +98,9 @@ def _migration_001_add_stale_column(db: Database) -> None:
 _MIGRATIONS: list = [_migration_001_add_stale_column]
 
 
-def _ensure_schema(db: Database) -> None:
-    """Create tables if they don't exist, then run pending migrations."""
-    # Capture state before CREATE TABLE blocks modify it.
-    # Legacy DBs (pre-migration-framework) have tables but no _meta table.
-    is_legacy = "sessions" in db.table_names() and "_meta" not in db.table_names()
+def _create_tables(db: Database) -> None:
+    """Create core tables if they don't already exist."""
+    session_fk = [("session_id", "sessions", "id")]
 
     if "sessions" not in db.table_names():
         Table(db, "sessions").create(
@@ -130,7 +128,7 @@ def _ensure_schema(db: Database) -> None:
                 "swap_used_gb": float,
             },
             pk="session_id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "processes" not in db.table_names():
@@ -148,7 +146,7 @@ def _ensure_schema(db: Database) -> None:
                 "cmdline": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "ls_entries" not in db.table_names():
@@ -168,7 +166,7 @@ def _ensure_schema(db: Database) -> None:
                 "stale": int,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "pty_snapshots" not in db.table_names():
@@ -180,7 +178,7 @@ def _ensure_schema(db: Database) -> None:
                 "system_pty_used": int,
             },
             pk="session_id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "pty_per_process" not in db.table_names():
@@ -194,7 +192,7 @@ def _ensure_schema(db: Database) -> None:
                 "fds": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
 
     if "issues" not in db.table_names():
@@ -206,8 +204,17 @@ def _ensure_schema(db: Database) -> None:
                 "message": str,
             },
             pk="id",
-            foreign_keys=[("session_id", "sessions", "id")],
+            foreign_keys=session_fk,
         )
+
+
+def _ensure_schema(db: Database) -> None:
+    """Create tables if they don't exist, then run pending migrations."""
+    # Capture state before CREATE TABLE blocks modify it.
+    # Legacy DBs (pre-migration-framework) have tables but no _meta table.
+    is_legacy = "sessions" in db.table_names() and "_meta" not in db.table_names()
+
+    _create_tables(db)
 
     # Fresh DB: CREATE TABLE blocks above always reflect the latest schema,
     # so just stamp the version and skip migrations entirely.
@@ -539,24 +546,29 @@ def _build_analyze_where(since: str | None) -> tuple[str, list]:
     return " AND ".join(where_parts), params
 
 
+def _nn(value: int | float | None, default: int | float = 0) -> int | float:
+    """Return *value* when not None, otherwise *default* (null-coalesce for DB rows)."""
+    return default if value is None else value
+
+
 def _row_to_analyze_dict(row: tuple) -> dict:
     """Convert a raw DB row to an analyze session dict."""
     (sid, ts_str, _ws_version, proc_count, total_mem_mb, total_cpu, total_mem_gb, avail_mem_gb, pty_count, pty_limit, pty_used) = row
     ts = datetime.fromisoformat(ts_str).replace(tzinfo=UTC) if ts_str else datetime.now(tz=UTC)
     pty_info = (
-        {"windsurf_pty_count": pty_count or 0, "system_pty_limit": pty_limit or 0, "system_pty_used": pty_used or 0}
+        {"windsurf_pty_count": _nn(pty_count), "system_pty_limit": _nn(pty_limit), "system_pty_used": _nn(pty_used)}
         if pty_count is not None
         else None
     )
     return {
         "session_id": sid,
         "timestamp": ts,
-        "processes": proc_count or 0,
-        "memory_mb": total_mem_mb or 0.0,
-        "cpu": total_cpu or 0.0,
+        "processes": _nn(proc_count),
+        "memory_mb": _nn(total_mem_mb, 0.0),
+        "cpu": _nn(total_cpu, 0.0),
         "lang_servers": 0,
         "issues": [],
-        "system": {"total_memory_gb": total_mem_gb or 0.0, "available_memory_gb": avail_mem_gb or 0.0},
+        "system": {"total_memory_gb": _nn(total_mem_gb, 0.0), "available_memory_gb": _nn(avail_mem_gb, 0.0)},
         "pty_info": pty_info,
         "windsurf_processes": [],
     }

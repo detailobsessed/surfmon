@@ -6,6 +6,9 @@ import pytest
 
 from surfmon.output import display_report, save_report_markdown
 
+_P_CONSOLE = "surfmon.output.console"
+_REPORT_MD = "report.md"
+
 
 @pytest.fixture
 def mock_report():
@@ -42,13 +45,13 @@ class TestDisplayReport:
 
     def test_display_report_basic(self, mock_report, mocker):
         """Should display report without errors."""
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         assert mock_console.print.called
 
     def test_display_report_verbose(self, mock_report, mocker):
         """Should display verbose report."""
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -57,7 +60,7 @@ class TestDisplayReport:
         from rich.table import Table
 
         mock_report.process_count = 0
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         table_titles = [
             arg.args[0].title
@@ -75,7 +78,7 @@ class TestDisplayReport:
         mock_report.extensions_count = 0
         mock_report.mcp_servers_enabled = []
         mock_report.active_workspaces = []
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         table_titles = [
             arg.args[0].title
@@ -88,7 +91,7 @@ class TestDisplayReport:
     def test_display_report_with_issues(self, mock_report, mocker):
         """Should display issues when present."""
         mock_report.log_issues = ["Issue 1", "Issue 2"]
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         assert mock_console.print.called
 
@@ -122,7 +125,7 @@ class TestDisplayReport:
             stale_issues=[],
         )
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         # Verify the LS snapshot table was rendered (console.print called with a Table)
         from rich.table import Table
@@ -140,7 +143,7 @@ class TestDisplayReport:
         ws.loaded_at = "12:00:00"
         mock_report.active_workspaces = [ws]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -159,7 +162,7 @@ class TestDisplayReportWithProcesses:
         proc.runtime_seconds = 3600.0
         mock_report.windsurf_processes = [proc]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -174,7 +177,7 @@ class TestDisplayReportWithProcesses:
         proc.runtime_seconds = 7200.0
         mock_report.windsurf_processes = [proc]
 
-        mock_console = mocker.patch("surfmon.output.console")
+        mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report, verbose=True)
         assert mock_console.print.called
 
@@ -184,7 +187,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown(self, mock_report, tmp_path):
         """Should save report as markdown file."""
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         assert output_path.exists()
@@ -195,7 +198,7 @@ class TestSaveReportMarkdown:
     def test_save_report_markdown_with_issues(self, mock_report, tmp_path):
         """Should include issues in markdown."""
         mock_report.log_issues = ["Critical issue"]
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")
@@ -204,7 +207,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown_with_mcp_servers(self, mock_report, tmp_path):
         """Should include MCP servers in markdown."""
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")
@@ -249,7 +252,7 @@ class TestSaveReportMarkdown:
             stale_issues=[],
         )
 
-        output_path = tmp_path / "report.md"
+        output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
         content = output_path.read_text(encoding="utf-8")

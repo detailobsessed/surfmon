@@ -14,6 +14,12 @@ from surfmon.config import (
     set_target,
 )
 
+_P_PROC_ITER = "psutil.process_iter"
+_P_CONFIG = "surfmon.config.config"
+_NEXT_EXE = "/Applications/Windsurf - Next.app/Contents/MacOS/Electron"
+_INSIDERS_EXE = "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"
+_STABLE_EXE = "/Applications/Windsurf.app/Contents/MacOS/Windsurf"
+
 
 @pytest.fixture(autouse=True)
 def _clean_target():
@@ -30,10 +36,10 @@ class TestDetectRunningTarget:
         """Should detect Windsurf Next from process exe path."""
         mock_proc = Mock()
         mock_proc.info = {
-            "exe": "/Applications/Windsurf - Next.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
+            "exe": _NEXT_EXE,
+            "cmdline": [_NEXT_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[mock_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[mock_proc])
 
         result = _detect_running_target()
 
@@ -43,10 +49,10 @@ class TestDetectRunningTarget:
         """Should detect Windsurf Insiders from process exe path."""
         mock_proc = Mock()
         mock_proc.info = {
-            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+            "exe": _INSIDERS_EXE,
+            "cmdline": [_INSIDERS_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[mock_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[mock_proc])
 
         result = _detect_running_target()
 
@@ -56,10 +62,10 @@ class TestDetectRunningTarget:
         """Should detect Windsurf Stable from process exe path."""
         mock_proc = Mock()
         mock_proc.info = {
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
+            "exe": _STABLE_EXE,
+            "cmdline": [_STABLE_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[mock_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[mock_proc])
 
         result = _detect_running_target()
 
@@ -69,15 +75,15 @@ class TestDetectRunningTarget:
         """Should prefer NEXT over STABLE when both are running."""
         stable_proc = Mock()
         stable_proc.info = {
-            "exe": "/Applications/Windsurf.app/Contents/MacOS/Windsurf",
-            "cmdline": ["/Applications/Windsurf.app/Contents/MacOS/Windsurf"],
+            "exe": _STABLE_EXE,
+            "cmdline": [_STABLE_EXE],
         }
         next_proc = Mock()
         next_proc.info = {
-            "exe": "/Applications/Windsurf - Next.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
+            "exe": _NEXT_EXE,
+            "cmdline": [_NEXT_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[stable_proc, next_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[stable_proc, next_proc])
 
         result = _detect_running_target()
 
@@ -87,15 +93,15 @@ class TestDetectRunningTarget:
         """Should prefer NEXT over INSIDERS when multiple are running."""
         insiders_proc = Mock()
         insiders_proc.info = {
-            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+            "exe": _INSIDERS_EXE,
+            "cmdline": [_INSIDERS_EXE],
         }
         next_proc = Mock()
         next_proc.info = {
-            "exe": "/Applications/Windsurf - Next.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
+            "exe": _NEXT_EXE,
+            "cmdline": [_NEXT_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[insiders_proc, next_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[insiders_proc, next_proc])
 
         result = _detect_running_target()
 
@@ -108,7 +114,7 @@ class TestDetectRunningTarget:
             "exe": "/usr/bin/python3",
             "cmdline": ["python3", "some_script.py"],
         }
-        mocker.patch("psutil.process_iter", return_value=[unrelated_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[unrelated_proc])
 
         result = _detect_running_target()
 
@@ -116,7 +122,7 @@ class TestDetectRunningTarget:
 
     def test_returns_none_with_empty_process_list(self, mocker):
         """Should return None when no processes are enumerated."""
-        mocker.patch("psutil.process_iter", return_value=[])
+        mocker.patch(_P_PROC_ITER, return_value=[])
 
         result = _detect_running_target()
 
@@ -126,13 +132,13 @@ class TestDetectRunningTarget:
         """Should skip processes that raise AccessDenied."""
         good_proc = Mock()
         good_proc.info = {
-            "exe": "/Applications/Windsurf - Next.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Next.app/Contents/MacOS/Electron"],
+            "exe": _NEXT_EXE,
+            "cmdline": [_NEXT_EXE],
         }
         bad_proc = Mock()
         bad_proc.info.__getitem__ = Mock(side_effect=psutil.AccessDenied())
 
-        mocker.patch("psutil.process_iter", return_value=[bad_proc, good_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[bad_proc, good_proc])
 
         result = _detect_running_target()
 
@@ -143,7 +149,7 @@ class TestDetectRunningTarget:
         bad_proc = Mock()
         bad_proc.info.__getitem__ = Mock(side_effect=psutil.NoSuchProcess(pid=999))
 
-        mocker.patch("psutil.process_iter", return_value=[bad_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[bad_proc])
 
         result = _detect_running_target()
 
@@ -161,10 +167,10 @@ class TestDetectRunningTarget:
         }
         insiders_proc = Mock()
         insiders_proc.info = {
-            "exe": "/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron",
-            "cmdline": ["/Applications/Windsurf - Insiders.app/Contents/MacOS/Electron"],
+            "exe": _INSIDERS_EXE,
+            "cmdline": [_INSIDERS_EXE],
         }
-        mocker.patch("psutil.process_iter", return_value=[crashpad_proc, insiders_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[crashpad_proc, insiders_proc])
 
         result = _detect_running_target()
 
@@ -182,7 +188,7 @@ class TestDetectRunningTarget:
             "exe": "",
             "cmdline": [helper_path],
         }
-        mocker.patch("psutil.process_iter", return_value=[mock_proc])
+        mocker.patch(_P_PROC_ITER, return_value=[mock_proc])
 
         result = _detect_running_target()
 
@@ -194,7 +200,7 @@ class TestGetTarget:
 
     def test_programmatic_override_takes_priority(self, mocker):
         """Programmatic set_target should override everything."""
-        mocker.patch("surfmon.config.config", return_value="next")
+        mocker.patch(_P_CONFIG, return_value="next")
 
         set_target(WindsurfTarget.STABLE)
         result = get_target()
@@ -203,7 +209,7 @@ class TestGetTarget:
 
     def test_env_var_next(self, mocker):
         """Explicit SURFMON_TARGET=next should work."""
-        mocker.patch("surfmon.config.config", return_value="next")
+        mocker.patch(_P_CONFIG, return_value="next")
 
         result = get_target()
 
@@ -211,7 +217,7 @@ class TestGetTarget:
 
     def test_env_var_insiders(self, mocker):
         """Explicit SURFMON_TARGET=insiders should work."""
-        mocker.patch("surfmon.config.config", return_value="insiders")
+        mocker.patch(_P_CONFIG, return_value="insiders")
 
         result = get_target()
 
@@ -219,7 +225,7 @@ class TestGetTarget:
 
     def test_env_var_stable(self, mocker):
         """Explicit SURFMON_TARGET=stable should work."""
-        mocker.patch("surfmon.config.config", return_value="stable")
+        mocker.patch(_P_CONFIG, return_value="stable")
 
         result = get_target()
 
@@ -227,7 +233,7 @@ class TestGetTarget:
 
     def test_raises_when_no_target_configured(self, mocker):
         """Should raise TargetNotSetError when no target is set."""
-        mocker.patch("surfmon.config.config", return_value="")
+        mocker.patch(_P_CONFIG, return_value="")
 
         with pytest.raises(TargetNotSetError):
             get_target()
