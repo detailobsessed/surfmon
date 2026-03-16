@@ -710,7 +710,7 @@ class TestPtySnapshotCommand:
     @pytest.fixture
     def _mock_pty_data(self, mocker):
         """Mock PTY data collection for pty-snapshot tests."""
-        from surfmon.monitor import PtyFdEntry, PtyInfo, PtyProcessDetail
+        from surfmon.pty import PtyFdEntry, PtyInfo, PtyProcessDetail
 
         mock_pty = PtyInfo(
             windsurf_pty_count=5,
@@ -756,7 +756,7 @@ class TestPtySnapshotCommand:
 
     def test_pty_snapshot_exit_code_warning(self, mocker):
         """Should exit 1 when PTY count triggers a warning."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=75,
@@ -772,7 +772,7 @@ class TestPtySnapshotCommand:
 
     def test_pty_snapshot_exit_code_critical(self, mocker):
         """Should exit 2 when PTY count triggers a critical issue."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=504,
@@ -788,7 +788,7 @@ class TestPtySnapshotCommand:
 
     def test_pty_snapshot_json_exit_code_warning(self, mocker):
         """Should exit 1 with --json when PTY count triggers a warning."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=75,
@@ -804,7 +804,7 @@ class TestPtySnapshotCommand:
 
     def test_pty_snapshot_json_exit_code_critical(self, mocker):
         """Should exit 2 with --json when PTY count triggers a critical issue."""
-        from surfmon.monitor import PtyInfo
+        from surfmon.pty import PtyInfo
 
         mock_pty = PtyInfo(
             windsurf_pty_count=504,

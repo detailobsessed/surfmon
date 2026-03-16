@@ -95,7 +95,7 @@ def build_process_memory_history(reports: list[dict]) -> dict[str, list[float]]:
 
 def _fmt_gb(mb: float | None) -> str:
     """Format nullable megabytes as 'X.XX GB' or '—'."""
-    if not mb:
+    if mb is None:
         return "—"
     return f"{mb / MB_PER_GB:.2f} GB"
 

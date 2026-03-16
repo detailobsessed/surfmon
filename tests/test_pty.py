@@ -2,8 +2,8 @@
 
 from unittest.mock import Mock
 
-from surfmon.monitor import (
-    ProcessInfo,
+from surfmon.monitor import ProcessInfo
+from surfmon.pty import (
     PtyFdEntry,
     PtyInfo,
     _classify_pty_issues,

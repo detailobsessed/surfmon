@@ -19,38 +19,15 @@ from surfmon._constants import (
     ISSUE_WARNING_PREFIX,
 )
 from surfmon.config import get_paths
-from surfmon.log_analysis import (  # noqa: F401 — re-exported for backward compat
-    _check_extension_logs_dir,
-    _check_main_log_issues,
-    _check_network_log_issues,
-    _check_orphaned_crashpad_handlers,
-    _check_shared_process_log_issues,
-    _format_age_str,
-    _read_log_tail,
-    check_log_issues,
-)
-from surfmon.pty import (  # noqa: F401 — re-exported for backward compat
-    PtyFdEntry,
-    PtyInfo,
-    PtyProcessDetail,
-    _classify_pty_issues,
-    _get_system_pty_limit,
-    _group_entries_by_pid,
-    _parse_lsof_line,
-    check_pty_leak,
-)
-from surfmon.workspaces import (  # noqa: F401 — re-exported for backward compat
+from surfmon.log_analysis import check_log_issues
+from surfmon.pty import PtyInfo, check_pty_leak
+from surfmon.workspaces import (
     WorkspaceInfo,
-    _check_orphaned_workspace_proc,
     _extract_workspace_from_cmdline,
     _extract_workspace_id,
     _format_workspace_display,
     _format_workspace_short,
-    _is_orphaned_workspace,
-    _is_stale_workspace,
-    _parse_workspace_event,
     _resolve_workspace_path,
-    check_orphaned_workspaces,
     count_windsurf_launches_today,
     get_active_workspaces,
 )

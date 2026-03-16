@@ -12,11 +12,9 @@ from surfmon.monitor import (
     EXIT_OK,
     EXIT_WARNING,
     ProcessInfo,
-    PtyInfo,
     SystemInfo,
     _extract_windsurf_version,
     _get_windsurf_uptime,
-    _parse_workspace_event,
     count_extensions,
     find_language_servers,
     generate_report,
@@ -28,6 +26,8 @@ from surfmon.monitor import (
     max_issue_severity,
     save_report_json,
 )
+from surfmon.pty import PtyInfo
+from surfmon.workspaces import _parse_workspace_event
 
 # ---------------------------------------------------------------------------
 # Shared test constants — eliminates repeated magic strings

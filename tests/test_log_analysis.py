@@ -5,7 +5,8 @@ from unittest.mock import Mock
 
 import psutil
 
-from surfmon.monitor import check_log_issues, get_windsurf_processes
+from surfmon.log_analysis import check_log_issues
+from surfmon.monitor import get_windsurf_processes
 
 _P_LA_PROC_ITER = "surfmon.log_analysis.psutil.process_iter"
 _P_MON_PROC_ITER = "surfmon.monitor.psutil.process_iter"

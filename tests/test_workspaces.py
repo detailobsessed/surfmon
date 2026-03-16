@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock
 
-from surfmon.monitor import (
+from surfmon.workspaces import (
     _extract_workspace_from_cmdline,
     _is_orphaned_workspace,
     _is_stale_workspace,
@@ -150,7 +150,7 @@ class TestOrphanedWorkspaceDetection:
 
     def test_detects_orphaned_workspace(self, tmp_path, mocker):
         """Should detect language server indexing a non-existent workspace."""
-        from surfmon.monitor import _check_orphaned_workspace_proc
+        from surfmon.workspaces import _check_orphaned_workspace_proc
 
         proc = Mock()
         proc.memory_info.return_value = Mock(rss=500 * 1024 * 1024)  # 500 MB
@@ -165,7 +165,7 @@ class TestOrphanedWorkspaceDetection:
 
     def test_returns_none_for_non_language_server(self):
         """Should return None for non-language-server processes."""
-        from surfmon.monitor import _check_orphaned_workspace_proc
+        from surfmon.workspaces import _check_orphaned_workspace_proc
 
         result = _check_orphaned_workspace_proc("some other process", Mock())
 
@@ -173,7 +173,7 @@ class TestOrphanedWorkspaceDetection:
 
     def test_returns_none_when_missing_flags(self):
         """Should return None when workspace_id or database_dir is missing."""
-        from surfmon.monitor import _check_orphaned_workspace_proc
+        from surfmon.workspaces import _check_orphaned_workspace_proc
 
         cmdline = "language_server_macos_arm --workspace_id file_Users_test"
         result = _check_orphaned_workspace_proc(cmdline, Mock())
@@ -182,7 +182,7 @@ class TestOrphanedWorkspaceDetection:
 
     def test_returns_none_when_workspace_exists(self, mocker):
         """Should return None when workspace path exists."""
-        from surfmon.monitor import _check_orphaned_workspace_proc
+        from surfmon.workspaces import _check_orphaned_workspace_proc
 
         # Mock Path.exists to return True so it works cross-platform (no /tmp on Windows)
         mocker.patch.object(Path, "exists", return_value=True)
@@ -194,7 +194,7 @@ class TestOrphanedWorkspaceDetection:
 
     def test_includes_db_size_when_db_exists(self, tmp_path, mocker):
         """Should include database size in issue when db directory exists."""
-        from surfmon.monitor import _check_orphaned_workspace_proc
+        from surfmon.workspaces import _check_orphaned_workspace_proc
 
         proc = Mock()
         proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)

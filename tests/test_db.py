@@ -28,10 +28,9 @@ from surfmon.monitor import (
     LsSnapshotEntry,
     MonitoringReport,
     ProcessInfo,
-    PtyInfo,
-    PtyProcessDetail,
     SystemInfo,
 )
+from surfmon.pty import PtyInfo, PtyProcessDetail
 
 _W_SESSION_ID = "session_id = ?"
 _W_ID = "id = ?"
