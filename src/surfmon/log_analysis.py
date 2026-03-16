@@ -25,7 +25,6 @@ from surfmon._constants import (
     TELEMETRY_ERROR_THRESHOLD,
 )
 from surfmon.config import get_paths
-from surfmon.workspaces import check_orphaned_workspaces
 
 
 def _format_age_str(days: float) -> str:
@@ -213,11 +212,10 @@ def _check_network_log_issues(latest_log: Path) -> list[str]:
     return []
 
 
-def check_log_issues(*, include_orphans: bool = True) -> list[str]:
+def check_log_issues() -> list[str]:
     """Check for common issues in Windsurf logs.
 
     Parses recent Windsurf logs to detect:
-    - Orphaned workspace indexes (CRITICAL - can waste 1+ GB RAM)
     - Orphaned crash handlers
     - Extension host crashes
     - Network/telemetry errors
@@ -225,16 +223,12 @@ def check_log_issues(*, include_orphans: bool = True) -> list[str]:
     - Renderer crashes
     - Extension errors
 
-    Args:
-        include_orphans: When False, skip the orphaned-workspace process scan.
-            Set to False when the caller performs its own orphan detection
-            (e.g. via ``capture_ls_snapshot``) to avoid a redundant
-            ``psutil.process_iter`` walk.
+    Orphaned-workspace detection is handled separately by
+    :func:`~surfmon.monitor.capture_ls_snapshot`, which works from
+    already-collected process data rather than a redundant process scan.
     """
     issues = []
 
-    if include_orphans:
-        issues.extend(check_orphaned_workspaces())
     issues.extend(_check_orphaned_crashpad_handlers())
     issues.extend(_check_extension_logs_dir())
 
