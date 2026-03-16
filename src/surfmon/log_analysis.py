@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 
 from surfmon._constants import (
     EXTENSION_ERROR_LINES_THRESHOLD,
-    ISSUE_CRITICAL_PREFIX,
-    ISSUE_WARNING_PREFIX,
     LOG_TAIL_BYTES,
     MAX_DISPLAY_ITEMS,
     SECONDS_PER_DAY,
@@ -23,6 +21,8 @@ from surfmon._constants import (
     SECONDS_PER_MINUTE,
     SHARED_LOG_TAIL_BYTES,
     TELEMETRY_ERROR_THRESHOLD,
+    Issue,
+    IssueSeverity,
 )
 from surfmon.config import get_paths
 
@@ -90,7 +90,7 @@ def _scan_crashpad_processes(app_name: str) -> tuple[bool, list[tuple[int, float
     return main_windsurf_found, orphaned
 
 
-def _check_orphaned_crashpad_handlers() -> list[str]:
+def _check_orphaned_crashpad_handlers() -> list[Issue]:
     """Check for orphaned crashpad handler processes."""
     main_found, orphaned = _scan_crashpad_processes(get_paths().app_name)
 
@@ -102,14 +102,14 @@ def _check_orphaned_crashpad_handlers() -> list[str]:
     age_str = _format_age_str(oldest_days)
     pids_str = ", ".join(pids[:MAX_DISPLAY_ITEMS]) + (", ..." if len(pids) > MAX_DISPLAY_ITEMS else "")
     return [
-        (
-            f"{ISSUE_WARNING_PREFIX}  {len(orphaned)} orphaned crash handler(s) "
-            f"(oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force"
+        Issue(
+            IssueSeverity.WARNING,
+            f"{len(orphaned)} orphaned crash handler(s) (oldest: {age_str}, PIDs: {pids_str}) - Fix: surfmon cleanup --force",
         )
     ]
 
 
-def _check_extension_logs_dir() -> list[str]:
+def _check_extension_logs_dir() -> list[Issue]:
     """Check for logs directory in extensions folder (package.json error)."""
     paths = get_paths()
     logs_dir = paths.extensions_dir / "logs"
@@ -125,20 +125,21 @@ def _check_extension_logs_dir() -> list[str]:
         pass
 
     return [
-        (
-            f"{ISSUE_WARNING_PREFIX}  'logs' directory in extensions folder ({culprit} logging to wrong location) - "
-            f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs"
+        Issue(
+            IssueSeverity.WARNING,
+            f"'logs' directory in extensions folder ({culprit} logging to wrong location) - "
+            f"Fix: rm -rf ~/{paths.dotfile_dir}/extensions/logs",
         )
     ]
 
 
-def _check_main_log_issues(latest_log: Path) -> list[str]:
+def _check_main_log_issues(latest_log: Path) -> list[Issue]:
     """Check main.log for extension host crashes, OOM, and renderer crashes."""
     content = _read_log_tail(latest_log / "main.log", LOG_TAIL_BYTES)
     if content is None:
         return []
 
-    issues = []
+    issues: list[Issue] = []
 
     # Extension host crashes (non-zero exit codes only)
     crash_lines = re.findall(
@@ -148,23 +149,23 @@ def _check_main_log_issues(latest_log: Path) -> list[str]:
     crashes = [pid for pid, code in crash_lines if code != "0"]
     if crashes:
         pids_str = ", ".join(crashes[:MAX_DISPLAY_ITEMS]) + (", ..." if len(crashes) > MAX_DISPLAY_ITEMS else "")
-        issues.append(f"{ISSUE_CRITICAL_PREFIX}  {len(crashes)} extension host crash(es) - PIDs: {pids_str}")
+        issues.append(Issue(IssueSeverity.CRITICAL, f"{len(crashes)} extension host crash(es) - PIDs: {pids_str}"))
 
     update_errors = content.count("UpdateService error")
     if update_errors:
-        issues.append(f"{ISSUE_WARNING_PREFIX}  {update_errors} update check request(s) timed out (check DNS/firewall settings)")
+        issues.append(Issue(IssueSeverity.WARNING, f"{update_errors} update check request(s) timed out (check DNS/firewall settings)"))
 
     if "out of memory" in content.lower() or "oom" in content.lower():
-        issues.append(f"{ISSUE_CRITICAL_PREFIX}  Out of memory errors detected")
+        issues.append(Issue(IssueSeverity.CRITICAL, "Out of memory errors detected"))
 
     renderer_crashes = content.count("GPU process crashed")
     if renderer_crashes > 0:
-        issues.append(f"{ISSUE_WARNING_PREFIX}  {renderer_crashes} GPU/renderer crash(es) detected")
+        issues.append(Issue(IssueSeverity.WARNING, f"{renderer_crashes} GPU/renderer crash(es) detected"))
 
     return issues
 
 
-def _check_shared_process_log_issues(latest_log: Path) -> list[str]:
+def _check_shared_process_log_issues(latest_log: Path) -> list[Issue]:
     """Check sharedprocess.log for extension errors."""
     content = _read_log_tail(latest_log / "sharedprocess.log", SHARED_LOG_TAIL_BYTES)
     if content is None:
@@ -187,15 +188,15 @@ def _check_shared_process_log_issues(latest_log: Path) -> list[str]:
     if extension_errors:
         sorted_exts = sorted(extension_errors.items(), key=operator.itemgetter(1), reverse=True)
         ext_summary = ", ".join([f"{ext} ({count})" for ext, count in sorted_exts[:MAX_DISPLAY_ITEMS]])
-        return [f"{ISSUE_WARNING_PREFIX}  Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}"]
+        return [Issue(IssueSeverity.WARNING, f"Extension errors: {ext_summary}{' ...' if len(sorted_exts) > MAX_DISPLAY_ITEMS else ''}")]
 
     if len(error_lines) > EXTENSION_ERROR_LINES_THRESHOLD:
-        return [f"{ISSUE_WARNING_PREFIX}  {len(error_lines)} extension errors in shared process"]
+        return [Issue(IssueSeverity.WARNING, f"{len(error_lines)} extension errors in shared process")]
 
     return []
 
 
-def _check_network_log_issues(latest_log: Path) -> list[str]:
+def _check_network_log_issues(latest_log: Path) -> list[Issue]:
     """Check network-shared.log for telemetry connection failures."""
     content = _read_log_tail(latest_log / "network-shared.log", SHARED_LOG_TAIL_BYTES)
     if content is None:
@@ -204,15 +205,15 @@ def _check_network_log_issues(latest_log: Path) -> list[str]:
     telemetry_errors = content.count("windsurf-telemetry.codeium.com")
     if telemetry_errors > TELEMETRY_ERROR_THRESHOLD:
         return [
-            (
-                f"{ISSUE_WARNING_PREFIX}  {telemetry_errors} telemetry connection failure(s) "
-                f"to windsurf-telemetry.codeium.com (check DNS/firewall settings)"
+            Issue(
+                IssueSeverity.WARNING,
+                f"{telemetry_errors} telemetry connection failure(s) to windsurf-telemetry.codeium.com (check DNS/firewall settings)",
             )
         ]
     return []
 
 
-def check_log_issues() -> list[str]:
+def check_log_issues() -> list[Issue]:
     """Check for common issues in Windsurf logs.
 
     Parses recent Windsurf logs to detect:
@@ -227,7 +228,7 @@ def check_log_issues() -> list[str]:
     :func:`~surfmon.monitor.capture_ls_snapshot`, which works from
     already-collected process data rather than a redundant process scan.
     """
-    issues = []
+    issues: list[Issue] = []
 
     issues.extend(_check_orphaned_crashpad_handlers())
     issues.extend(_check_extension_logs_dir())

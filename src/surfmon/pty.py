@@ -6,12 +6,12 @@ import subprocess  # noqa: S404
 from dataclasses import dataclass, field
 
 from surfmon._constants import (
-    ISSUE_CRITICAL_PREFIX,
-    ISSUE_WARNING_PREFIX,
     LSOF_MIN_FIELDS,
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
+    Issue,
+    IssueSeverity,
 )
 from surfmon.config import get_paths
 
@@ -51,7 +51,7 @@ class PtyInfo:
     windsurf_version: str = ""
     windsurf_uptime_seconds: float = 0.0
     raw_lsof: str = ""
-    issues: list[str] = field(default_factory=list)
+    issues: list[Issue] = field(default_factory=list)
 
 
 def _get_system_pty_limit() -> int:
@@ -114,11 +114,11 @@ def _classify_pty_issues(
     windsurf_pty_count: int,
     system_pty_used: int,
     system_pty_limit: int,
-) -> list[str]:
-    """Generate issue strings for PTY leak severity.
+) -> list[Issue]:
+    """Generate issues for PTY leak severity.
 
-    Returns a list of 0 or 1 issue strings, classified as critical or warning
-    using the standard ``ISSUE_CRITICAL_PREFIX`` / ``ISSUE_WARNING_PREFIX`` markers.
+    Returns a list of 0 or 1 :class:`Issue` objects, classified as critical
+    or warning based on PTY count and system usage thresholds.
     """
     if windsurf_pty_count <= 0:
         return []
@@ -127,19 +127,21 @@ def _classify_pty_issues(
 
     if windsurf_pty_count >= PTY_CRITICAL_COUNT or usage_pct >= PTY_USAGE_CRITICAL_PERCENT:
         return [
-            (
-                f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Windsurf processes are holding {windsurf_pty_count} PTYs "
+            Issue(
+                IssueSeverity.CRITICAL,
+                f"Windsurf processes are holding {windsurf_pty_count} PTYs "
                 f"(system: {system_pty_used}/{system_pty_limit}, {usage_pct:.0f}% used) "
-                f"- Fix: Restart all Windsurf instances to release leaked PTYs"
+                f"- Fix: Restart all Windsurf instances to release leaked PTYs",
             )
         ]
 
     if windsurf_pty_count >= PTY_WARNING_COUNT:
         return [
-            (
-                f"{ISSUE_WARNING_PREFIX}  Windsurf PTY leak detected: {windsurf_pty_count} PTYs held "
+            Issue(
+                IssueSeverity.WARNING,
+                f"Windsurf PTY leak detected: {windsurf_pty_count} PTYs held "
                 f"(system: {system_pty_used}/{system_pty_limit}) "
-                f"- Monitor closely, restart all Windsurf instances if it keeps growing"
+                f"- Monitor closely, restart all Windsurf instances if it keeps growing",
             )
         ]
 

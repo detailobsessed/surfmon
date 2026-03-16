@@ -6,6 +6,7 @@ import pytest
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 
+from surfmon._constants import Issue, IssueSeverity
 from surfmon.db import (
     HISTORY_COLUMNS,
     SCHEMA_VERSION,
@@ -316,7 +317,12 @@ class TestStoreCheck:
         assert rows[0]["windsurf_pty_count"] == 25
 
     def test_stores_issues(self, db):
-        report = _make_report(issues=["⚠ Memory leak detected", "Critical failure"])
+        report = _make_report(
+            issues=[
+                Issue(IssueSeverity.WARNING, "Memory leak detected"),
+                Issue(IssueSeverity.CRITICAL, "Critical failure"),
+            ]
+        )
         session_id = store_check(db, report)
 
         rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
@@ -376,7 +382,7 @@ class TestStoreLsSnapshot:
         assert rows[0]["orphaned"] == 1
 
     def test_stores_issues(self, db):
-        snapshot = _make_ls_snapshot(stale_issues=["⚠ High memory usage"])
+        snapshot = _make_ls_snapshot(stale_issues=[Issue(IssueSeverity.WARNING, "High memory usage")])
         session_id = store_ls_snapshot(db, snapshot)
 
         rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
@@ -403,7 +409,7 @@ class TestStorePtySnapshot:
 
     def test_stores_issues(self, db):
         pty = _make_pty_info()
-        pty.issues = ["\u26a0  Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)"]
+        pty.issues = [Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)")]
         session_id = store_pty_snapshot(db, pty)
 
         rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))
@@ -533,26 +539,6 @@ class TestParseSince:
             _parse_since("5x")
 
 
-class TestClassifyIssueSeverity:
-    def test_critical(self):
-        from surfmon.monitor import classify_issue_severity
-
-        assert classify_issue_severity("✖ Process crashed") == "critical"
-        assert classify_issue_severity("✖  CRITICAL: PTY exhaustion") == "critical"
-
-    def test_warning(self):
-        from surfmon.monitor import classify_issue_severity
-
-        assert classify_issue_severity("⚠ Memory leak detected") == "warning"
-        assert classify_issue_severity("⚠  Extension errors: foo (3)") == "warning"
-
-    def test_unprefixed_defaults_to_warning(self):
-        from surfmon.monitor import classify_issue_severity
-
-        assert classify_issue_severity("Extensions loaded") == "warning"
-        assert classify_issue_severity("Some plain issue") == "warning"
-
-
 class TestQueryAnalyzeSessions:
     def test_empty_db(self, db):
         assert query_analyze_sessions(db) == []
@@ -592,7 +578,7 @@ class TestQueryAnalyzeSessions:
         assert session["windsurf_processes"][0]["memory_mb"] >= session["windsurf_processes"][1]["memory_mb"]
 
     def test_attaches_issues(self, db):
-        store_check(db, _make_report(issues=["⚠ High memory", "⚠ Leak detected"]))
+        store_check(db, _make_report(issues=[Issue(IssueSeverity.WARNING, "High memory"), Issue(IssueSeverity.WARNING, "Leak detected")]))
         session = query_analyze_sessions(db)[0]
         assert len(session["issues"]) == 2
 

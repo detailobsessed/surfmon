@@ -135,19 +135,19 @@ class TestClassifyPtyIssues:
     def test_warning_threshold(self):
         issues = _classify_pty_issues(50, 60, 511)
         assert len(issues) == 1
-        assert "PTY leak" in issues[0]
-        assert "\u26a0" in issues[0]
+        assert "PTY leak" in issues[0].message
+        assert issues[0].severity.marker == "\u26a0"
 
     def test_critical_by_count(self):
         issues = _classify_pty_issues(200, 210, 511)
         assert len(issues) == 1
-        assert "CRITICAL" in issues[0]
-        assert "\u2716" in issues[0]
+        assert issues[0].severity.value == "critical"
+        assert issues[0].severity.marker == "\u2716"
 
     def test_critical_by_usage_percent(self):
         issues = _classify_pty_issues(50, 420, 511)
         assert len(issues) == 1
-        assert "CRITICAL" in issues[0]
+        assert issues[0].severity.value == "critical"
 
     def test_zero_pty_limit_no_crash(self):
         assert _classify_pty_issues(0, 0, 0) == []

@@ -16,7 +16,6 @@ from sqlite_utils import Database
 from sqlite_utils.db import NotFoundError, Table
 
 from . import __version__
-from .monitor import classify_issue_severity
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -299,11 +298,11 @@ def store_check(db: Database, report: MonitoringReport, target: str = "") -> str
                 "stale": int(entry.stale),
             })
 
-    for issue_msg in report.log_issues:
+    for issue in report.log_issues:
         Table(db, "issues").insert({
             "session_id": session_id,
-            "severity": classify_issue_severity(issue_msg),
-            "message": issue_msg,
+            "severity": issue.severity.value,
+            "message": issue.message,
         })
 
     return session_id
@@ -338,11 +337,11 @@ def store_ls_snapshot(db: Database, snapshot: LsSnapshot, target: str = "") -> s
             "stale": int(entry.stale),
         })
 
-    for issue_msg in snapshot.issues:
+    for issue in snapshot.issues:
         Table(db, "issues").insert({
             "session_id": session_id,
-            "severity": classify_issue_severity(issue_msg),
-            "message": issue_msg,
+            "severity": issue.severity.value,
+            "message": issue.message,
         })
 
     return session_id
@@ -364,11 +363,11 @@ def store_pty_snapshot(db: Database, pty: PtyInfo, target: str = "") -> str:
 
     _store_pty_data(db, session_id, pty)
 
-    for issue_msg in pty.issues:
+    for issue in pty.issues:
         Table(db, "issues").insert({
             "session_id": session_id,
-            "severity": classify_issue_severity(issue_msg),
-            "message": issue_msg,
+            "severity": issue.severity.value,
+            "message": issue.message,
         })
 
     return session_id

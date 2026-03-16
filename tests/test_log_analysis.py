@@ -44,7 +44,7 @@ class TestCheckLogIssues:
         result = check_log_issues()
 
         # Should detect orphaned crashpad
-        assert any("crashpad" in issue.lower() or "orphan" in issue.lower() for issue in result)
+        assert any("crashpad" in issue.message.lower() or "orphan" in issue.message.lower() for issue in result)
 
     def test_detects_logs_directory_issue(self, tmp_path, monkeypatch):
         """Should detect logs directory in extensions folder."""
@@ -56,7 +56,7 @@ class TestCheckLogIssues:
         result = check_log_issues()
 
         assert len(result) > 0
-        assert any("logs" in issue.lower() for issue in result)
+        assert any("logs" in issue.message.lower() for issue in result)
 
     def test_identifies_logs_directory_culprit(self, tmp_path, monkeypatch):
         """Should identify which extension created the logs directory."""
@@ -68,7 +68,7 @@ class TestCheckLogIssues:
 
         result = check_log_issues()
 
-        assert any("marimo" in issue.lower() for issue in result)
+        assert any("marimo" in issue.message.lower() for issue in result)
 
     def test_detects_extension_host_crashes(self, tmp_path, monkeypatch):
         """Should detect extension host crashes (non-zero exit codes) in main.log."""
@@ -88,9 +88,9 @@ class TestCheckLogIssues:
         result = check_log_issues()
 
         # Should detect 2 crashes (PIDs 1234 and 9999, excluding 5678 which exited cleanly)
-        assert any("extension host crash" in issue.lower() for issue in result)
-        assert any("1234" in issue for issue in result)
-        assert any("9999" in issue for issue in result)
+        assert any("extension host crash" in issue.message.lower() for issue in result)
+        assert any("1234" in issue.message for issue in result)
+        assert any("9999" in issue.message for issue in result)
 
     def test_detects_update_service_errors(self, tmp_path, monkeypatch):
         """Should detect UpdateService errors."""
@@ -103,7 +103,7 @@ class TestCheckLogIssues:
 
         result = check_log_issues()
 
-        assert any("update" in issue.lower() for issue in result)
+        assert any("update" in issue.message.lower() for issue in result)
 
     def test_detects_oom_errors(self, tmp_path, monkeypatch):
         """Should detect out of memory errors."""
@@ -116,7 +116,7 @@ class TestCheckLogIssues:
 
         result = check_log_issues()
 
-        assert any("memory" in issue.lower() for issue in result)
+        assert any("memory" in issue.message.lower() for issue in result)
 
     def test_detects_renderer_crashes(self, tmp_path, monkeypatch):
         """Should detect GPU/renderer crashes."""
@@ -129,7 +129,7 @@ class TestCheckLogIssues:
 
         result = check_log_issues()
 
-        assert any("gpu" in issue.lower() or "renderer" in issue.lower() for issue in result)
+        assert any("gpu" in issue.message.lower() or "renderer" in issue.message.lower() for issue in result)
 
     def test_detects_extension_errors(self, tmp_path, monkeypatch):
         """Should detect extension errors in shared process log."""
@@ -144,7 +144,7 @@ class TestCheckLogIssues:
 
         result = check_log_issues()
 
-        assert any("extension error" in issue.lower() for issue in result)
+        assert any("extension error" in issue.message.lower() for issue in result)
 
     def test_detects_specific_extension_errors(self, tmp_path, monkeypatch):
         """Should identify specific extensions causing errors."""
@@ -165,7 +165,7 @@ class TestCheckLogIssues:
         result = check_log_issues()
 
         # Should report specific extension with error count
-        issues_str = " ".join(result)
+        issues_str = " ".join(issue.message for issue in result)
         assert "ms-python.python" in issues_str.lower()
         assert "3" in issues_str  # 3 errors for ms-python.python
 
@@ -195,7 +195,7 @@ class TestOrphanedCrashpadAgeFormatting:
 
         result = check_log_issues()
 
-        assert any("30s" in issue or "29s" in issue or "31s" in issue for issue in result)
+        assert any("30s" in issue.message or "29s" in issue.message or "31s" in issue.message for issue in result)
 
     def test_formats_age_in_minutes(self, tmp_path, monkeypatch, mocker):
         """Should format age in minutes when < 1 hour."""
@@ -219,7 +219,7 @@ class TestOrphanedCrashpadAgeFormatting:
 
         result = check_log_issues()
 
-        assert any("15m" in issue for issue in result)
+        assert any("15m" in issue.message for issue in result)
 
     def test_formats_age_in_days(self, tmp_path, monkeypatch, mocker):
         """Should format age in days when >= 1 day."""
@@ -243,7 +243,7 @@ class TestOrphanedCrashpadAgeFormatting:
 
         result = check_log_issues()
 
-        assert any("2.0 days" in issue or "2 days" in issue for issue in result)
+        assert any("2.0 days" in issue.message or "2 days" in issue.message for issue in result)
 
 
 class TestNetworkLogParsing:
@@ -262,7 +262,7 @@ class TestNetworkLogParsing:
 
         result = check_log_issues()
 
-        assert any("telemetry" in issue.lower() for issue in result)
+        assert any("telemetry" in issue.message.lower() for issue in result)
 
 
 class TestCrashpadFilterException:

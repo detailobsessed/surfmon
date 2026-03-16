@@ -27,11 +27,10 @@ __all__ = [
 ]
 
 from ._constants import (
-    ISSUE_CRITICAL_PREFIX,
-    ISSUE_WARNING_PREFIX,
     PTY_CRITICAL_COUNT,
     PTY_USAGE_CRITICAL_PERCENT,
     PTY_WARNING_COUNT,
+    Issue,
 )
 from .config import get_paths, get_target_display_name
 from .monitor import format_uptime
@@ -330,16 +329,11 @@ def _display_verbose_info(report: MonitoringReport) -> None:
         console.print()
 
 
-def style_issue(issue: str) -> str:
-    """Wrap the prefix marker of an issue string in Rich colour markup."""
-    stripped = issue.lstrip()
-    if stripped.startswith(ISSUE_CRITICAL_PREFIX):
-        rest = stripped[len(ISSUE_CRITICAL_PREFIX) :]
-        return f"[red]{ISSUE_CRITICAL_PREFIX}[/red]{rest}"
-    if stripped.startswith(ISSUE_WARNING_PREFIX):
-        rest = stripped[len(ISSUE_WARNING_PREFIX) :]
-        return f"[yellow]{ISSUE_WARNING_PREFIX}[/yellow]{rest}"
-    return issue
+def style_issue(issue: Issue) -> str:
+    """Return a Rich-styled string for an Issue, colouring the severity marker."""
+    marker = issue.severity.marker
+    color = issue.severity.color
+    return f"[{color}]{marker}[/{color}]  {issue.message}"
 
 
 def display_report(report: MonitoringReport, verbose: bool = False) -> None:

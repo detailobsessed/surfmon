@@ -15,8 +15,8 @@ from surfmon._constants import (
     EXIT_CRITICAL,
     EXIT_OK,
     EXIT_WARNING,
-    ISSUE_CRITICAL_PREFIX,
-    ISSUE_WARNING_PREFIX,
+    Issue,
+    IssueSeverity,
 )
 from surfmon.config import get_paths
 from surfmon.log_analysis import check_log_issues
@@ -88,9 +88,9 @@ class LsSnapshot:
     orphaned_count: int
     stale_count: int
     entries: list[LsSnapshotEntry]
-    orphan_issues: list[str]
-    stale_issues: list[str]
-    issues: list[str] = field(init=False)
+    orphan_issues: list[Issue]
+    stale_issues: list[Issue]
+    issues: list[Issue] = field(init=False)
 
     def __post_init__(self) -> None:
         self.issues = self.orphan_issues + self.stale_issues
@@ -109,7 +109,7 @@ class MonitoringReport:
     language_servers: list[ProcessInfo]
     mcp_servers_enabled: list[str]
     extensions_count: int
-    log_issues: list[str]
+    log_issues: list[Issue]
     active_workspaces: list[WorkspaceInfo]
     windsurf_launches_today: int
     windsurf_version: str = ""
@@ -324,10 +324,10 @@ def _build_ls_entry(
     ls: ProcessInfo,
     proc_infos: list[ProcessInfo],
     active_ws_paths: set[str],
-) -> tuple[LsSnapshotEntry, str | None]:
-    """Build a single LsSnapshotEntry with optional issue string.
+) -> tuple[LsSnapshotEntry, Issue | None]:
+    """Build a single LsSnapshotEntry with optional Issue.
 
-    Returns (entry, issue_string) where issue_string is None when healthy.
+    Returns (entry, issue) where issue is None when healthy.
     """
     # Use original cmdline for detection (before enhancement)
     original_proc = next((p for p in proc_infos if p.pid == ls.pid), ls)
@@ -364,21 +364,21 @@ def _build_ls_entry(
     if orphaned:
         issue = _format_orphan_issue(ls, workspace, original_proc.cmdline)
     elif stale:
-        issue = (
-            f"{ISSUE_WARNING_PREFIX}  {ls.name} (PID {ls.pid}) still running for closed workspace "
-            f"'{workspace}' — consuming {ls.memory_mb:.0f} MB RAM"
+        issue = Issue(
+            IssueSeverity.WARNING,
+            f"{ls.name} (PID {ls.pid}) still running for closed workspace '{workspace}' \u2014 consuming {ls.memory_mb:.0f} MB RAM",
         )
 
     return entry, issue
 
 
-def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> str:
-    """Build a detailed orphan-workspace issue string.
+def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> Issue:
+    """Build a detailed orphan-workspace issue.
 
     Includes database directory size and cleanup command when the
     ``--database_dir`` flag is present in the process command line.
     """
-    prefix = f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: {ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}'"
+    base = f"{ls.name} (PID {ls.pid}) indexing non-existent workspace '{workspace}'"
     db_match = re.search(r"--database_dir\s+(\S+)", cmdline)
     if db_match:
         db_path = Path(db_match.group(1))
@@ -388,8 +388,11 @@ def _format_orphan_issue(ls: ProcessInfo, workspace: str, cmdline: str) -> str:
                 db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
         except OSError:
             pass
-        return f"{prefix} (consuming {ls.memory_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - Fix: Close Windsurf, run: rm -rf {db_path}"
-    return f"{prefix} — consuming {ls.memory_mb:.0f} MB RAM"
+        return Issue(
+            IssueSeverity.CRITICAL,
+            f"{base} (consuming {ls.memory_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - Fix: Close Windsurf, run: rm -rf {db_path}",
+        )
+    return Issue(IssueSeverity.CRITICAL, f"{base} \u2014 consuming {ls.memory_mb:.0f} MB RAM")
 
 
 def capture_ls_snapshot(
@@ -410,8 +413,8 @@ def capture_ls_snapshot(
     active_ws_paths = {ws.path for ws in active_workspaces} if active_workspaces else set()
 
     entries = []
-    orphan_issues: list[str] = []
-    stale_issues: list[str] = []
+    orphan_issues: list[Issue] = []
+    stale_issues: list[Issue] = []
     total_memory = 0.0
 
     for ls in lang_servers:
@@ -419,7 +422,7 @@ def capture_ls_snapshot(
         entries.append(entry)
         total_memory += entry.memory_mb
 
-        if issue and ISSUE_CRITICAL_PREFIX in issue:
+        if issue and issue.severity == IssueSeverity.CRITICAL:
             orphan_issues.append(issue)
         elif issue:
             stale_issues.append(issue)
@@ -588,35 +591,16 @@ def generate_report() -> MonitoringReport:
     )
 
 
-def classify_issue_severity(message: str) -> str:
-    """Classify a single issue string into a severity label.
-
-    Returns ``"critical"`` or ``"warning"`` based on the prefix marker
-    (``✖`` → critical, ``⚠`` → warning).
-
-    Issues without a recognised prefix are treated as warnings (safe default).
-    """
-    stripped = message.lstrip()
-    if stripped.startswith(ISSUE_CRITICAL_PREFIX):
-        return "critical"
-    if stripped.startswith(ISSUE_WARNING_PREFIX):
-        return "warning"
-    return "warning"
-
-
-def max_issue_severity(issues: list[str]) -> int:
-    """Determine the highest severity among issue strings.
+def max_issue_severity(issues: list[Issue]) -> int:
+    """Determine the highest severity among issues.
 
     Returns EXIT_OK (0) for no issues, EXIT_WARNING (1) for warnings only,
     or EXIT_CRITICAL (2) if any critical issue is present.
-
-    Delegates per-issue classification to :func:`classify_issue_severity`.
     """
     if not issues:
         return EXIT_OK
-    for issue in issues:
-        if classify_issue_severity(issue) == "critical":
-            return EXIT_CRITICAL
+    if any(issue.severity == IssueSeverity.CRITICAL for issue in issues):
+        return EXIT_CRITICAL
     return EXIT_WARNING
 
 

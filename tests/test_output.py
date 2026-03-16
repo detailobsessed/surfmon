@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from surfmon._constants import Issue, IssueSeverity
 from surfmon.output import display_report, save_report_markdown
 
 _P_CONSOLE = "surfmon.output.console"
@@ -90,7 +91,7 @@ class TestDisplayReport:
 
     def test_display_report_with_issues(self, mock_report, mocker):
         """Should display issues when present."""
-        mock_report.log_issues = ["Issue 1", "Issue 2"]
+        mock_report.log_issues = [Issue(IssueSeverity.WARNING, "Issue 1"), Issue(IssueSeverity.CRITICAL, "Issue 2")]
         mock_console = mocker.patch(_P_CONSOLE)
         display_report(mock_report)
         assert mock_console.print.called
@@ -197,7 +198,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown_with_issues(self, mock_report, tmp_path):
         """Should include issues in markdown."""
-        mock_report.log_issues = ["Critical issue"]
+        mock_report.log_issues = [Issue(IssueSeverity.CRITICAL, "Critical issue")]
         output_path = tmp_path / _REPORT_MD
         save_report_markdown(mock_report, output_path)
 
