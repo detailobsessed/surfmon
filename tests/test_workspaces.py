@@ -21,7 +21,26 @@ _LOG_TS_2 = "20260314T120000"
 _DEV_HOME = "/Users/dev"
 _DEV_REPOS = "/Users/dev/repos"
 _COPIER_UV = "/Users/dev/repos/copier-uv-bleeding"
+_ICLOUD_BASE = "/Users/dev/Library"
+_ICLOUD_MOBILE = "/Users/dev/Library/Mobile Documents"
+_ICLOUD_APPLE = "/Users/dev/Library/Mobile Documents/com~apple~CloudDocs"
+_ICLOUD_DOCS = "/Users/dev/Library/Mobile Documents/com~apple~CloudDocs/Documents"
+_ICLOUD_CAREER = "/Users/dev/Library/Mobile Documents/com~apple~CloudDocs/Documents/Career"
+_ICLOUD_JOBS = "/Users/dev/Library/Mobile Documents/com~apple~CloudDocs/Documents/Career/Job Applications"
+_ICLOUD_PROJECT = "/Users/dev/Library/Mobile Documents/com~apple~CloudDocs/Documents/Career/Job Applications/digitec-galaxus"
 _FS_BASE = ["/", "/Users", _DEV_HOME, _DEV_REPOS]
+_FS_ICLOUD = [
+    "/",
+    "/Users",
+    _DEV_HOME,
+    _ICLOUD_BASE,
+    _ICLOUD_MOBILE,
+    _ICLOUD_APPLE,
+    _ICLOUD_DOCS,
+    _ICLOUD_CAREER,
+    _ICLOUD_JOBS,
+    _ICLOUD_PROJECT,
+]
 
 
 def _patch_fs(monkeypatch, dirs, files=()):
@@ -287,6 +306,29 @@ class TestResolveWorkspacePath:
             files=[f"{_DEV_REPOS}/surfmon.code-workspace"],
         )
         assert _resolve_workspace_path("file_Users_dev_repos_surfmon_code_workspace") == Path("/Users/dev/repos/surfmon.code-workspace")
+
+    def test_tilde_directory(self, monkeypatch):
+        """Tildes in directory names are correctly resolved (iCloud paths)."""
+        _patch_fs(
+            monkeypatch,
+            ["/", "/Users", _DEV_HOME, _ICLOUD_BASE, _ICLOUD_MOBILE, _ICLOUD_APPLE],
+        )
+        result = _resolve_workspace_path("file_Users_dev_Library_Mobile_20Documents_com_apple_CloudDocs")
+        assert result == Path(_ICLOUD_APPLE)
+
+    def test_icloud_path_with_spaces_and_tildes(self, monkeypatch):
+        """Full iCloud path with spaces (_20) and tildes resolves correctly."""
+        _patch_fs(monkeypatch, _FS_ICLOUD)
+        workspace_id = "file_Users_dev_Library_Mobile_20Documents_com_apple_CloudDocs_Documents_Career_Job_20Applications_digitec_galaxus"
+        assert _resolve_workspace_path(workspace_id) == Path(_ICLOUD_PROJECT)
+
+    def test_icloud_path_not_orphaned(self, monkeypatch):
+        """An existing iCloud workspace must not be flagged as orphaned."""
+        _patch_fs(monkeypatch, _FS_ICLOUD)
+        workspace_id = "file_Users_dev_Library_Mobile_20Documents_com_apple_CloudDocs_Documents_Career_Job_20Applications_digitec_galaxus"
+        result = _resolve_workspace_path(workspace_id)
+        assert result is not None
+        assert result == Path(_ICLOUD_PROJECT)
 
 
 class TestExtractWorkspaceFromCmdline:
