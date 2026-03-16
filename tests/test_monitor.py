@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import psutil
 import pytest
 
+from surfmon._constants import Issue, IssueSeverity
 from surfmon.monitor import (
     EXIT_CRITICAL,
     EXIT_OK,
@@ -51,7 +52,7 @@ _LS_BINARY = "language_server_macos_arm"
 _TEST_VERSION = "2.5.0"
 _TEST_WS_PATH = "/Users/test/my-project"
 _LS_CMDLINE = "language_server_macos_arm --workspace_id file_Users_test_my_project --database_dir /tmp/db"
-_WARN_EXT_ERRORS = "\u26a0  Extension errors: some.ext (3)"
+_WARN_EXT_ERRORS = Issue(IssueSeverity.WARNING, "Extension errors: some.ext (3)")
 
 
 class TestGetWindsurfProcesses:
@@ -557,7 +558,7 @@ class TestPtyLeakIssueDetection:
             system_pty_limit=511,
             system_pty_used=509,
             issues=[
-                "\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)",
+                Issue(IssueSeverity.CRITICAL, "Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"),
             ],
         )
 
@@ -565,7 +566,7 @@ class TestPtyLeakIssueDetection:
 
         assert report.pty_info is not None
         assert report.pty_info.windsurf_pty_count == 504
-        assert any("CRITICAL" in issue and "PTY" in issue for issue in report.log_issues)
+        assert any(issue.severity == IssueSeverity.CRITICAL and "PTY" in issue.message for issue in report.log_issues)
 
     def test_warning_pty_leak_generates_issue(self, mock_process, mocker):
         """Should generate warning issue when PTY count >= 50 but < 200."""
@@ -591,14 +592,14 @@ class TestPtyLeakIssueDetection:
             system_pty_limit=511,
             system_pty_used=100,
             issues=[
-                "\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)",
+                Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"),
             ],
         )
 
         report = generate_report()
 
-        assert any("PTY leak" in issue for issue in report.log_issues)
-        assert not any("CRITICAL" in issue for issue in report.log_issues)
+        assert any("PTY leak" in issue.message for issue in report.log_issues)
+        assert not any(issue.severity == IssueSeverity.CRITICAL for issue in report.log_issues)
 
     def test_low_pty_count_no_issue(self, mock_process, mocker):
         """Should not generate issue when PTY count is low."""
@@ -623,7 +624,7 @@ class TestPtyLeakIssueDetection:
 
         report = generate_report()
 
-        assert not any("PTY" in issue for issue in report.log_issues)
+        assert not any("PTY" in issue.message for issue in report.log_issues)
 
 
 class TestSurfmonProcessExclusion:
@@ -874,7 +875,7 @@ class TestCaptureLsSnapshot:
 
         assert snapshot.orphaned_count == 1
         assert len(snapshot.issues) == 1
-        assert "CRITICAL" in snapshot.issues[0]
+        assert snapshot.issues[0].severity == IssueSeverity.CRITICAL
         assert snapshot.entries[0].orphaned is True
 
     def test_empty_when_no_language_servers(self):
@@ -940,7 +941,7 @@ class TestCaptureLsSnapshotStaleDetection:
         assert snapshot.stale_count == 1
         assert snapshot.orphaned_count == 0
         assert len(snapshot.issues) == 1
-        assert "closed workspace" in snapshot.issues[0]
+        assert "closed workspace" in snapshot.issues[0].message
         assert snapshot.entries[0].stale is True
         assert snapshot.entries[0].orphaned is False
 
@@ -1026,7 +1027,7 @@ class TestCaptureLsSnapshotStaleDetection:
         assert snapshot.stale_count == 0
         assert snapshot.entries[0].orphaned is True
         assert snapshot.entries[0].stale is False
-        assert "CRITICAL" in snapshot.issues[0]
+        assert snapshot.issues[0].severity == IssueSeverity.CRITICAL
 
     def test_no_stale_detection_with_empty_active_workspaces(self, mocker):
         """Should skip stale detection when active_workspaces list is empty."""
@@ -1066,12 +1067,12 @@ class TestMaxIssueSeverity:
         assert max_issue_severity([_WARN_EXT_ERRORS]) == EXIT_WARNING
 
     def test_critical_only_returns_critical(self):
-        assert max_issue_severity(["\u2716  CRITICAL: Orphaned workspace"]) == EXIT_CRITICAL
+        assert max_issue_severity([Issue(IssueSeverity.CRITICAL, "Orphaned workspace")]) == EXIT_CRITICAL
 
     def test_mixed_returns_critical(self):
         issues = [
             _WARN_EXT_ERRORS,
-            "\u2716  CRITICAL: Orphaned workspace",
+            Issue(IssueSeverity.CRITICAL, "Orphaned workspace"),
         ]
         assert max_issue_severity(issues) == EXIT_CRITICAL
 
@@ -1083,20 +1084,16 @@ class TestMaxIssueSeverity:
         assert max_issue_severity(issues) == EXIT_WARNING
 
     def test_critical_pty_issue(self):
-        assert max_issue_severity(["\u2716  CRITICAL: Windsurf processes are holding 250 PTYs"]) == EXIT_CRITICAL
+        assert max_issue_severity([Issue(IssueSeverity.CRITICAL, "Windsurf processes are holding 250 PTYs")]) == EXIT_CRITICAL
 
     def test_warning_pty_issue(self):
-        assert max_issue_severity(["\u26a0  Windsurf PTY leak detected: 60 PTYs held"]) == EXIT_WARNING
+        assert max_issue_severity([Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 60 PTYs held")]) == EXIT_WARNING
 
     def test_extension_host_crash_is_critical(self):
-        assert max_issue_severity(["\u2716  2 extension host crash(es) - PIDs: 1234, 5678"]) == EXIT_CRITICAL
+        assert max_issue_severity([Issue(IssueSeverity.CRITICAL, "2 extension host crash(es) - PIDs: 1234, 5678")]) == EXIT_CRITICAL
 
     def test_oom_is_critical(self):
-        assert max_issue_severity(["\u2716  Out of memory errors detected"]) == EXIT_CRITICAL
-
-    def test_unprefixed_issue_treated_as_warning(self):
-        """Issues without a recognised prefix default to warning (safe fallback)."""
-        assert max_issue_severity(["Some issue without prefix"]) == EXIT_WARNING
+        assert max_issue_severity([Issue(IssueSeverity.CRITICAL, "Out of memory errors detected")]) == EXIT_CRITICAL
 
 
 # ---------------------------------------------------------------------------

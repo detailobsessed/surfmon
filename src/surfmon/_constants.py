@@ -3,6 +3,38 @@
 Extracted to break circular imports between monitor.py and submodules.
 """
 
+from dataclasses import dataclass
+from enum import StrEnum
+
+
+class IssueSeverity(StrEnum):
+    """Severity level for detected issues."""
+
+    CRITICAL = "critical"
+    WARNING = "warning"
+
+    @property
+    def marker(self) -> str:
+        """Return the display marker character for this severity."""
+        return "\u2716" if self == IssueSeverity.CRITICAL else "\u26a0"
+
+    @property
+    def color(self) -> str:
+        """Return the Rich color name for this severity."""
+        return "red" if self == IssueSeverity.CRITICAL else "yellow"
+
+
+@dataclass(slots=True, frozen=True)
+class Issue:
+    """A detected issue with explicit severity."""
+
+    severity: IssueSeverity
+    message: str
+
+    def __str__(self) -> str:
+        return f"{self.severity.marker}  {self.message}"
+
+
 # Monitoring thresholds
 CMDLINE_TRUNCATE_LEN = 200
 PATH_COMPONENTS_SHORT = 3
@@ -18,10 +50,6 @@ PTY_WARNING_COUNT = 50
 PTY_USAGE_CRITICAL_PERCENT = 80
 LOG_TAIL_BYTES = 50000
 SHARED_LOG_TAIL_BYTES = 30000
-
-# Issue severity markers used in log_issues strings
-ISSUE_CRITICAL_PREFIX = "✖"
-ISSUE_WARNING_PREFIX = "⚠"
 
 # Exit codes for the check command
 EXIT_OK = 0

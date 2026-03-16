@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from typer.testing import CliRunner
 
+from surfmon._constants import Issue, IssueSeverity
 from surfmon.cli import _get_target_str, _store_to_db, app
 from surfmon.config import reset_target
 
@@ -29,8 +30,8 @@ _P_DISPLAY = "surfmon.cli.display_report"
 _P_GEN_REPORT = "surfmon.cli.generate_report"
 
 _CRASHPAD_EXE = "/Applications/Windsurf.app/crashpad_handler"
-_CRIT_ORPHANED_WS = "\u2716  CRITICAL: Orphaned workspace"
-_WARN_EXT_ERRORS = "\u26a0  Extension errors: some.ext (3)"
+_CRIT_ORPHANED_WS = Issue(IssueSeverity.CRITICAL, "Orphaned workspace")
+_WARN_EXT_ERRORS = Issue(IssueSeverity.WARNING, "Extension errors: some.ext (3)")
 _LS_BINARY = "language_server_macos_arm"
 _TS_LS = "2025-06-01T12:00:00+00:00"
 _TS_TREND_10 = "2025-01-01T10:00:00"
@@ -762,7 +763,7 @@ class TestPtySnapshotCommand:
             windsurf_pty_count=75,
             system_pty_limit=511,
             system_pty_used=100,
-            issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
+            issues=[Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 75 PTYs held (system: 100/511)")],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
@@ -778,7 +779,7 @@ class TestPtySnapshotCommand:
             windsurf_pty_count=504,
             system_pty_limit=511,
             system_pty_used=509,
-            issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
+            issues=[Issue(IssueSeverity.CRITICAL, "Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)")],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
@@ -794,7 +795,7 @@ class TestPtySnapshotCommand:
             windsurf_pty_count=75,
             system_pty_limit=511,
             system_pty_used=100,
-            issues=["\u26a0  Windsurf PTY leak detected: 75 PTYs held (system: 100/511)"],
+            issues=[Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 75 PTYs held (system: 100/511)")],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
@@ -810,7 +811,7 @@ class TestPtySnapshotCommand:
             windsurf_pty_count=504,
             system_pty_limit=511,
             system_pty_used=509,
-            issues=["\u2716  CRITICAL: Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)"],
+            issues=[Issue(IssueSeverity.CRITICAL, "Windsurf processes are holding 504 PTYs (system: 509/511, 100% used)")],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_CHECK_PTY, return_value=mock_pty)
@@ -934,7 +935,7 @@ class TestLsSnapshotCommand:
             orphaned_count=1,
             stale_count=0,
             entries=[],
-            orphan_issues=["\u2716  CRITICAL: Language server indexing non-existent workspace 'repos/gone'"],
+            orphan_issues=[Issue(IssueSeverity.CRITICAL, "Language server indexing non-existent workspace 'repos/gone'")],
             stale_issues=[],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
@@ -959,7 +960,9 @@ class TestLsSnapshotCommand:
             stale_count=0,
             entries=[],
             orphan_issues=[],
-            stale_issues=["\u26a0  language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"],
+            stale_issues=[
+                Issue(IssueSeverity.WARNING, "language_server (PID 999) still running for closed workspace '/old' — consuming 300 MB RAM"),
+            ],
         )
         mocker.patch(_P_COLLECT_PROCS, return_value=[])
         mocker.patch(_P_EXTRACT_VER, return_value="2.5.0")
@@ -999,7 +1002,7 @@ class TestLsSnapshotDisplay:
                     orphaned=True,
                 ),
             ],
-            orphan_issues=["\u2716  CRITICAL: language_server_macos_arm indexing non-existent workspace"],
+            orphan_issues=[Issue(IssueSeverity.CRITICAL, "language_server_macos_arm indexing non-existent workspace")],
             stale_issues=[],
         )
 
