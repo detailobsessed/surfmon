@@ -1,14 +1,11 @@
-"""Workspace detection, resolution, and orphan/stale analysis."""
+"""Workspace detection, resolution, and active workspace tracking."""
 
-import contextlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-import psutil
-
-from surfmon._constants import ISSUE_CRITICAL_PREFIX, PATH_COMPONENTS_SHORT
+from surfmon._constants import PATH_COMPONENTS_SHORT
 from surfmon.config import get_paths
 
 
@@ -110,102 +107,6 @@ def _extract_workspace_from_cmdline(cmdline: str) -> str:
         return data_match.group(1).split("/")[-1]
 
     return ""
-
-
-def _is_orphaned_workspace(cmdline: str) -> bool:
-    """Check if a language server is indexing a non-existent workspace."""
-    workspace_id = _extract_workspace_id(cmdline)
-    if not workspace_id:
-        return False
-    return _resolve_workspace_path(workspace_id) is None
-
-
-def _is_stale_workspace(cmdline: str, active_ws_paths: set[str]) -> bool:
-    """Check if a language server is for a workspace not currently open in the IDE.
-
-    Returns True when the workspace exists on disk (not orphaned) but does
-    not appear in the set of active Windsurf workspace paths.
-    Returns False when active_ws_paths is empty (cannot determine staleness).
-    """
-    if not active_ws_paths:
-        return False
-    workspace_id = _extract_workspace_id(cmdline)
-    if not workspace_id:
-        return False
-    resolved = _resolve_workspace_path(workspace_id)
-    if resolved is None:
-        return False
-    return str(resolved) not in active_ws_paths
-
-
-# ---------------------------------------------------------------------------
-# Orphaned workspace detection (process-level)
-# ---------------------------------------------------------------------------
-
-
-def _check_orphaned_workspace_proc(cmdline: str, proc: psutil.Process) -> str | None:
-    """Check a single language server process for orphaned workspace indexing.
-
-    Returns an issue string if the process is indexing a non-existent workspace, else None.
-    """
-    if "language_server_macos_arm" not in cmdline:
-        return None
-
-    workspace_id = _extract_workspace_id(cmdline)
-    database_match = re.search(r"--database_dir\s+(\S+)", cmdline)
-
-    if not (workspace_id and database_match):
-        return None
-
-    if not _is_orphaned_workspace(cmdline):
-        return None
-
-    database_dir = database_match.group(1)
-
-    # Get database size
-    db_path = Path(database_dir)
-    db_size_mb = 0
-    if db_path.exists():
-        db_size_mb = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file()) / 1024 / 1024
-
-    # Get memory usage from the process
-    mem_mb = 0
-    with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-        mem_mb = proc.memory_info().rss / 1024 / 1024
-
-    # Naïve decode for display — workspace doesn't exist so _resolve_workspace_path
-    # would redundantly walk the filesystem and return None again.
-    workspace = workspace_id.removeprefix("file_").replace("_", "/")
-    parts = workspace.split("/")
-    workspace_short = "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace
-    return (
-        f"{ISSUE_CRITICAL_PREFIX}  CRITICAL: Language server indexing non-existent workspace '{workspace_short}' "
-        f"(consuming {mem_mb:.0f} MB RAM, {db_size_mb:.0f} MB disk) - "
-        f"Fix: Close Windsurf, run: rm -rf {database_dir}"
-    )
-
-
-def check_orphaned_workspaces() -> list[str]:
-    """Check for orphaned workspace indexes consuming memory and disk space.
-
-    Detects language servers indexing non-existent workspaces - a major bug
-    that can waste 1+ GB of RAM and hundreds of MB of disk space.
-    """
-    issues = []
-
-    try:
-        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-            try:
-                cmdline = " ".join(proc.info["cmdline"] or [])
-                issue = _check_orphaned_workspace_proc(cmdline, proc)
-                if issue:
-                    issues.append(issue)
-            except psutil.NoSuchProcess, psutil.AccessDenied:
-                continue
-    except psutil.Error, OSError, re.error:
-        pass  # Silently fail if we can't detect processes or parse cmdline
-
-    return issues
 
 
 # ---------------------------------------------------------------------------

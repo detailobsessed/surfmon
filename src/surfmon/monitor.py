@@ -549,10 +549,8 @@ def generate_report() -> MonitoringReport:
     # Check PTY usage (pass process info for version/uptime extraction)
     pty_info = check_pty_leak(windsurf_processes=proc_infos)
 
-    # Build log issues — skip orphan scan here; capture_ls_snapshot
-    # performs orphan detection from the already-collected proc_infos,
-    # avoiding a redundant psutil.process_iter walk.
-    log_issues = check_log_issues(include_orphans=False)
+    # Log issues (orphan detection handled by capture_ls_snapshot below)
+    log_issues = check_log_issues()
 
     log_issues.extend(pty_info.issues)
 

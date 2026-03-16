@@ -5,8 +5,6 @@ from unittest.mock import Mock
 
 from surfmon.workspaces import (
     _extract_workspace_from_cmdline,
-    _is_orphaned_workspace,
-    _is_stale_workspace,
     _parse_workspace_event,
     _resolve_workspace_path,
     count_windsurf_launches_today,
@@ -143,72 +141,6 @@ class TestCountWindsurfLaunchesToday:
         result = count_windsurf_launches_today()
 
         assert result == 3
-
-
-class TestOrphanedWorkspaceDetection:
-    """Tests for _check_orphaned_workspace_proc."""
-
-    def test_detects_orphaned_workspace(self, tmp_path, mocker):
-        """Should detect language server indexing a non-existent workspace."""
-        from surfmon.workspaces import _check_orphaned_workspace_proc
-
-        proc = Mock()
-        proc.memory_info.return_value = Mock(rss=500 * 1024 * 1024)  # 500 MB
-
-        cmdline = "language_server_macos_arm --workspace_id file_Users_test_nonexistent_project --database_dir /tmp/fake_db_dir"
-
-        result = _check_orphaned_workspace_proc(cmdline, proc)
-
-        assert result is not None
-        assert "CRITICAL" in result
-        assert "non-existent workspace" in result
-
-    def test_returns_none_for_non_language_server(self):
-        """Should return None for non-language-server processes."""
-        from surfmon.workspaces import _check_orphaned_workspace_proc
-
-        result = _check_orphaned_workspace_proc("some other process", Mock())
-
-        assert result is None
-
-    def test_returns_none_when_missing_flags(self):
-        """Should return None when workspace_id or database_dir is missing."""
-        from surfmon.workspaces import _check_orphaned_workspace_proc
-
-        cmdline = "language_server_macos_arm --workspace_id file_Users_test"
-        result = _check_orphaned_workspace_proc(cmdline, Mock())
-
-        assert result is None
-
-    def test_returns_none_when_workspace_exists(self, mocker):
-        """Should return None when workspace path exists."""
-        from surfmon.workspaces import _check_orphaned_workspace_proc
-
-        # Mock Path.exists to return True so it works cross-platform (no /tmp on Windows)
-        mocker.patch.object(Path, "exists", return_value=True)
-        cmdline = "language_server_macos_arm --workspace_id file_tmp --database_dir /tmp/db"
-
-        result = _check_orphaned_workspace_proc(cmdline, Mock())
-
-        assert result is None
-
-    def test_includes_db_size_when_db_exists(self, tmp_path, mocker):
-        """Should include database size in issue when db directory exists."""
-        from surfmon.workspaces import _check_orphaned_workspace_proc
-
-        proc = Mock()
-        proc.memory_info.return_value = Mock(rss=100 * 1024 * 1024)
-
-        db_dir = tmp_path / "db"
-        db_dir.mkdir()
-        (db_dir / "data.bin").write_bytes(b"x" * 1024)
-
-        cmdline = f"language_server_macos_arm --workspace_id file_Users_test_nonexistent --database_dir {db_dir}"
-
-        result = _check_orphaned_workspace_proc(cmdline, proc)
-
-        assert result is not None
-        assert "CRITICAL" in result
 
 
 class TestWorkspaceParsingEdgeCases:
@@ -388,69 +320,6 @@ class TestExtractWorkspaceFromCmdline:
         cmdline = "ls --workspace_id file_no_such_fake_workspace --x"
         result = _extract_workspace_from_cmdline(cmdline)
         assert result == "such/fake/workspace"
-
-
-class TestIsOrphanedWorkspace:
-    """Tests for _is_orphaned_workspace helper."""
-
-    def test_not_orphaned_without_workspace_id(self):
-        """Should return False when no workspace_id flag present."""
-        assert _is_orphaned_workspace("gopls serve") is False
-
-    def test_not_orphaned_for_existing_workspace(self, monkeypatch):
-        """Should return False for existing workspace path."""
-        _patch_fs(monkeypatch, ["/", "/opt"])
-        cmdline = "language_server --workspace_id file_opt"
-        assert _is_orphaned_workspace(cmdline) is False
-
-    def test_orphaned_for_nonexistent_workspace(self, monkeypatch):
-        """Should return True for non-existent workspace path."""
-        _patch_fs(monkeypatch, ["/"])
-        cmdline = "language_server --workspace_id file_Users_nobody_nonexistent_project_xyz"
-        assert _is_orphaned_workspace(cmdline) is True
-
-    def test_not_orphaned_with_hyphenated_path(self, monkeypatch):
-        _patch_fs(monkeypatch, [*_FS_BASE, f"{_DEV_REPOS}/my-project"])
-        cmdline = "language_server --workspace_id file_Users_dev_repos_my_project --other"
-        assert _is_orphaned_workspace(cmdline) is False
-
-
-class TestIsStaleWorkspace:
-    """Tests for _is_stale_workspace helper."""
-
-    def test_stale_when_path_exists_but_not_in_active_set(self, mocker):
-        """Should return True when workspace exists on disk but isn't active."""
-        mocker.patch(
-            _P_RESOLVE_WS,
-            return_value=Path(_TEST_WS_PATH),
-        )
-        cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
-
-        active_paths: set[str] = {"/some/other/workspace"}
-        assert _is_stale_workspace(cmdline, active_paths) is True
-
-    def test_not_stale_when_path_in_active_set(self, mocker):
-        """Should return False when workspace is in the active set."""
-        mocker.patch(
-            _P_RESOLVE_WS,
-            return_value=Path(_TEST_WS_PATH),
-        )
-        cmdline = "language_server_macos_arm --workspace_id file_Users_test_my_project"
-
-        active_paths: set[str] = {str(Path(_TEST_WS_PATH))}
-        assert _is_stale_workspace(cmdline, active_paths) is False
-
-    def test_not_stale_when_no_workspace_id(self):
-        """Should return False for processes without --workspace_id."""
-        cmdline = "node pyright --stdio"
-        active_paths: set[str] = {"/some/workspace"}
-        assert _is_stale_workspace(cmdline, active_paths) is False
-
-    def test_not_stale_when_path_does_not_exist(self):
-        """Should return False when workspace doesn't exist (orphan, not stale)."""
-        cmdline = "language_server_macos_arm --workspace_id file_Users_nobody_nonexistent"
-        active_paths: set[str] = {"/some/workspace"}
-        assert _is_stale_workspace(cmdline, active_paths) is False
 
 
 class TestParseWorkspaceEvent:
