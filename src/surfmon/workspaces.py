@@ -9,7 +9,7 @@ from surfmon._constants import PATH_COMPONENTS_SHORT
 from surfmon.config import get_paths
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class WorkspaceInfo:
     """Information about a Windsurf workspace."""
 

@@ -33,7 +33,7 @@ from surfmon.workspaces import (
 )
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class ProcessInfo:
     """Information about a Windsurf process."""
 
@@ -47,7 +47,7 @@ class ProcessInfo:
     cmdline: str
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class SystemInfo:
     """System-wide resource information."""
 
@@ -59,7 +59,7 @@ class SystemInfo:
     swap_used_gb: float
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class LsSnapshotEntry:
     """Forensic detail for a single language server process."""
 
@@ -76,7 +76,7 @@ class LsSnapshotEntry:
     stale: bool = False
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class LsSnapshot:
     """Language server forensic snapshot."""
 
@@ -93,10 +93,10 @@ class LsSnapshot:
     issues: list[Issue] = field(init=False)
 
     def __post_init__(self) -> None:
-        self.issues = self.orphan_issues + self.stale_issues
+        object.__setattr__(self, "issues", self.orphan_issues + self.stale_issues)
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class MonitoringReport:
     """Complete monitoring report."""
 
