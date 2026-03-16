@@ -16,7 +16,7 @@ from surfmon._constants import (
 from surfmon.config import get_paths
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class PtyFdEntry:
     """Single lsof line parsed for a PTY file descriptor."""
 
@@ -27,7 +27,7 @@ class PtyFdEntry:
     size_off: str  # e.g., "0t0" or "0t2077"
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class PtyProcessDetail:
     """Per-PID PTY ownership detail."""
 
@@ -37,7 +37,7 @@ class PtyProcessDetail:
     fds: list[str]  # e.g., ["33u", "34u", "37u"]
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class PtyInfo:
     """PTY usage information for Windsurf."""
 
@@ -148,7 +148,7 @@ def _classify_pty_issues(
     return []
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class _LsofResult:
     """Parsed lsof /dev/ptmx output."""
 

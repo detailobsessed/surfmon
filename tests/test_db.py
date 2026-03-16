@@ -133,7 +133,7 @@ def _make_ls_snapshot(timestamp=None, entries=None, orphan_issues=None, stale_is
     )
 
 
-def _make_pty_info():
+def _make_pty_info(*, issues=None):
     return PtyInfo(
         windsurf_pty_count=25,
         system_pty_limit=2048,
@@ -143,6 +143,7 @@ def _make_pty_info():
         ],
         windsurf_version=_WS_VERSION,
         windsurf_uptime_seconds=7200.0,
+        issues=issues or [],
     )
 
 
@@ -408,8 +409,9 @@ class TestStorePtySnapshot:
         assert rows[0]["pty_count"] == 20
 
     def test_stores_issues(self, db):
-        pty = _make_pty_info()
-        pty.issues = [Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)")]
+        pty = _make_pty_info(
+            issues=[Issue(IssueSeverity.WARNING, "Windsurf PTY leak detected: 25 PTYs held (system: 150/2048)")],
+        )
         session_id = store_pty_snapshot(db, pty)
 
         rows = list(db["issues"].rows_where(_W_SESSION_ID, [session_id]))

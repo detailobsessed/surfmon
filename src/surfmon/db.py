@@ -20,7 +20,8 @@ from . import __version__
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from .monitor import LsSnapshot, MonitoringReport, PtyInfo
+    from .monitor import LsSnapshot, MonitoringReport
+    from .pty import PtyInfo
 
 DB_DIR = Path.home() / ".surfmon"
 DB_PATH = DB_DIR / "surfmon.db"

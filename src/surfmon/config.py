@@ -25,7 +25,7 @@ class WindsurfTarget(Enum):
     INSIDERS = "insiders"
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class WindsurfPaths:
     """Paths for a specific Windsurf installation."""
 
