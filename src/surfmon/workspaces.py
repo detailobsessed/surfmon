@@ -111,7 +111,11 @@ def _format_workspace_display(workspace_id: str, resolved: Path | None) -> str:
     if resolved is not None:
         parts = resolved.parts
         return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else str(resolved)
-    # Fallback: naïve decode for display
+    # Non-file workspaces (e.g. untitled_1773689340397) get a friendly label
+    if not workspace_id.startswith("file_"):
+        prefix, _, suffix = workspace_id.partition("_")
+        return f"{prefix} ({suffix})" if suffix else prefix
+    # Fallback: naïve decode for display of unresolvable file_ workspace IDs
     workspace = workspace_id.removeprefix("file_").replace("_", "/")
     parts = workspace.split("/")
     return "/".join(parts[-PATH_COMPONENTS_SHORT:]) if len(parts) > PATH_COMPONENTS_SHORT else workspace

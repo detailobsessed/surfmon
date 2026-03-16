@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from surfmon.workspaces import (
     _extract_workspace_from_cmdline,
+    _format_workspace_display,
     _parse_workspace_event,
     _resolve_workspace_path,
     count_windsurf_launches_today,
@@ -337,6 +338,35 @@ class TestResolveWorkspacePath:
     def test_non_file_prefix_returns_none(self):
         """Workspace IDs without the file_ prefix are not filesystem-based."""
         assert _resolve_workspace_path("vscode-remote_wsl_project") is None
+
+
+class TestFormatWorkspaceDisplay:
+    """Tests for _format_workspace_display friendly labels."""
+
+    def test_resolved_path_uses_short_format(self):
+        """Resolved paths are shortened to last N components."""
+        result = _format_workspace_display("file_Users_dev_repos_surfmon", Path("/Users/dev/repos/surfmon"))
+        assert result == "dev/repos/surfmon"
+
+    def test_untitled_workspace_friendly_label(self):
+        """Untitled workspace IDs get a friendly parenthesized label."""
+        result = _format_workspace_display("untitled_1773689340397", None)
+        assert result == "untitled (1773689340397)"
+
+    def test_non_file_prefix_friendly_label(self):
+        """Other non-file prefixes get a friendly label."""
+        result = _format_workspace_display("vscode-remote_wsl_project", None)
+        assert result == "vscode-remote (wsl_project)"
+
+    def test_bare_prefix_no_suffix(self):
+        """A workspace ID with no underscore returns the raw prefix."""
+        result = _format_workspace_display("untitled", None)
+        assert result == "untitled"
+
+    def test_unresolvable_file_workspace_falls_back(self):
+        """Unresolvable file_ workspace IDs use naïve slash decode."""
+        result = _format_workspace_display("file_Users_dev_repos_gone", None)
+        assert result == "dev/repos/gone"
 
 
 class TestExtractWorkspaceFromCmdline:
