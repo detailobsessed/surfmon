@@ -878,6 +878,29 @@ class TestCaptureLsSnapshot:
         assert snapshot.issues[0].severity == IssueSeverity.CRITICAL
         assert snapshot.entries[0].orphaned is True
 
+    def test_untitled_workspace_not_orphaned(self):
+        """Untitled (unsaved) workspaces must not be flagged as orphaned."""
+        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+
+        proc_infos = [
+            ProcessInfo(
+                2000,
+                _LS_BINARY,
+                10.0,
+                800.0,
+                2.5,
+                8,
+                3500.0,
+                "language_server_macos_arm --workspace_id untitled_1773689340397",
+            ),
+        ]
+
+        snapshot = capture_ls_snapshot(proc_infos, "2.5.0", 3600.0)
+
+        assert snapshot.orphaned_count == 0
+        assert len(snapshot.issues) == 0
+        assert snapshot.entries[0].orphaned is False
+
     def test_empty_when_no_language_servers(self):
         """Should return empty snapshot when no language servers found."""
         from surfmon.monitor import ProcessInfo, capture_ls_snapshot

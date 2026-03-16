@@ -343,7 +343,7 @@ def _build_ls_entry(
     else:
         workspace = _extract_workspace_from_cmdline(original_proc.cmdline)
 
-    orphaned = workspace_id is not None and resolved_path is None
+    orphaned = workspace_id is not None and workspace_id.startswith("file_") and resolved_path is None
     stale = not orphaned and bool(active_ws_paths) and resolved_path is not None and str(resolved_path) not in active_ws_paths
 
     entry = LsSnapshotEntry(
