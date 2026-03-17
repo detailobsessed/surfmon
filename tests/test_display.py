@@ -12,7 +12,7 @@ from surfmon.display import (
     build_process_memory_history,
     simplify_process_name,
 )
-from surfmon.monitor import LsSnapshotEntry
+from surfmon.language_servers import LsSnapshotEntry
 
 # ---------------------------------------------------------------------------
 # simplify_process_name

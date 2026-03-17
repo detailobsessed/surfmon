@@ -8,6 +8,7 @@ import psutil
 import pytest
 
 from surfmon._constants import Issue, IssueSeverity
+from surfmon.language_servers import find_language_servers
 from surfmon.monitor import (
     EXIT_CRITICAL,
     EXIT_OK,
@@ -17,7 +18,6 @@ from surfmon.monitor import (
     _extract_windsurf_version,
     _get_windsurf_uptime,
     count_extensions,
-    find_language_servers,
     generate_report,
     get_active_workspaces,
     get_mcp_config,
@@ -44,7 +44,7 @@ _P_PROC_INFO = "surfmon.monitor.get_process_info"
 _P_PTY_LEAK = "surfmon.monitor.check_pty_leak"
 _P_ACTIVE_WS = "surfmon.monitor.get_active_workspaces"
 _P_LAUNCHES = "surfmon.monitor.count_windsurf_launches_today"
-_P_RESOLVE_WS = "surfmon.monitor._resolve_workspace_path"
+_P_RESOLVE_WS = "surfmon.language_servers._resolve_workspace_path"
 
 _WINDSURF_EXE = "/Applications/Windsurf.app/Contents/MacOS/Windsurf"
 _WINDSURF_NAME = "Windsurf"
@@ -828,7 +828,7 @@ class TestDetectLanguage:
     )
     def test_detect_language(self, cmdline, expected):
         """Should detect the correct language from cmdline."""
-        from surfmon.monitor import _detect_language
+        from surfmon.language_servers import _detect_language
 
         assert _detect_language(cmdline) == expected
 
@@ -838,7 +838,8 @@ class TestCaptureLsSnapshot:
 
     def test_captures_language_servers(self):
         """Should capture all language server processes."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(1000, "Windsurf", 5.0, 500.0, 1.5, 20, 3600.0, "Windsurf --windsurf_version 2.5.0"),
@@ -856,7 +857,8 @@ class TestCaptureLsSnapshot:
 
     def test_detects_orphaned_workspace(self):
         """Should detect orphaned workspace and report issue."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(
@@ -880,7 +882,8 @@ class TestCaptureLsSnapshot:
 
     def test_untitled_workspace_not_orphaned(self):
         """Untitled (unsaved) workspaces must not be flagged as orphaned."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(
@@ -903,7 +906,8 @@ class TestCaptureLsSnapshot:
 
     def test_empty_when_no_language_servers(self):
         """Should return empty snapshot when no language servers found."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(1000, "Windsurf", 5.0, 500.0, 1.5, 20, 3600.0, "Windsurf main process"),
@@ -917,7 +921,8 @@ class TestCaptureLsSnapshot:
 
     def test_entries_sorted_by_memory_descending(self):
         """Should sort entries by memory usage descending."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(2000, "gopls", 2.0, 100.0, 0.3, 8, 3500.0, "gopls serve"),
@@ -935,7 +940,9 @@ class TestCaptureLsSnapshotStaleDetection:
 
     def test_detects_stale_workspace(self, mocker):
         """Should detect LS for workspace that exists but isn't open in IDE."""
-        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
+        from surfmon.workspaces import WorkspaceInfo
 
         mocker.patch(
             _P_RESOLVE_WS,
@@ -970,7 +977,9 @@ class TestCaptureLsSnapshotStaleDetection:
 
     def test_not_stale_when_workspace_active(self, mocker):
         """Should not flag LS as stale when workspace is in active set."""
-        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
+        from surfmon.workspaces import WorkspaceInfo
 
         mocker.patch(
             _P_RESOLVE_WS,
@@ -1003,7 +1012,8 @@ class TestCaptureLsSnapshotStaleDetection:
 
     def test_no_stale_detection_without_active_workspaces(self):
         """Should skip stale detection when active_workspaces is None."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         proc_infos = [
             ProcessInfo(
@@ -1025,7 +1035,9 @@ class TestCaptureLsSnapshotStaleDetection:
 
     def test_orphaned_takes_priority_over_stale(self):
         """Should flag as orphaned, not stale, when workspace doesn't exist."""
-        from surfmon.monitor import ProcessInfo, WorkspaceInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
+        from surfmon.workspaces import WorkspaceInfo
 
         proc_infos = [
             ProcessInfo(
@@ -1054,7 +1066,8 @@ class TestCaptureLsSnapshotStaleDetection:
 
     def test_no_stale_detection_with_empty_active_workspaces(self, mocker):
         """Should skip stale detection when active_workspaces list is empty."""
-        from surfmon.monitor import ProcessInfo, capture_ls_snapshot
+        from surfmon.language_servers import capture_ls_snapshot
+        from surfmon.monitor import ProcessInfo
 
         mocker.patch(
             _P_RESOLVE_WS,

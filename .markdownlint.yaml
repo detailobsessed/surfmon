@@ -24,3 +24,6 @@ MD024: false
 
 # Allow blank lines between consecutive blockquotes (used for callout boxes in README)
 MD028: false
+
+# Allow compact table pipe style (needed for generated AGENTS.md)
+MD060: false

@@ -38,7 +38,8 @@ from .monitor import format_uptime
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from .monitor import LsSnapshot, LsSnapshotEntry, MonitoringReport
+    from .language_servers import LsSnapshot, LsSnapshotEntry
+    from .monitor import MonitoringReport
 
 console = Console()
 

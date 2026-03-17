@@ -6,22 +6,24 @@
 
 ```
 src/surfmon/
-    _constants.py    # Shared constants (exit codes, Issue/IssueSeverity, PTY thresholds)
-    cli.py           # Typer CLI commands — wires data collection to display
-    config.py        # Target detection (stable/next/insiders), paths, env config
-    db.py            # SQLite persistence via sqlite-utils
-    display.py       # Interactive display helpers (watch-mode tables, history, PTY/LS snapshots, plots)
-    log_analysis.py  # Log file parsing and issue detection
-    monitor.py       # Core orchestration — processes, language servers, MCP, snapshot capture, report assembly
-    output.py        # Rich terminal display (tables, panels, styling) and Markdown export
-    pty.py           # PTY leak detection — lsof parsing, PtyInfo dataclass, thresholds
-    workspaces.py    # Active workspace detection — event log parsing, workspace lifecycle
+    _constants.py        # Shared constants (exit codes, Issue/IssueSeverity, PTY thresholds)
+    cli.py               # Typer CLI commands — wires data collection to display
+    config.py            # Target detection (stable/next/insiders), paths, env config
+    db.py                # SQLite persistence via sqlite-utils
+    display.py           # Interactive display helpers (watch-mode tables, history, PTY/LS snapshots, plots)
+    language_servers.py  # LS detection, forensic snapshots, orphan/stale detection
+    log_analysis.py      # Log file parsing and issue detection
+    monitor.py           # Core orchestration — processes, MCP, snapshot capture, report assembly
+    output.py            # Rich terminal display (tables, panels, styling) and Markdown export
+    pty.py               # PTY leak detection — lsof parsing, PtyInfo dataclass, thresholds
+    workspaces.py        # Active workspace detection — event log parsing, workspace lifecycle
 ```
 
 - **`_constants.py`** is the single source for shared constants (`EXIT_OK/WARNING/CRITICAL`, `Issue`/`IssueSeverity`, PTY thresholds). All other modules import from here — never redefine these.
-- **`monitor.py`** orchestrates data collection and assembles `MonitoringReport` / `LsSnapshot`. `max_issue_severity` lives here.
+- **`monitor.py`** orchestrates data collection and assembles `MonitoringReport`. `max_issue_severity` lives here. Process detection (`get_windsurf_processes`, `is_main_windsurf_process`) and system info collection.
+- **`language_servers.py`** owns all language server logic: `LsSnapshot`/`LsSnapshotEntry` dataclasses, `find_language_servers`, `capture_ls_snapshot`, orphan/stale workspace detection (`_build_ls_entry`). Uses `TYPE_CHECKING` import for `ProcessInfo` to avoid circular dependency with `monitor.py`.
 - **`pty.py`** owns all PTY logic: `PtyInfo` dataclass (with `severity`/`color` properties), `check_pty_leak`, lsof parsing. Imports `_extract_windsurf_version` / `_get_windsurf_uptime` from `monitor.py` via a deferred import to avoid circular dependency.
-- **`workspaces.py`** owns active workspace detection: event log parsing (`_parse_workspace_event`), workspace path resolution (`_resolve_workspace_path`), and `get_active_workspaces`. Orphan/stale detection lives in `monitor.py:_build_ls_entry`.
+- **`workspaces.py`** owns active workspace detection: event log parsing (`_parse_workspace_event`), workspace path resolution (`_resolve_workspace_path`), and `get_active_workspaces`.
 - **`log_analysis.py`** owns log-file issue detection (`check_log_issues`). Imports `is_main_windsurf_process` from `monitor.py` via a deferred import.
 - **`display.py`** owns interactive display: watch-mode summary tables, history table, PTY/LS forensic snapshot display, and matplotlib plot generation. Imports from `monitor.py`, `pty.py`, and `output.py`.
 - **`output.py`** owns all Rich terminal rendering primitives. `style_issue()` and `display_report()` live here. No imports from other surfmon modules.

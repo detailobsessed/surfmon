@@ -826,7 +826,8 @@ class TestLsSnapshotCommand:
     @pytest.fixture
     def _mock_ls_data(self, mocker):
         """Mock language server data collection for ls-snapshot tests."""
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry, ProcessInfo
+        from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
+        from surfmon.monitor import ProcessInfo
 
         mock_proc_infos = [
             ProcessInfo(
@@ -924,7 +925,7 @@ class TestLsSnapshotCommand:
 
     def test_ls_snapshot_exits_2_on_critical_issues(self, mocker):
         """Should exit with code 2 when snapshot has critical issues."""
-        from surfmon.monitor import LsSnapshot
+        from surfmon.language_servers import LsSnapshot
 
         snapshot = LsSnapshot(
             timestamp=_TS_LS,
@@ -948,7 +949,7 @@ class TestLsSnapshotCommand:
 
     def test_ls_snapshot_exits_1_on_warning_issues(self, mocker):
         """Should exit with code 1 when snapshot has only warning issues."""
-        from surfmon.monitor import LsSnapshot
+        from surfmon.language_servers import LsSnapshot
 
         snapshot = LsSnapshot(
             timestamp=_TS_LS,
@@ -978,7 +979,7 @@ class TestLsSnapshotDisplay:
 
     def test_display_critical_memory(self, mocker):
         """Should display red color for critical memory (>1024 MB total)."""
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+        from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
 
         snapshot = LsSnapshot(
             timestamp=_TS_LS,
@@ -1017,7 +1018,7 @@ class TestLsSnapshotDisplay:
 
     def test_display_warning_memory(self, mocker):
         """Should display yellow color for warning memory (>512 MB total)."""
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+        from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
 
         snapshot = LsSnapshot(
             timestamp=_TS_LS,
