@@ -98,7 +98,7 @@ class TestDisplayReport:
 
     def test_display_report_with_language_servers(self, mock_report, mocker):
         """Should display language servers table via ls_snapshot."""
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+        from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
 
         entry = LsSnapshotEntry(
             pid=1234,
@@ -217,7 +217,7 @@ class TestSaveReportMarkdown:
 
     def test_save_report_markdown_with_language_servers(self, mock_report, tmp_path):
         """Should include language servers table in markdown via ls_snapshot."""
-        from surfmon.monitor import LsSnapshot, LsSnapshotEntry
+        from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
 
         ls = MagicMock()
         ls.pid = 1234

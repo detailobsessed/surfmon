@@ -24,9 +24,8 @@ from surfmon.db import (
     store_ls_snapshot,
     store_pty_snapshot,
 )
+from surfmon.language_servers import LsSnapshot, LsSnapshotEntry
 from surfmon.monitor import (
-    LsSnapshot,
-    LsSnapshotEntry,
     MonitoringReport,
     ProcessInfo,
     SystemInfo,

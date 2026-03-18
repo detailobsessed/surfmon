@@ -33,7 +33,8 @@ from .output import (
 if TYPE_CHECKING:
     from rich.table import Table
 
-    from .monitor import LsSnapshot, LsSnapshotEntry, MonitoringReport
+    from .language_servers import LsSnapshot, LsSnapshotEntry
+    from .monitor import MonitoringReport
     from .pty import PtyInfo
 
 # Language server snapshot thresholds

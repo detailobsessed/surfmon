@@ -31,10 +31,10 @@ from .display import (
     display_trend_summary,
     generate_analysis_plots,
 )
+from .language_servers import capture_ls_snapshot
 from .monitor import (
     _extract_windsurf_version,
     _get_windsurf_uptime,
-    capture_ls_snapshot,
     check_pty_leak,
     collect_process_infos,
     generate_report,

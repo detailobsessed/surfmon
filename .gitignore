@@ -62,3 +62,4 @@ surfmon-*.md
 
 # brv (byterover) context tree
 .brv/
+.gitnexus
