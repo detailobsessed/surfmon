@@ -63,7 +63,7 @@ dev = [
     "ast-grep-cli>=0.41.1",
 ]
 local = [
-    "prek>=0.3.6",
+    "prek>=0.3.8",
     "pytest-testmon>=2.2",
 ]
 docs = [

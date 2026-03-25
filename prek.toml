@@ -1,5 +1,6 @@
+"$schema" = "https://raw.githubusercontent.com/j178/prek/v0.3.8/prek.schema.json"
 default_stages = ["pre-commit"]
-minimum_prek_version = "0.3.6"
+minimum_prek_version = "0.3.8"
 # All available: commit-msg, post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-merge-commit, pre-push, pre-rebase, prepare-commit-msg
 default_install_hook_types = ["commit-msg", "post-checkout", "pre-commit", "pre-push"]
 
@@ -16,6 +17,9 @@ hooks = [
   { id = "check-case-conflict", priority = 0 },
   { id = "check-symlinks", priority = 0 },
   { id = "check-executables-have-shebangs", priority = 0 },
+  { id = "check-shebang-scripts-are-executable", priority = 0 },
+  { id = "check-illegal-windows-names", priority = 0 },
+  { id = "destroyed-symlinks", priority = 0 },
   { id = "mixed-line-ending", args = ["--fix=lf"], priority = 0 },
   { id = "detect-private-key", priority = 0 },
 ]
@@ -26,13 +30,13 @@ rev = "v0.6.0-prek"  # prek autoupdate will fill this
 hooks = [{ id = "sync-with-uv", priority = 0, stages = ["manual"] }]  # TODO: enable once fork supports prek.toml (copier-uv-bleeding#144)
 
 [[repos]]
-repo = "https://github.com/gitleaks/gitleaks"
-rev = "v8.30.0"  # prek autoupdate will fill this
-hooks = [{ id = "gitleaks", priority = 1 }]
+repo = "https://github.com/betterleaks/betterleaks"
+rev = "v1.1.1"  # prek autoupdate will fill this
+hooks = [{ id = "betterleaks", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.5"  # prek autoupdate will fill this
+rev = "v0.15.7"  # prek autoupdate will fill this
 hooks = [
   { id = "ruff", args = ["--fix"], priority = 1 },
   { id = "ruff-format", priority = 1 },
@@ -40,7 +44,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.10.9"  # prek autoupdate will fill this
+rev = "0.11.1"  # prek autoupdate will fill this
 hooks = [{ id = "uv-lock", priority = 1 }]
 
 [[repos]]
@@ -65,7 +69,7 @@ hooks = [{ id = "markdownlint", args = ["--fix", "--ignore", "CHANGELOG.md"], pr
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
-rev = "lychee-v0.23.0"  # lychee tags nightly as latest; prek autoupdate may switch to it
+rev = "lychee-v0.23.0"  # prek autoupdate will fill this
 hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1, types_or = ["markdown", "html", "rst", "yaml"] }]
 
 [[repos]]
@@ -80,31 +84,6 @@ always_run = true
 pass_filenames = false
 stages = ["pre-push"]
 priority = 0
-
-[[repos.hooks]]
-id = "check-shebang-scripts-are-executable"
-name = "check scripts with shebangs are executable"
-entry = "bash -c 'fail=0; for f in \"$@\"; do if head -c2 \"$f\" | grep -q \"#!\"; then if [ ! -x \"$f\" ]; then echo \"$f: has shebang but is not executable (run: chmod +x $f)\"; fail=1; fi; fi; done; exit $fail' --"
-language = "system"
-types_or = ["bash", "shell", "python", "ruby", "perl"]
-priority = 0
-
-[[repos.hooks]]
-id = "check-unspecified-encoding"
-name = "check unspecified encoding in write_text/read_text"
-entry = "uv run scripts/check_unspecified_encoding.py"
-language = "system"
-types = ["python"]
-priority = 1
-
-[[repos.hooks]]
-id = "ast-grep"
-name = "ast-grep structural lint"
-entry = "uv run ast-grep scan"
-language = "system"
-types = ["python"]
-pass_filenames = false
-priority = 1
 
 [[repos.hooks]]
 id = "ty"
