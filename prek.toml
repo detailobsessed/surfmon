@@ -31,12 +31,12 @@ hooks = [{ id = "sync-with-uv", priority = 0, stages = ["manual"] }]  # TODO: en
 
 [[repos]]
 repo = "https://github.com/betterleaks/betterleaks"
-rev = ""  # prek autoupdate will fill this
+rev = "v1.1.1"  # prek autoupdate will fill this
 hooks = [{ id = "betterleaks", priority = 1 }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.5"  # prek autoupdate will fill this
+rev = "v0.15.7"  # prek autoupdate will fill this
 hooks = [
   { id = "ruff", args = ["--fix"], priority = 1 },
   { id = "ruff-format", priority = 1 },
@@ -44,7 +44,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.10.9"  # prek autoupdate will fill this
+rev = "0.11.1"  # prek autoupdate will fill this
 hooks = [{ id = "uv-lock", priority = 1 }]
 
 [[repos]]
@@ -69,7 +69,7 @@ hooks = [{ id = "markdownlint", args = ["--fix", "--ignore", "CHANGELOG.md"], pr
 
 [[repos]]
 repo = "https://github.com/lycheeverse/lychee"
-rev = "lychee-v0.23.0"  # lychee tags nightly as latest; prek autoupdate may switch to it
+rev = "nightly"  # lychee tags nightly as latest; prek autoupdate may switch to it
 hooks = [{ id = "lychee", args = ["--config", ".lychee.toml"], priority = 1, types_or = ["markdown", "html", "rst", "yaml"] }]
 
 [[repos]]

@@ -103,11 +103,11 @@ def _create_indexes(db: Database) -> None:
     Without them, each correlated subquery or join does a full table scan.
     Safe to call on existing DBs — all statements use IF NOT EXISTS.
     """
-    db.execute("CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_processes_session_id ON processes(session_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_ls_entries_session_id ON ls_entries(session_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_issues_session_id ON issues(session_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_pty_per_process_session_id ON pty_per_process(session_id)")
+    Table(db, "sessions").create_index(["timestamp"], if_not_exists=True, index_name="idx_sessions_timestamp")
+    Table(db, "processes").create_index(["session_id"], if_not_exists=True, index_name="idx_processes_session_id")
+    Table(db, "ls_entries").create_index(["session_id"], if_not_exists=True, index_name="idx_ls_entries_session_id")
+    Table(db, "issues").create_index(["session_id"], if_not_exists=True, index_name="idx_issues_session_id")
+    Table(db, "pty_per_process").create_index(["session_id"], if_not_exists=True, index_name="idx_pty_per_process_session_id")
 
 
 def _migration_002_add_session_indexes(db: Database) -> None:
