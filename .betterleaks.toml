@@ -1,0 +1,8 @@
+# betterleaks configuration
+# See: https://github.com/betterleaks/betterleaks#configuration
+
+[[allowlists]]
+description = "allow test fixtures with fake secrets"
+paths = [
+  '''(?:^|/)tests?/''',
+]

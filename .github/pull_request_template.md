@@ -1,4 +1,9 @@
-Closes ISM-XXX
+<!-- Closes #, Related to # -->
 
-<!-- Replace ISM-XXX with the Linear issue this PR closes (auto-transitions to Done on merge).
-     Use "Ref ISM-XXX" to link without closing. Delete the line for chore PRs with no issue. -->
+## Why
+
+<!-- What problem does this solve, or what improvement does it make? -->
+
+## Notes for reviewer
+
+<!-- Anything non-obvious: trade-offs made, things to look out for, follow-up work left. Delete if nothing to add. -->
