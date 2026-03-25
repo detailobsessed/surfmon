@@ -28,7 +28,7 @@ DB_DIR = Path.home() / ".surfmon"
 DB_PATH = DB_DIR / "surfmon.db"
 
 # Bump this when adding migrations. Each migration upgrades from (version - 1) to version.
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
 
 # Duration shorthand parser: "24h", "7d", "30m"
 _DURATION_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
@@ -96,7 +96,32 @@ def _migration_001_add_stale_column(db: Database) -> None:
             Table(db, "ls_entries").add_column("stale", int, not_null_default=0)
 
 
-_MIGRATIONS: list = [_migration_001_add_stale_column]
+def _create_indexes(db: Database) -> None:
+    """Create indexes on session_id FK columns and sessions.timestamp.
+
+    These are the hot paths for every read query: history, analyze, trend.
+    Without them, each correlated subquery or join does a full table scan.
+    Safe to call on existing DBs — all statements use IF NOT EXISTS.
+    """
+    db.execute("CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_processes_session_id ON processes(session_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_ls_entries_session_id ON ls_entries(session_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_issues_session_id ON issues(session_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_pty_per_process_session_id ON pty_per_process(session_id)")
+
+
+def _migration_002_add_session_indexes(db: Database) -> None:
+    """Add indexes on session_id FK columns and sessions.timestamp.
+
+    Fixes O(N) full-table-scan behaviour in history and analyze when the DB
+    has grown beyond a few hundred sessions. With 6 674 sessions and 152 k
+    process rows the correlated subqueries in query_history and the four-table
+    JOIN in _ANALYZE_SESSION_SQL each triggered full scans on every call.
+    """
+    _create_indexes(db)
+
+
+_MIGRATIONS: list = [_migration_001_add_stale_column, _migration_002_add_session_indexes]
 
 
 def _create_tables(db: Database) -> None:
@@ -207,6 +232,9 @@ def _create_tables(db: Database) -> None:
             pk="id",
             foreign_keys=session_fk,
         )
+
+    # Indexes: created here for fresh DBs; existing DBs get them via migration 002.
+    _create_indexes(db)
 
 
 def _ensure_schema(db: Database) -> None:
