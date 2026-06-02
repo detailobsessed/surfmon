@@ -174,7 +174,7 @@ jobs:
 
     - name: Update coverage badge
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.os == 'blacksmith-4vcpu-ubuntu-2404' && matrix.resolution == 'highest' }}
-      uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483 # v1.7.0
+      uses: schneegans/dynamic-badges-action@0e50b8bad39e7e1afd3e4e9c2b7dd145fad07501 # v1.8.0
       with:
         auth: ${{ secrets.GIST_TOKEN }}
         gistID: 759ab8d29e8650758515a72c9d8262d2
